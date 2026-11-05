@@ -48,6 +48,30 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ClaimValidation runtime integration (issue #179)
+
+### Changed
+- Module: claim-validation
+  - Wired the container in `shared.app` with durable PostgreSQL repositories under
+    `PERSISTENCE=postgres`; memory remains the explicit test/local family.
+  - Added migration `0301_claim_validation` for claims, reference figures and contradictions.
+  - Added ADR-012 (Accepted) and removed the pre-wiring `NotImplementedError` bodies.
+  - Added public-API and restart round-trip integration tests.
+
+### Impact Analysis
+- Files affected: `src/shared/app.py`, `src/claim_validation/**`,
+  `migrations/versions/0301_claim_validation.py`, integration tests
+- Canonical refs: ADR-012, module wiring contract
+- Validators: migrations, integration, runtime wiring, architecture
+
+### Status
+- [x] Runtime path wired
+- [x] Migration applied and reversible
+- [x] ADR accepted
+- [x] E2E and persistence proofs
+
+---
+
 ## [2026-11-06] - ClaimValidation contract freeze (issue #164)
 
 ### Changed
