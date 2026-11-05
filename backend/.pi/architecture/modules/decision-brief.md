@@ -306,6 +306,16 @@ prove the gate works).
 | Renderer | **Strategy** (JSON, PDF) | Two outputs from one artefact |
 | Revealed state | **Read model** | The brief is a projection with enforced immutability — not an entity that accumulates edits |
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router | `app.include_router(decision_brief_router)` | boot test asserting registration |
+| Composition | citation resolver bound to EvidenceCorpus port; provenance port bound to GovernanceCompliance — a missing port must block publication, not skip the gate | negative test: unwired provenance port ⇒ publication fails |
+| Persistence | Migration `0502` applied; published briefs immutable across restart | restart test: brief retrievable, `POST :version` creates successor |
+| Events | Publication, versioning and every blocked publication published through the outbox | `CitationResolutionFailed` row present |
+| Auth | `briefs:publish` enforced (ADR-005), not merely declared in OpenAPI | 403 test with an analyst key |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -320,6 +330,7 @@ prove the gate works).
 | 8 | Reproduction | Regenerating from the run log yields identical sections except narrative wording | integration |
 | 9 | Blocked outcome honesty | A veto-blocked topic renders as blocked, never as a recommendation | integration |
 | 10 | Probabilistic disclaimer | Brief JSON contains the disclaimer and the model/prompt version reference | API contract |
+| 11 | Wiring | Router registered; unwired provenance port blocks publication (gate cannot be skipped); `briefs:publish` enforced with 403 for analyst | integration |
 
 ## Modeling Depth Note (ADR-008)
 

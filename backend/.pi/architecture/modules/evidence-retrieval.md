@@ -324,6 +324,17 @@ application, query rewriting — these fail all three triage questions and remai
 | Ports | **Adapter / Port** | Corpus, embeddings, reranker are vendor code behind domain interfaces |
 | `EvidencePack` | **Rich aggregate, immutable once frozen** | Prevents the "evidence changed after the argument" audit failure |
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router | `app.include_router(evidence_retrieval_router)` in `shared/app.py` | boot test asserting registration |
+| Composition | `build_container(settings)` wires real `pgvector`/`tsvector` adapters, embedding client and reranker from settings | integration test: pack assembled against a real snapshot |
+| Upstream port | `PassageSearchPort` adapter bound to EvidenceCorpus' published language; **no direct read of `evidence_corpus_*` tables** | architecture test forbidding cross-context repository imports |
+| Persistence | Migration `0201` (pack, candidate, retrieval_trace, passage_embedding) is applied before the router is exposed | `alembic upgrade head` + pack persists across restart |
+| Events | Packs and absences published through the outbox | `EvidencePackAssembled` row in `shared_event_outbox` |
+| Degraded mode | If the embedding provider is unreachable the module must fail loudly (readiness red), never silently return lexical-only results labelled as hybrid | `/readyz` reflects embedding/reranker reachability |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -339,6 +350,7 @@ application, query rewriting — these fail all three triage questions and remai
 | 9 | Reproducibility | Re-freezing a pack for the same claim + snapshot yields identical candidate ids | integration |
 | 10 | ACL boundary | `EvidencePackView` contains no raw vectors; NegotiationSession receives `ClaimEvidence` refs only | architecture test |
 | 11 | Evaluation harness | A labelled set of ≥50 claims produces a recall report; no threshold asserted in code | manual + CI artifact |
+| 12 | Wiring | Router registered; `PassageSearchPort` bound to EvidenceCorpus published language (no cross-context table reads); readiness red when embeddings unreachable | integration |
 
 ## Modeling Depth Note (ADR-008)
 

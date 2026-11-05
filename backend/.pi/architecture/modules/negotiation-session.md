@@ -445,6 +445,17 @@ class RunEventLog(Protocol):
 **Explicit anti-patterns refused:** no anaemic run object with public setters; no business rules in
 the LangGraph nodes; no cross-aggregate transaction joining a run with a corpus snapshot.
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router + SSE | `app.include_router(negotiation_session_router)`; SSE endpoint shares the progress broker with SimulationOrchestration | boot test asserting both route and stream |
+| Composition | ACL adapters wired to EvidenceRetrieval, StakeholderModel, ClaimValidation, GovernanceCompliance — none stubbed | integration test: a run executes with real ports |
+| Persistence | Migrations `0401` (run … round_learning) and `0402` (append-only event log) applied before the router is exposed | run survives restart; `/events` replays |
+| Event log | Every state change appends to the run log in the same transaction | replay fold equality test |
+| Guard on the write path | No argument or position can be persisted without a GovernanceCompliance verdict; the port must not have a permissive default | negative test: guard unreachable ⇒ writes fail, not pass |
+| Orchestrator hook | Graph nodes invoke these application services and hold only ids in graph state | architecture test: no graph state fields for positions/arguments |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -462,6 +473,7 @@ the LangGraph nodes; no cross-aggregate transaction joining a run with a corpus 
 | 11 | Replay equivalence | Folding the event log to round N equals the live state at round N | integration |
 | 12 | ACL purity | No retrieval or vector types appear in `domain/` (import check) | architecture test |
 | 13 | SSE | A live run emits ordered events; reconnecting with `Last-Event-ID` replays without gaps | integration |
+| 14 | Wiring | Router + SSE registered; ACL ports bound to real upstream contexts; a run survives restart and `/events` replays; missing guard blocks writes (fails closed) | integration |
 
 ## Modeling Depth Note (ADR-008)
 

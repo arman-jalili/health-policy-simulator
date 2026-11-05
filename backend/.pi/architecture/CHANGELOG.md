@@ -48,6 +48,36 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - Wiring Contracts (post-implementation audit)
+
+### Changed
+- Module: all 10 — added `## Wiring Contract` section (router registration, settings-driven composition, migrations, outbox, cross-context ports, fail-closed behaviour) and a `Wiring` acceptance criterion row per module
+- Module: evidence-corpus — wiring contract marks the baseline; audit found persistence/outbox/migrations unwired (issue #26)
+- Roadmap: added `## Cross-Cutting: Wiring Definition of Done` (gates W1–W7) and a per-issue DoD template; Phase 1 explicitly not closable while #26 is open
+
+### Impact Analysis
+- Files affected:
+  - `.pi/architecture/modules/*.md` (10)
+  - `.pi/architecture/implementation-roadmap.md`
+  - implementation follow-up: `src/shared/app.py`, `src/evidence_corpus/composition.py`, `migrations/versions/`
+- Canonical refs to update:
+  - `.pi/architecture/modules/[module].md#wiring-contract`
+- Validators required:
+  - architecture, canonical, ci
+
+### Migration Steps
+1. Close issue #26 (persistence adapters, outbox publisher, migrations `0101`/`0103`)
+2. Add the boot test that fails when a context router is removed from `create_app`
+3. Add the architecture test forbidding cross-context repository imports
+4. Apply the W1–W7 checklist to every subsequent module issue before merge
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated (issue #26 open)
+- [ ] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-05] - Complete Architecture Package (ADR-001…ADR-008)
 
 ### Changed

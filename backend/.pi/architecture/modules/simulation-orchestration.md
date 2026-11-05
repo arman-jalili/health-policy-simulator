@@ -251,6 +251,17 @@ defined by its application services and its persistence contract above.
 **Explicitly rejected:** storing negotiation state in graph state. That would make pause/resume,
 replay and audit depend on framework internals, and it was rejected in ADR-003.
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router + worker | `app.include_router(simulation_orchestration_router)` and the worker is started by the app lifespan (or a documented companion process started in `compose.yaml`) | smoke test: `POST /runs/{id}:start` produces progress events without manual intervention |
+| Composition | LLM provider, price table, budget defaults and prompt registry selected from settings; a missing price entry must fail at boot, not silently meter zero | boot test with an unknown model id |
+| Persistence | Migration `0302` applied; jobs resumable across restart | kill-and-restart test |
+| Broker sharing | Progress broker instance shared with the NegotiationSession SSE endpoint | integration test: one stream, two publishers |
+| Metering | Every call writes `agent_invocation` with model, `prompt@version`, tokens, cost | usage endpoint reflects a live run |
+| Ownership | Graph holds only ids/phase/budget; no domain state | architecture test on graph state schema |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -265,6 +276,7 @@ replay and audit depend on framework internals, and it was rejected in ADR-003.
 | 8 | SSE ordering | Events arrive in monotonic `sequence`; reconnect with `Last-Event-ID` replays without gaps or duplicates | integration |
 | 9 | Prompt versioning | Changing a prompt template creates a new version; old invocations keep their version | unit |
 | 10 | Provider independence | Swapping the LLM adapter requires no change outside `infrastructure/` | architecture test |
+| 11 | Wiring | Worker started by lifespan or compose; `POST :start` emits progress with no manual step; unknown model id fails at boot | integration |
 
 ## Modeling Depth Note (ADR-008)
 

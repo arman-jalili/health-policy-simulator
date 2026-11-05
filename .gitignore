@@ -17,7 +17,7 @@ Thumbs.db
 *.pem
 *.key
 
-# ── Node / frontend (frontend/ is scaffolded later) ───────────────────────────
+# ── Node / frontend (frontend/ intentionally absent; scaffold later if needed) ──
 node_modules/
 .next/
 out/

@@ -215,6 +215,16 @@ GovernanceCompliance for actor attribution.
 | Key resolution | **Strategy** (`KeyResolver`, `DemoResolver`) | Two resolution modes behind one interface |
 | No aggregates | — | ADR-008 adapter depth: no domain model |
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Dependency | `require_scope(...)` applied to **every non-health route** of every context; OpenAPI `x-required-scope` alone is documentation, not enforcement | meta-test: iterating `app.routes`, every `/api/v1/...` route declares a scope and rejects an unscoped principal |
+| Composition | key store bound to migration `0104`; `AUTH_MODE` resolved once at startup | boot test for `strict` and `demo` |
+| Demo guard | `AUTH_MODE=demo` + `ENV=production` refuses to boot | startup test |
+| Attribution | `Principal.label` flows into every command's `actor` and into `agent_invocation` | integration test: event actor is non-empty |
+| ACL isolation | no module outside `identity_access/infrastructure` imports key-store types | architecture test |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -227,6 +237,7 @@ GovernanceCompliance for actor attribution.
 | 6 | ACL isolation | No module outside `identity_access/infrastructure` imports key-store types | architecture test |
 | 7 | Revocation | A revoked key returns `401` immediately on the next request | integration |
 | 8 | Health endpoints | `/healthz` and `/readyz` need no auth and report DB + LLM reachability | integration |
+| 9 | Wiring | Meta-test: every `/api/v1` route declares a scope and rejects an unscoped principal; boot refuses `demo` + `production` | contract test |
 
 ## Modeling Depth Note (ADR-008)
 

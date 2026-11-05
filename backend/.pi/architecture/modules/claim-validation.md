@@ -342,6 +342,17 @@ class ReferenceFigureRepository(Protocol):
 | Number parsing | **Adapter** | German numeric formats behind one port |
 | Verdict exposure | **DTO** | `ClaimVerdictView` for NegotiationSession |
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router | `app.include_router(claim_validation_router)` | boot test asserting registration |
+| Composition | Verification paths bound to EvidenceCorpus (provisions, authoritative passages) and to the shared metered LLM client for causal appraisal | integration test: one claim per path |
+| Seeded data | Migration `0301` seeds the curated `ReferenceFigure` set (~10 authoritative figures with tier + as_of); an empty table must make the verifier report `ambiguous`, never `supported` | integration test on an empty table |
+| Downstream port | `ClaimVerdictView` exposed to NegotiationSession and ConsensusAnalysis | integration test: an argument with a contradicted claim is refused |
+| Persistence | Migration `0301` applied; verdicts and contradictions survive restart | restart round-trip |
+| Events | Verdicts and refusals published through the outbox | `ClaimRejected` / `UnsupportedAssertionFlagged` rows present |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -356,6 +367,7 @@ class ReferenceFigureRepository(Protocol):
 | 8 | Unsupported not dropped | A claim with no evidence is `UNSUPPORTED` and returned in responses | integration |
 | 9 | German number parsing | `1.204 Kassenstellen`, `3,2 Mrd. €`, `22 %` parse to correct values | unit |
 | 10 | Measure identity | `Wartezeit` and `Wartezeit auf Facharzttermin` do not collapse into one measure | unit |
+| 11 | Wiring | Router registered; empty `ReferenceFigure` table yields `ambiguous`, never `supported`; verdict port refuses contradicted claims downstream | integration |
 
 ## Modeling Depth Note (ADR-008)
 

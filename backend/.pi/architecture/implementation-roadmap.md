@@ -253,6 +253,40 @@ Bootstrap only — no bounded contexts.
 
 ---
 
+## Cross-Cutting: Wiring Definition of Done
+
+A module is **not complete** when its tests pass. It is complete when it is reachable from
+`shared/app.py` and its data survives a restart. Every module doc carries a `## Wiring Contract`
+section; this is the phase-level checklist that applies to each `### Modules` row.
+
+| # | Gate | Fails when |
+|---|---|---|
+| W1 | Router registered in `create_app` | the module is testable in isolation but absent from `app.routes` |
+| W2 | Composition root builds adapters from settings | an in-memory adapter is the silent default outside tests |
+| W3 | Migrations own every table the repositories query | a repository queries a table no migration created |
+| W4 | Events leave through `shared_event_outbox` | a `LoggingEventPublisher`-style stub is still wired |
+| W5 | Cross-context access uses ports/published language | a context imports another context's repositories or tables |
+| W6 | Missing upstream dependency fails closed | a guard/gate silently degrades to permissive |
+| W7 | Boot test asserts registration + adapter selection | deleting a router registration leaves CI green |
+
+**Known debt this gate exposes:** `EvidenceCorpus` is wired at HTTP level only — persistence,
+outbox and migrations `0101`/`0103` are missing (issue #26). Every later phase inherits that debt, so
+Phase 1 is not closed until W1–W7 pass for both EvidenceCorpus and IdentityAccess.
+
+**Definition of Done template (append to each issue)**
+
+```
+- [ ] W1 router registered in create_app (boot test)
+- [ ] W2 composition selects adapters by settings
+- [ ] W3 migration for every queried table; upgrade head on empty DB
+- [ ] W4 events via shared_event_outbox (same transaction as the aggregate write)
+- [ ] W5 no cross-context repository/table access (architecture test)
+- [ ] W6 missing dependency fails closed
+- [ ] W7 restart round-trip proven by an integration test
+```
+
+---
+
 ## Dependency Graph
 
 ```mermaid

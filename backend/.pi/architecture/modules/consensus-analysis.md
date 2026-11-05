@@ -325,6 +325,17 @@ and `MinorityPositionRecorded` are audit-critical (they record refusals and diss
 | `EstimateValidator` | **Guard / invariant enforcer** | Blocks the specific failure of an unbacked number |
 | Views | **DTO** | `ConsensusView` for the brief |
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router | `app.include_router(consensus_analysis_router)` | boot test asserting registration |
+| Event subscription | Handler **subscribed** to `SimulationRunClosed` / `ConflictTopicOpened`; consuming manually is not sufficient | integration test: closing a run produces consensus rows without an explicit API call |
+| Composition | Veto classes read from StakeholderModel port; reference figures from ClaimValidation port | integration test: veto-blocked outcome reproduced |
+| Persistence | Migration `0501` applied; derived rows rebuildable | rebuild-from-log equality test |
+| Events | Consensus, veto blocks and blocked estimates published through the outbox | `ConsensusBlockedByVeto` row present |
+| Estimation | `AssessImpact` uses the shared metered LLM client, never a direct provider SDK call | usage report shows the invocation |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -340,6 +351,7 @@ and `MinorityPositionRecorded` are audit-critical (they record refusals and diss
 | 9 | Rejected proposals | Every proposal without threshold support appears in `rejected_proposals` | unit |
 | 10 | Feasibility veto check | A feasible scenario naming a veto-holding institution as consenting raises | unit |
 | 11 | Comparison | Alternative packages are ranked with all three dimensions present | integration |
+| 12 | Wiring | Subscribed to `SimulationRunClosed`; closing a run produces consensus rows with no explicit API call; derived rows rebuild from the log | integration |
 
 ## Modeling Depth Note (ADR-008)
 

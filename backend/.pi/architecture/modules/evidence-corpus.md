@@ -464,6 +464,20 @@ class IngestionRun:
 **OOP constraints:** no anemic aggregate, no property setters on roots, command/query separation
 (`submit_*` vs `is_citable`), tell-don't-ask from application services.
 
+## Wiring Contract
+
+A module is not done when its tests pass — it is done when it is reachable from the running app.
+Baseline for all other contexts (tracked in issue #26).
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router | `app.include_router(evidence_corpus_router)` in `shared/app.py` | boot test asserting the route exists in `app.routes` |
+| Composition | `build_container(settings)` selects adapters by config (`PERSISTENCE=postgres\|memory`); memory is never the silent default outside tests | integration test asserting `SqlAlchemy*Repository` when configured |
+| Persistence | Migrations `0101` (document/publication/article/passage/snapshot/ingestion_run) and `0103` (manifests) own every table the repositories query | `alembic upgrade head` on empty DB then ingest + restart round-trip |
+| Events | `OutboxEventPublisher` writes drained events in the same transaction as the aggregate | row present in `shared_event_outbox` on ingest |
+| Published language | `PassageView`/`ProvenanceView` exposed to EvidenceRetrieval through a port, not tables | architecture test: no cross-context table access |
+| Residue | no `_not_implemented` stub, no stale "handlers not wired" docstring | grep in CI |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -480,6 +494,7 @@ class IngestionRun:
 | 10 | `PinCorpusSnapshot` | Snapshot pins documents + index version; re-running ingestion afterwards does not change passages visible through the old snapshot | integration |
 | 11 | `IndexIngestedPassages` | Passages are searchable via `tsvector` within the same application run; re-indexing is idempotent | integration |
 | 12 | API contract | All endpoints appear in generated OpenAPI and return the documented envelope; error paths use `{code,message,details,trace_id}` | contract test |
+| 13 | Wiring | With `PERSISTENCE=postgres`, `app.state.corpus` exposes SQLAlchemy repositories and an ingest → restart → `GET /documents/{id}` round-trip preserves provenance offsets | integration (issue #26) |
 
 ## Modeling Depth Note (ADR-008)
 

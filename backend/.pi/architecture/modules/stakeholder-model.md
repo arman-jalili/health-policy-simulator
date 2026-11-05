@@ -361,6 +361,17 @@ audit-critical — recorded without an audit obligation.
 | `Stakeholder` | **Rich aggregate** | `cite_power_source`, `record_historical_position`, `negotiating_power`; no setters |
 | Views | **DTO / read model** | `StakeholderProfileView` is a boundary object, not an entity |
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router | `app.include_router(stakeholder_model_router)` in `shared/app.py` | boot test asserting registration |
+| Composition | persona loader runs at startup and fails fast if any of the 9 personas is invalid (missing interest/constraint, personal name) | startup test: a malformed persona aborts boot |
+| Persistence | Migration `0202` (stakeholder, profile, historical_position, mandate_source, agent_binding) applied | profiles survive restart |
+| Downstream publication | `StakeholderProfileView` exposed to NegotiationSession; **institutional allowlist published to GovernanceCompliance** (the guard's source of truth) | integration test: guard recognises all 9 institutions |
+| Events | Registrations, powers and weak attributions published through the outbox | `MandateSourceCited` / `AuthorityClaimRejected` rows present |
+| Grounding data | Every veto/budget limit ships with a `MandateSource`; seeded via migration or operator endpoint, never defaulted | integration test: persona without grounding is refused at boot |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -376,6 +387,7 @@ audit-critical — recorded without an audit obligation.
 | 9 | Persona cards | All 9 personas load, each with ≥1 interest, ≥1 constraint, and only institutional names | integration |
 | 10 | Partner contract | `StakeholderProfileView` exposes no repository or ORM types | architecture test |
 | 11 | Selection | The waiting-time question selects ≥7 of 9 institutions with materiality scores in `[0,1]` | integration |
+| 12 | Wiring | Boot aborts on an invalid persona; the institutional allowlist is published to GovernanceCompliance and the guard recognises all 9 institutions | integration |
 
 ## Modeling Depth Note (ADR-008)
 

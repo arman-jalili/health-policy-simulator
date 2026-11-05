@@ -239,6 +239,17 @@ compliance (ADR-007). Every verdict is reproducible for the same input.
 **Explicitly rejected:** LLM-as-judge for compliance. It cannot be unit-tested, cannot be replayed
 and can be argued with — three disqualifying properties for a compliance control.
 
+## Wiring Contract
+
+| Wiring point | Requirement | Proof |
+|---|---|---|
+| Router | `app.include_router(governance_compliance_router)` | boot test asserting registration |
+| Composition | allowlist loaded from StakeholderModel at startup (fail fast if empty or containing a personal name); violation and provenance stores bound to their tables | startup test: empty allowlist aborts boot |
+| Guard on the write path | `EnforceInstitutionOnlyOutput` is a **blocking** dependency of the negotiation write path; a missing guard must fail closed | negative test: guard unbound ⇒ argument write returns 5xx, never persists |
+| Persistence | Migration `0303` applied; violations append-only and idempotent on `violation_hash` | restart + duplicate-retry test |
+| Determinism | No LLM call in the guard path; rule version recorded per violation | unit test monkeypatching the LLM client to raise — guard must still work |
+| Provenance | `DisclosePositionProvenance` reads invocations from SimulationOrchestration and verdicts from ClaimValidation | integration test: disclosure record complete for a real run |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -253,6 +264,7 @@ and can be argued with — three disqualifying properties for a compliance contr
 | 8 | Adversarial suite | ≥30 adversarial strings all classified correctly; suite runs in CI | CI |
 | 9 | Port contract | NegotiationSession cannot persist an argument without a guard verdict | integration |
 | 10 | No domain model | Module contains no aggregates/VOs per ADR-008; validator passes | architecture |
+| 11 | Wiring | Renamed guard is a blocking dependency of the negotiation write path; empty allowlist aborts boot; guard works with the LLM client patched to raise | integration |
 
 ## Modeling Depth Note (ADR-008)
 
