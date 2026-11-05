@@ -40,6 +40,7 @@ from simulation_orchestration.infrastructure.bootstrap import (
     BootstrapRoundNode,
 )
 from simulation_orchestration.infrastructure.graph import SequentialWorkflowGraph
+from simulation_orchestration.infrastructure.llm import ScriptedLLMClient
 from simulation_orchestration.infrastructure.memory import (
     InMemoryInvocationStore,
     InMemoryJobStore,
@@ -92,6 +93,13 @@ def build_container(
         invocations = InMemoryInvocationStore()
         progress = InMemoryProgressStore()
         registry = InMemoryPromptRegistry()
+    if (
+        settings.simulation_input_price_per_1k == 0
+        and settings.simulation_output_price_per_1k == 0
+        and not settings.simulation_allow_zero_price
+    ):
+        raise ValueError("simulation model prices are zero; set SIMULATION_ALLOW_ZERO_PRICE=true")
+    llm = ScriptedLLMClient(model_id)
     prices = StaticPriceTable(
         {
             model_id: ModelPrice(
@@ -106,8 +114,8 @@ def build_container(
     )
     graph = SequentialWorkflowGraph(
         [
-            BootstrapMandateNode(record_agent_invocation, model=model_id),
-            BootstrapRoundNode(record_agent_invocation, model=model_id),
+            BootstrapMandateNode(record_agent_invocation, model=model_id, llm=llm),
+            BootstrapRoundNode(record_agent_invocation, model=model_id, llm=llm),
         ]
     )
     uow = DbUnitOfWork(database.session_factory)

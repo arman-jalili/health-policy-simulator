@@ -133,14 +133,12 @@ async def test_batching_preserves_order() -> None:
 async def test_unknown_last_event_id_is_rejected() -> None:
     store = await _seeded()
     service = StreamSimulationProgress(progress=store)
+    from simulation_orchestration.application.errors import UnknownLastEventId
 
-    with pytest.raises(ValueError, match="unknown Last-Event-ID"):
-        [
-            event
-            async for event in service.execute(
-                StreamSimulationProgressRequest(run_id=RunId("run_1"), last_event_id="evt_missing")
-            )
-        ]
+    with pytest.raises(UnknownLastEventId, match="unknown Last-Event-ID"):
+        await service.validate(
+            StreamSimulationProgressRequest(run_id=RunId("run_1"), last_event_id="evt_missing")
+        )
 
 
 async def test_duplicate_sequence_is_rejected() -> None:
@@ -156,3 +154,53 @@ async def test_duplicate_sequence_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="duplicate progress sequence"):
         await store.append(duplicate)
+
+
+async def test_unknown_last_event_id_is_rejected_before_streaming() -> None:
+    from simulation_orchestration.application.errors import UnknownLastEventId
+    from simulation_orchestration.application.services import StreamSimulationProgress
+    from simulation_orchestration.infrastructure.memory import InMemoryProgressStore
+
+    service = StreamSimulationProgress(progress=InMemoryProgressStore())
+    request = StreamSimulationProgressRequest(run_id=RunId("run_1"), last_event_id="evt_nope")
+
+    with pytest.raises(UnknownLastEventId) as raised:
+        await service.validate(request)
+    assert raised.value.status_code == 400
+    assert raised.value.code == "UNKNOWN_LAST_EVENT_ID"
+
+
+async def test_stream_stays_live_until_a_terminal_event() -> None:
+    from simulation_orchestration.application.services import StreamSimulationProgress
+    from simulation_orchestration.application.values import ProgressKind
+    from simulation_orchestration.infrastructure.memory import InMemoryProgressStore
+
+    store = InMemoryProgressStore()
+    await store.append(
+        ProgressEventView(
+            event_id="evt_start",
+            run_id=RunId("run_live"),
+            sequence=0,
+            kind=ProgressKind.STARTED,
+            payload={},
+            created_at=datetime.now(tz=UTC),
+        )
+    )
+    stream = StreamSimulationProgress(progress=store).execute(
+        StreamSimulationProgressRequest(run_id=RunId("run_live"))
+    )
+    first = await anext(stream)
+    assert first.kind is ProgressKind.STARTED
+
+    await store.append(
+        ProgressEventView(
+            event_id="evt_done",
+            run_id=RunId("run_live"),
+            sequence=0,
+            kind=ProgressKind.COMPLETED,
+            payload={},
+            created_at=datetime.now(tz=UTC),
+        )
+    )
+    second = await anext(stream)
+    assert second.kind is ProgressKind.COMPLETED

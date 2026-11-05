@@ -100,9 +100,9 @@ async def stream_simulation_progress(
     container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
     last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
 ) -> StreamingResponse:
-    events = container.stream_simulation_progress.execute(
-        StreamSimulationProgressRequest(run_id=RunId(run_id), last_event_id=last_event_id)
-    )
+    request = StreamSimulationProgressRequest(run_id=RunId(run_id), last_event_id=last_event_id)
+    await container.stream_simulation_progress.validate(request)
+    events = container.stream_simulation_progress.execute(request)
     return StreamingResponse(
         _sse(events),
         media_type="text/event-stream",

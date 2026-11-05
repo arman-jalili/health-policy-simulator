@@ -182,7 +182,7 @@ sequenceDiagram
 | `RunSimulationJob` | `simulation_orchestration_job`, domain state via commands | job row, progress events | yes — resumable from `checkpoint`, one turn per node |
 | `StreamSimulationProgress` | `progress` event log | — (read) | yes — replayable by `Last-Event-ID` |
 | `PauseOrResumeSimulation` | job row, run phase | job status | yes — pause is a flag checked at turn boundary |
-| `RecordAgentInvocation` | model price table | `agent_invocation` | yes — unique on `invocation_id` |
+| `RecordAgentInvocation` | model price table | `agent_invocation` | yes — unique on the deterministic `invocation_id = sha256(run_id\|round\|stakeholder\|purpose\|node)` |
 
 **Persistence contract**
 
@@ -345,13 +345,13 @@ non-`ok`; discovering it from "jobs stopped arriving" is a failure of this gate 
 |---|---|---|---|
 | 1 | Graph purity | No graph node mutates domain state directly; all mutations go through application services | architecture test |
 | 2 | Graph state | Graph state contains only ids/phase/budget — no positions, arguments or evidence | architecture test |
-| 3 | Invocation envelope | Every LLM call produces exactly one `agent_invocation` row with model, prompt@version, tokens, cost | integration |
+| 3 | Invocation envelope | Every LLM call produces exactly one `agent_invocation` row with model, prompt@version, real response tokens/latency; re-execution is idempotent on the deterministic key | integration |
 | 4 | Budget guard | Exceeding `max_cost`/`max_tokens`/`max_invocations` pre-check pauses the run and emits `RunBudgetExhausted`; no invocation is attempted after rejection | integration |
-| 4a | Metering runtime | The temporary bootstrap graph records one metered envelope per turn; `budget_used` advances from the invocation store | integration |
+| 4a | Metering runtime | The bootstrap graph calls `LLMClient.complete`, records response tokens/latency/model, marks `parameters.synthetic=true`, and is priced by the configured table; zero prices require `SIMULATION_ALLOW_ZERO_PRICE=true` | integration |
 | 5 | Pause boundary | Pause during a turn completes or discards the turn atomically; run state unchanged | integration |
 | 6 | Resume | A paused run resumes at the next turn with identical prior state | integration |
 | 7 | Crash recovery | Killing the worker mid-run and restarting neither duplicates arguments nor loses rounds | integration |
-| 8 | SSE ordering | Events arrive in monotonic `sequence`; reconnect with `Last-Event-ID` replays without gaps or duplicates | integration |
+| 8 | SSE ordering | Replay-then-live: events arrive in monotonic `sequence`; reconnect with `Last-Event-ID` replays without gaps; unknown/foreign ids return `400 UNKNOWN_LAST_EVENT_ID` before streaming; terminal event closes the stream | integration |
 | 9 | Prompt versioning | Changing a prompt template creates a new version; old invocations keep their version | unit |
 | 10 | Provider independence | Swapping the LLM adapter requires no change outside `infrastructure/` | architecture test |
 | 11 | Wiring | Worker started by lifespan or compose; `POST :start` emits progress with no manual step; unknown model id fails at boot | integration |

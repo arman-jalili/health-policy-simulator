@@ -122,6 +122,11 @@ async def readyz(request: Request) -> JSONResponse:
         checks["simulation_orchestration"] = "ok"
         checks["simulation_orchestration_persistence"] = str(settings.persistence)
         checks["simulation_model"] = settings.simulation_model_id
+        configured = (
+            settings.simulation_input_price_per_1k > 0
+            or settings.simulation_output_price_per_1k > 0
+        )
+        checks["simulation_pricing"] = "configured" if configured else "zero"
         checks["simulation_worker"] = (
             "not_started" if worker_task is None else ("ok" if worker_alive else "dead")
         )

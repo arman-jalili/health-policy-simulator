@@ -207,3 +207,16 @@ async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() 
 def test_unknown_configured_model_fails_at_boot() -> None:
     with pytest.raises(UnknownModel, match="configured model"):
         create_app(_settings(simulation_model_id="missing-model"))
+
+
+async def test_unknown_last_event_id_returns_400_before_streaming() -> None:
+    app = create_app(_settings())
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            "/api/v1/runs/run_missing/stream", headers={"Last-Event-ID": "evt_nope"}
+        )
+    await app.state.db.dispose()
+
+    assert response.status_code == 400, response.text
+    assert response.json()["code"] == "UNKNOWN_LAST_EVENT_ID"

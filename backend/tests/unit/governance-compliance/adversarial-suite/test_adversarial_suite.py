@@ -117,3 +117,49 @@ def test_person_quotes_are_never_accepted(text: str) -> None:
 @pytest.mark.parametrize("text", FACT_STRINGS)
 def test_uncited_facts_are_never_accepted(text: str) -> None:
     assert _verdict(text, SpeakerKind.INSTITUTION) is not GuardDecision.ACCEPT
+
+
+TITLELESS = [
+    "Sebastian Kurz kündigte Reformen an.",
+    "Kurz kündigte Reformen an.",
+    "DR. KURZ kündigte Reformen an.",
+    "S. Kurz kündigte Reformen an.",
+]
+
+RELABELLED_QUOTES = [
+    'Kurz sagte: "Wir werden das ändern."',
+    'Sebastian Kurz sagte: "Die Reform ist beschlossen."',
+]
+
+
+@pytest.mark.parametrize("text", TITLELESS)
+def test_titleless_person_names_are_never_accepted(text: str) -> None:
+    assert _verdict(text, SpeakerKind.INSTITUTION) is not GuardDecision.ACCEPT
+
+
+@pytest.mark.parametrize("text", RELABELLED_QUOTES)
+def test_person_quotes_relabelled_as_institution_are_never_accepted(text: str) -> None:
+    assert _verdict(text, SpeakerKind.INSTITUTION) is not GuardDecision.ACCEPT
+
+
+def test_contradicted_figure_is_rejected_with_the_real_rule() -> None:
+    from governance_compliance.application.rules import ContradictedFigureRule
+    from governance_compliance.application.values import FigureVerdict
+
+    class _Contradicted:
+        async def verdict_for(self, reference_figure_id: str) -> FigureVerdict:
+            return FigureVerdict.CONTRADICTED
+
+    chain = GuardRuleChain([ContradictedFigureRule(_Contradicted())])
+    results = asyncio.run(
+        chain.evaluate(
+            context_for(
+                text="Die Kosten betragen 5 Mrd.",
+                speaker_kind=SpeakerKind.INSTITUTION,
+                allowlist=ALLOWLIST,
+                cited_passage_ids=(),
+                reference_figure_ids=("fig_x",),
+            )
+        )
+    )
+    assert results[-1].decision is GuardDecision.REJECT

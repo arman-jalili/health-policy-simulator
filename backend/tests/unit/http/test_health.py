@@ -49,6 +49,7 @@ async def test_readyz_reports_ready_when_database_answers(
         "simulation_orchestration": "ok",
         "simulation_orchestration_persistence": "memory",
         "simulation_model": "scripted-local",
+        "simulation_pricing": "zero",
         "simulation_worker": "not_started",
         "governance_compliance": "ok",
         "governance_allowlist": "9",

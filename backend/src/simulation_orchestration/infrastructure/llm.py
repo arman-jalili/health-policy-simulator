@@ -28,7 +28,7 @@ class ScriptedLLMClient:
         return LLMResponse(
             text=text,
             model=self.model_id,
-            input_tokens=max(1, len(request.prompt.split())),
+            input_tokens=max(1, len(request.prompt) // 4),
             output_tokens=max(1, words),
             latency_ms=0,
         )
@@ -51,7 +51,7 @@ class MappedLLMClient(ScriptedLLMClient):
         return LLMResponse(
             text=text,
             model=self.model_id,
-            input_tokens=max(1, len(request.prompt.split())),
+            input_tokens=max(1, len(request.prompt) // 4),
             output_tokens=max(1, words),
             latency_ms=0,
         )
