@@ -2,9 +2,9 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Contract frozen (2026-11-06) — implementation follows issues #165–#181
 **Depends:** EvidenceCorpus (authoritative passages, source tiers), EvidenceRetrieval (candidate passages for verification)
-**Last reviewed:** 2026-11-05
+**Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description
@@ -16,6 +16,29 @@ admits when a claim cannot be verified.
 **Modeling Depth:** tactical (core domain)
 **Subdomain Rationale:** Requirement that figures must not contradict each other and must be substantiated.
 **Context Map:** partnership → NegotiationSession (verdicts gate argument acceptance).
+
+
+## Contract Freeze (issue #164)
+
+Interfaces, DTOs, events, error codes, repository ports and the HTTP surface are frozen. Every
+stub names its implementing issue and raises until that issue lands.
+
+| Contract | Location |
+|---|---|
+| Values, enums, reference figure, evidence | `domain/values.py` |
+| `Claim` aggregate surface | `domain/claim.py` |
+| Verification record, contradiction, expert review | `domain/entities.py` |
+| 10 event payloads + union | `domain/events.py` |
+| Error codes | `domain/errors.py` |
+| Repository ports | `domain/repositories.py` |
+| Pure domain services | `domain/services.py` |
+| Application ports, requests, results | `application/` |
+| German number adapter | `infrastructure/number_parser.py` |
+| Published `ClaimVerdictView` | `interfaces/published.py` |
+| 7 routes + scopes + bodies | `interfaces/http/` |
+
+Contract tests inspect structure only (`tests/unit/claim-validation/**`); behaviour tests are added by
+the implementation issues.
 
 ## Architecture
 
