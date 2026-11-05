@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from shared.ids import new_id
+from shared.metrics import METRICS
 from simulation_orchestration.application.events import RunBudgetExhausted
 from simulation_orchestration.application.values import (
     BudgetDecision,
@@ -52,6 +53,9 @@ class BudgetGuard:
         )
         for dimension, limit, used in checks:
             if limit is not None and used > Decimal(limit):
+                METRICS.increment(
+                    "simulation_budget_exhausted_total", {"dimension": dimension.value}
+                )
                 return BudgetDecision(
                     allowed=False,
                     dimension=dimension,

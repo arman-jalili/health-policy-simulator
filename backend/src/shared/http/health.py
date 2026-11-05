@@ -115,6 +115,12 @@ async def readyz(request: Request) -> JSONResponse:
         checks["claim_validation"] = "ok"
         checks["claim_validation_persistence"] = str(settings.persistence)
 
+    simulation = getattr(request.app.state, "simulation_orchestration", None)
+    if simulation is not None:
+        checks["simulation_orchestration"] = "ok"
+        checks["simulation_orchestration_persistence"] = str(settings.persistence)
+        checks["simulation_model"] = settings.simulation_model_id
+
     if failures:
         raise ServiceUnavailableError(
             "A required dependency is unavailable",
