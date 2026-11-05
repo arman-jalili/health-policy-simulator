@@ -132,8 +132,20 @@ class Stakeholder:
         stated_on: date,
         passage_id: PassageId,
     ) -> HistoricalPosition:
-        """Record a past stance with attribution strength; implemented by issue #110."""
-        raise NotImplementedError("record_historical_position is implemented by issue #110")
+        """Record a past stance; weak attribution is stored unusable and flagged."""
+        position = HistoricalPosition.new(
+            stance=stance,
+            attribution=attribution,
+            stated_on=stated_on,
+            passage_id=passage_id,
+        )
+        if not position.usable:
+            self.events.append(WeakAttributionFlagged(self.id, passage_id, attribution))
+        self.history.append(position)
+        self.events.append(
+            HistoricalPositionRecorded(self.id, position.id, attribution, passage_id)
+        )
+        return position
 
     def negotiating_power(self) -> NegotiatingPower:
         """Derive leverage from grounded inputs only; never assignable."""
