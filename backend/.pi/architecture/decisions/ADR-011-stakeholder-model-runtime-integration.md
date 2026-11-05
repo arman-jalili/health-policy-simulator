@@ -53,6 +53,12 @@ the HTTP router.**
 - Persona YAML is now a deployment input; operators must ship `backend/config/personas/`.
 - The current runtime uses the in-memory repository family seeded from those cards; durable
   PostgreSQL persistence is a follow-up deployment concern, not a hidden default.
+- **Deviation from ADR-002 (explicit):** this context creates no tables and owns no migration yet,
+  so the schema-per-context rule in ADR-002 is not satisfied here. Recorded as D-001 in
+  `.pi/architecture/DEFERRED.md`.
+- **Exit criterion (when the deviation must end):** before any run in which a
+  `HistoricalPosition` registered through the API influences a negotiation outcome — i.e. the
+  first time NegotiationSession cites institutional history as evidence.
 
 ### Neutral
 

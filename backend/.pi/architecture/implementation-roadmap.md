@@ -397,3 +397,17 @@ number verification → scenario comparison → coalition offers granularity →
 ---
 
 *Generated from session: 87433e56-b1a2-4464-a232-2dc4fe6f9dfd · Date: 2026-11-05*
+
+---
+
+## Deferred Work
+
+Items accepted as incomplete, with the decision and cost already recorded: see
+[`.pi/architecture/DEFERRED.md`](DEFERRED.md).
+
+- **D-001** StakeholderModel durable persistence (~3 h) — trigger: first negotiation run that cites a
+  `HistoricalPosition` as evidence
+- D-002 persona legal citations unverified · D-003 retrieval eval set lacks paraphrase cases ·
+  D-004 `semantic` is a hashing encoder, not a neural one
+
+A phase is not blocked by these, but no epic may silently inherit them: each has a named trigger.

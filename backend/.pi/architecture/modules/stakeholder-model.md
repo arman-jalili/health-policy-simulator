@@ -63,7 +63,8 @@ The context runs through the application shell, not a test-only library (ADR-009
 
 **Known deployment limitation:** the runtime currently seeds the registry from persona cards and keeps
 mutable profile/history/binding state in memory. Durable PostgreSQL persistence for these records is
-the next deployment step, not a hidden default. The runbook and DR plan state this explicitly.
+the next deployment step, not a hidden default. The runbook and DR plan state this explicitly. Tracked as **D-001** in `.pi/architecture/DEFERRED.md` with the
+estimate, the seed-reconciliation decision and acceptance criteria.
 
 ## Related ADRs
 
