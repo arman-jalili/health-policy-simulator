@@ -106,6 +106,13 @@ class AttributionStrength(StrEnum):
         return self.is_explicit()
 
 
+def _ensure_proposal_class(value: object) -> None:
+    if not isinstance(value, ProposalClass):
+        from stakeholder_model.domain.errors import VetoNarrowedToProposal
+
+        raise VetoNarrowedToProposal(str(value))
+
+
 def _require_text(value: str, field_name: str) -> None:
     if not value.strip():
         raise ValueError(f"{field_name} must be non-empty")
@@ -241,6 +248,9 @@ class VetoRight:
 
     proposal_class: ProposalClass
     source: MandateSource
+
+    def __post_init__(self) -> None:
+        _ensure_proposal_class(self.proposal_class)
 
 
 @dataclass(frozen=True, slots=True)
