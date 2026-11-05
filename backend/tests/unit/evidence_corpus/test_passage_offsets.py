@@ -88,3 +88,51 @@ class TestArticleBounds:
 
     def test_overlap_guard_is_declared_on_the_article_interface(self) -> None:
         assert "publishable_passages" in dir(Article)
+
+
+class TestPassageSpanDiscipline:
+    """A citation is reproducible only if its span is exactly inside the article and unique."""
+
+    def test_ordinals_follow_insertion_order(self) -> None:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+            SourceType,
+        )
+
+        document = Document.register(
+            source_uri="s3://corpus/std.pdf",
+            content_hash="sha256:abc",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction("Text", ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0))
+        article = document.add_article("h", "Erster Satz. Zweiter Satz.", 1, 1)
+
+        first = article.add_passage(
+            text="Erster Satz.", offsets=Offsets(0, 12), speaker_kind=SpeakerKind.INSTITUTION
+        )
+        second = article.add_passage(
+            text="Zweiter Satz.", offsets=Offsets(13, 25), speaker_kind=SpeakerKind.INSTITUTION
+        )
+
+        assert (first.ord, second.ord) == (0, 1)
+        assert article.passage_count() == 2
+
+    def test_adjacent_spans_do_not_overlap(self) -> None:
+        assert Offsets(0, 10).overlaps(Offsets(10, 20)) is False
+        assert Offsets(0, 11).overlaps(Offsets(10, 20)) is True
+        assert Offsets(10, 20).overlaps(Offsets(0, 11)) is True
+
+    def test_zero_length_spans_are_impossible(self) -> None:
+        with pytest.raises(ValueError, match="end must be greater"):
+            Offsets(5, 5)
+
+    def test_negative_offsets_are_impossible(self) -> None:
+        with pytest.raises(ValueError, match="must not be negative"):
+            Offsets(-1, 5)
