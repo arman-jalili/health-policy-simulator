@@ -1,0 +1,41 @@
+code: privatkrankenanstalten
+persona_version: '2026.1'
+identity:
+  name: Verband der Privatkrankenanstalten Österreichs
+  short_name: Privatkrankenanstalten
+  category: provider
+mandate_scope:
+  topics:
+  - service_catalogue
+  - waiting_times
+  - fee_schedule
+  description: Private hospital providers' service and reimbursement interests
+  source: &id001
+    kind: statutory
+    citation: Krankenanstalten- und Kuranstaltengesetz, § 15
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '2100000000'
+  period: annual
+  tolerance: 0.03
+  source: *id001
+interests:
+- topic: service_catalogue
+  goal: Open selective contracts for elective care
+  weight: 0.9
+- topic: waiting_times
+  goal: Use private capacity to reduce public waiting lists
+  weight: 0.7
+constraints:
+- statement: No price caps without volume guarantees
+  topic: fee_schedule
+- statement: No obligation to treat outside the agreed catalogue
+  topic: service_catalogue
+red_lines:
+- Retroactive reimbursement cuts
+priorities:
+- rank: 1
+  topic: service_catalogue
+veto_rights:
+- proposal_class: fee_schedule
+  source: *id001

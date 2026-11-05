@@ -1,0 +1,43 @@
+code: landesgesundheitsfonds
+persona_version: '2026.1'
+identity:
+  name: Landesgesundheitsfonds
+  short_name: Landesgesundheitsfonds
+  category: regulator
+mandate_scope:
+  topics:
+  - hospital_plan
+  - waiting_times
+  - public_health
+  description: Regional health planning and hospital financing
+  source: &id001
+    kind: statutory
+    citation: Gesundheitsfonds-Gesetz, § 2
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '3200000000'
+  period: annual
+  tolerance: 0.04
+  source: *id001
+interests:
+- topic: hospital_plan
+  goal: Align regional hospital capacity with demand
+  weight: 0.9
+- topic: waiting_times
+  goal: Meet regional waiting-time targets
+  weight: 0.8
+constraints:
+- statement: No cross-regional shift of structural funds
+  topic: hospital_plan
+- statement: No new facility without a regional needs assessment
+  topic: public_health
+red_lines:
+- Federal override of regional planning decisions
+priorities:
+- rank: 1
+  topic: hospital_plan
+- rank: 2
+  topic: waiting_times
+veto_rights:
+- proposal_class: hospital_plan
+  source: *id001

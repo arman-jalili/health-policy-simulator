@@ -1,0 +1,40 @@
+code: apothekerkammer
+persona_version: '2026.1'
+identity:
+  name: Österreichische Apothekerkammer
+  short_name: Apothekerkammer
+  category: professional_body
+mandate_scope:
+  topics:
+  - service_catalogue
+  - fee_schedule
+  description: Professional representation of community and hospital pharmacists
+  source: &id001
+    kind: statutory
+    citation: Apothekengesetz, § 26
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '45000000'
+  period: annual
+  tolerance: 0.0
+  source: *id001
+interests:
+- topic: service_catalogue
+  goal: Recognise pharmacy-led adherence services
+  weight: 0.9
+- topic: fee_schedule
+  goal: Secure sustainable pharmacy remuneration
+  weight: 0.7
+constraints:
+- statement: No mail-order-only dispensing for controlled medicines
+  topic: service_catalogue
+- statement: No reduction of pharmacy on-call funding
+  topic: fee_schedule
+red_lines:
+- Deregulation of controlled-medicine dispensing
+priorities:
+- rank: 1
+  topic: service_catalogue
+veto_rights:
+- proposal_class: service_catalogue
+  source: *id001

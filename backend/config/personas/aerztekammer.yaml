@@ -1,0 +1,43 @@
+code: aerztekammer
+persona_version: '2026.1'
+identity:
+  name: Österreichische Ärztekammer
+  short_name: Ärztekammer
+  category: professional_body
+mandate_scope:
+  topics:
+  - waiting_times
+  - fee_schedule
+  - workforce
+  description: Professional representation of physicians and contract negotiations
+  source: &id001
+    kind: statutory
+    citation: Ärztegesetz 1998, § 117
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '180000000'
+  period: annual
+  tolerance: 0.0
+  source: *id001
+interests:
+- topic: waiting_times
+  goal: Add contract positions to reduce waiting lists
+  weight: 0.8
+- topic: fee_schedule
+  goal: Index fee-schedule values to inflation
+  weight: 0.9
+constraints:
+- statement: No unilateral changes to the fee schedule
+  topic: fee_schedule
+- statement: No mandatory supply quotas without funding
+  topic: workforce
+red_lines:
+- Unfunded expansion of physician duties
+priorities:
+- rank: 1
+  topic: fee_schedule
+- rank: 2
+  topic: waiting_times
+veto_rights:
+- proposal_class: fee_schedule
+  source: *id001

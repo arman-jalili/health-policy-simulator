@@ -1,0 +1,43 @@
+code: oegk
+persona_version: '2026.1'
+identity:
+  name: Österreichische Gesundheitskasse
+  short_name: ÖGK
+  category: payer
+mandate_scope:
+  topics:
+  - waiting_times
+  - benefits
+  - premiums
+  description: Social health insurance coverage and benefit administration
+  source: &id001
+    kind: statutory
+    citation: § 23 ASVG
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '12500000000'
+  period: annual
+  tolerance: 0.02
+  source: *id001
+interests:
+- topic: waiting_times
+  goal: Shorten elective waiting times without premium growth
+  weight: 0.9
+- topic: benefits
+  goal: Keep the statutory benefit catalogue stable
+  weight: 0.7
+constraints:
+- statement: No increase in contribution rates above inflation
+  topic: premiums
+- statement: No reduction of statutory benefits
+  topic: benefits
+red_lines:
+- Abolition of the statutory benefit catalogue
+priorities:
+- rank: 1
+  topic: waiting_times
+- rank: 2
+  topic: benefits
+veto_rights:
+- proposal_class: statutory_benefit_change
+  source: *id001
