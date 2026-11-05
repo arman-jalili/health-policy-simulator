@@ -64,6 +64,9 @@ Verify restores, do not assume them: `pg_restore` into a scratch database monthl
 - `select max(sequence) from shared_event_outbox` — gaps are not expected; a gap means a rolled-back
   transaction, which is fine, but a decreasing maximum means a restore went too far back.
 
+Authentication recovery: `docs/dr-plan-identity-access.md` (key-table restore, revocation after
+restore, credential compromise). Keys are hashed; plaintext is never backed up.
+
 ## Communication
 
 Single operator (hackathon prototype): record the incident in the project workpad with timeline,

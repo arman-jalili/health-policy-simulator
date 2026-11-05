@@ -107,6 +107,9 @@ Never roll back a published brief: briefs are attributed artefacts. Withdraw wit
   logging processor (`***`). A leaked credential in logs is a bug — open an issue with the trace id.
 - Never log request bodies at INFO; they contain corpus text and query parameters.
 
+Authentication operations: `docs/runbook-identity-access.md` (key bootstrap, 401/403 triage,
+revocation, credential compromise).
+
 ## Evidence corpus operations
 
 The corpus context exposes eight endpoints under `/api/v1` (documents, ingestion runs, passages,

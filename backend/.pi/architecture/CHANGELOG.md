@@ -48,6 +48,44 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - IdentityAccess implemented and wired (epic #30, issues #31-#44)
+
+### Changed
+- Module: identity-access — contract frozen (#31), resolution outcomes + ACL proof (#32), strict
+  anonymous rejection (#33), scope enforcement with static adapter (#34), loopback demo guard (#35),
+  salted-hash key store + migration `0104` (#36), request-scoped actor attribution (#37), repo-wide
+  ACL isolation (#38), admin lifecycle + immediate revocation (#39), DB/LLM readiness (#40),
+  composition wiring + admin router (#41), runtime reachability + ADR-009 (#42), 81-check contract
+  proofing stage + CI coverage gate (#43)
+- Module: identity-access — `Status: Implemented`; every `/api/v1` route declares a scope and
+  rejects unscoped principals; `demo` + `production` refuses boot
+- Docs: dedicated `docs/runbook-identity-access.md` and `docs/dr-plan-identity-access.md`; ADR-009
+  accepted; roadmap W1–W7 evidence recorded
+- Tests: 502 passing with PostgreSQL; wired E2E covers admin issue → operator read → revoke → 401
+
+### Impact Analysis
+- Files affected:
+  - `src/identity_access/**`, `src/shared/{app,config,attribution,outbox}.py`
+  - `migrations/versions/0104_identity_access.py`
+  - `.pi/scripts/ci/{check_identity-access_contracts,stage_identity-access_proofing,run_hardening_stages}.sh`
+  - `.github/workflows/ci.yml`, `docs/`, `tests/{unit,integration}/...`
+- Canonical refs to update:
+  - `.pi/architecture/modules/identity-access.md#frozen-contracts-2026-11-05`
+- Validators required:
+  - ci, tests, security, architecture, canonical, operations, runtime-wiring, readiness
+
+### Migration Steps
+1. `alembic upgrade head` (applies `0104_identity_access`)
+2. Bootstrap an admin key; issue role keys; verify `/readyz` and a scoped route
+3. Keep `AUTH_MODE=strict` outside local; demo remains loopback-only
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated (#31-#44)
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-05] - IdentityAccess contract frozen (issue #31)
 
 ### Changed
@@ -230,8 +268,9 @@ Track which changes have been synced to implementation:
 | 2026-11-05 | Complete architecture package | claim-validation | pending | not run |
 | 2026-11-05 | Complete architecture package | governance-compliance | pending | not run |
 | 2026-11-05 | Complete architecture package | simulation-orchestration | pending | not run |
+| 2026-11-05 | IdentityAccess implemented (#31-#44) | identity-access | complete | pass |
 | 2026-11-05 | IdentityAccess contract freeze (#31) | identity-access | contract frozen | pass |
-| 2026-11-05 | Complete architecture package | identity-access | contract frozen | pass |
+| 2026-11-05 | Complete architecture package | identity-access | complete | pass |
 
 ---
 
