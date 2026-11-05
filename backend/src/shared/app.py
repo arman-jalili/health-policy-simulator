@@ -18,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from evidence_corpus.composition import build_container
 from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
+from identity_access.composition import build_identity_access_container
+from identity_access.interfaces.http.router import router as identity_access_router
 from shared.config import Settings, get_settings
 from shared.db import Database
 from shared.enums import Persistence
@@ -79,6 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
     app.state.db = database
     app.state.corpus = build_container(app_settings, database)
+    app.state.identity_access = build_identity_access_container(app_settings, database)
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -95,6 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(metrics_router)
     app.include_router(evidence_corpus_router)
+    app.include_router(identity_access_router)
     return app
 
 

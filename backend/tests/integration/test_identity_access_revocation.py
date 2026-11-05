@@ -20,7 +20,6 @@ from identity_access.infrastructure.keys import Sha256ApiKeyFactory
 from identity_access.infrastructure.repository.models import ApiKeyRow
 from identity_access.infrastructure.repository.sqlalchemy import SqlAlchemyApiKeyRepository
 from identity_access.interfaces.dto import CreateApiKeyCommand
-from identity_access.interfaces.http.router import router as admin_router
 from identity_access.interfaces.types import Role
 from shared.app import create_app
 from shared.config import Settings, get_settings
@@ -63,7 +62,6 @@ async def test_revoked_key_is_rejected_on_the_next_request() -> None:
     settings = _settings()
     database = Database(settings)
     app = create_app(settings)
-    app.include_router(admin_router)
     key_ids: list[str] = []
     try:
         async with database.session() as session:

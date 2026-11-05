@@ -21,12 +21,16 @@ from identity_access.interfaces.http.schemas import (
     IssuedApiKeyResponse,
 )
 from identity_access.interfaces.ports import ApiKeyAdminPort
-from identity_access.interfaces.types import Principal, Scope
+from identity_access.interfaces.types import Scope
 from shared.http.schemas import error_responses
 
 ADMIN_ERRORS = error_responses(401, 403, 404, 422, 503)
 
-router = APIRouter(prefix="/api/v1/admin", tags=["identity-access"])
+router = APIRouter(
+    prefix="/api/v1/admin",
+    tags=["identity-access"],
+    dependencies=[Depends(require_scope(Scope.ADMIN))],
+)
 
 
 @router.post(
@@ -39,7 +43,6 @@ router = APIRouter(prefix="/api/v1/admin", tags=["identity-access"])
 async def create_api_key(
     payload: CreateApiKeyRequest,
     admin: Annotated[ApiKeyAdminPort, Depends(get_api_key_admin)],
-    principal: Annotated[Principal, Depends(require_scope(Scope.ADMIN))],
 ) -> IssuedApiKeyResponse:
     """Issue a key and return the plaintext exactly once."""
     issued = await admin.create_key(CreateApiKeyCommand(label=payload.label, role=payload.role))
@@ -60,7 +63,6 @@ async def create_api_key(
 )
 async def list_api_keys(
     admin: Annotated[ApiKeyAdminPort, Depends(get_api_key_admin)],
-    principal: Annotated[Principal, Depends(require_scope(Scope.ADMIN))],
 ) -> list[ApiKeySummaryResponse]:
     """List key metadata without hashes or plaintext."""
     summaries = await admin.list_keys()
@@ -85,7 +87,6 @@ async def list_api_keys(
 async def revoke_api_key(
     key_id: str,
     admin: Annotated[ApiKeyAdminPort, Depends(get_api_key_admin)],
-    principal: Annotated[Principal, Depends(require_scope(Scope.ADMIN))],
 ) -> None:
     """Revoke a key; the next request with it must fail with 401."""
     await admin.revoke_key(key_id)

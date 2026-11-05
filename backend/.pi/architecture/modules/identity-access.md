@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Contract frozen (2026-11-05)
+**Status:** Implemented (2026-11-05)
 **Depends:** — (none; generic adapter)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -179,7 +179,7 @@ issues may fill bodies but must not rename or reshape these types.
 | Errors | `src/identity_access/interfaces/errors.py` | `AUTHENTICATION_REQUIRED` → `UNAUTHENTICATED` (401), `SCOPE_REQUIRED` (403), `API_KEY_NOT_FOUND` (404) |
 | HTTP | `src/identity_access/interfaces/http/dependencies.py`, `.../deps.py`, `.../schemas.py`, `.../router.py` | `require_scope(scope)` guard, `get_api_key_admin` dependency; `CreateApiKeyRequest`, `IssuedApiKeyResponse`, `ApiKeySummaryResponse`; admin routes below are implemented against `ApiKeyAdminPort` |
 | Key store | `src/identity_access/infrastructure/keys.py`, `src/identity_access/infrastructure/key_store.py`, `src/identity_access/infrastructure/key_resolver.py`, `src/identity_access/infrastructure/repository/models.py`, `src/identity_access/infrastructure/repository/sqlalchemy.py`, `src/identity_access/infrastructure/repository/records.py`, `.../ports.py`, `src/identity_access/infrastructure/resolvers.py` | `Sha256ApiKeyFactory`/`hash_key`, `HashedApiKeyStore`, `KeyResolver`, `ApiKeyRow`/`SqlAlchemyApiKeyRepository`, `ApiKeyRecord`, `ApiKeyRepository`, `StaticPrincipalResolver`; migration `0104_identity_access` owns `identity_access_api_key`; only hash+salt persisted; secrets are `repr=False` |
-| Composition | `src/identity_access/composition.py` | `IdentityAccessContainer(principal_port, api_key_admin, readiness, demo_policy)`; `build_identity_access_container(settings, database)` |
+| Composition | `src/identity_access/composition.py` | `IdentityAccessContainer(principal_port, api_key_admin, readiness, demo_policy)`; `build_identity_access_container(settings, database)` selects UoW-backed PostgreSQL or in-memory adapters |
 
 Resolution is a request outcome, not an aggregate: `ResolutionState` is never persisted and no
 domain event is published (ADR-008). The only published concept is `Principal`; `ApiKeyRecord`,
@@ -246,7 +246,7 @@ GovernanceCompliance for actor attribution.
 | Composition | key store bound to migration `0104`; `AUTH_MODE` resolved once at startup | boot test for `strict` and `demo` |
 | Demo guard | `AUTH_MODE=demo` + `ENV=production` refuses to boot | startup test |
 | Attribution | `Principal.label` flows into every command's `actor` and into `agent_invocation` | integration test: event actor is non-empty |
-| ACL isolation | no module outside `identity_access/infrastructure` imports key-store types | architecture test |
+| ACL isolation | no module outside `identity_access/infrastructure` imports key-store types (the composition root is the sole adapter-wiring exception) | architecture test |
 
 ## Acceptance Criteria
 
@@ -257,7 +257,7 @@ GovernanceCompliance for actor attribution.
 | 3 | Demo guard | `AUTH_MODE=demo` with `ENV=production` refuses to boot with a clear error | unit |
 | 4 | Key secrecy | Keys are stored hashed; the plaintext is returned exactly once and never logged | unit |
 | 5 | Attribution | Every command event carries a non-empty `actor` label | integration |
-| 6 | ACL isolation | No module outside `identity_access/infrastructure` imports key-store types | architecture test |
+| 6 | ACL isolation | No module outside `identity_access/infrastructure` imports key-store types (composition root excepted) | architecture test |
 | 7 | Revocation | A revoked key returns `401` immediately on the next request | integration |
 | 8 | Health endpoints | `/healthz` and `/readyz` need no auth and report DB + LLM reachability | integration |
 | 9 | Wiring | Meta-test: every `/api/v1` route declares a scope and rejects an unscoped principal; boot refuses `demo` + `production` | contract test |
