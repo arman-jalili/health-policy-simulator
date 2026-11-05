@@ -8,7 +8,7 @@ a stub raising ``NotImplementedError`` until the owning implementation issue lan
 
 from __future__ import annotations
 
-from evidence_corpus.domain.values import AuthorityTier
+from evidence_corpus.domain.values import AuthorityTier, SourceType
 from evidence_retrieval.application.commands import (
     ApplyRecencyPolicyRequest,
     AssembleEvidencePackRequest,
@@ -19,6 +19,7 @@ from evidence_retrieval.application.commands import (
 from evidence_retrieval.application.dto import (
     AbsenceResult,
     CandidateResult,
+    CandidateScoreResult,
     EvidencePackResult,
     ScoreBreakdownResult,
     SearchCandidatesResult,
@@ -26,6 +27,7 @@ from evidence_retrieval.application.dto import (
 )
 from evidence_retrieval.application.ports import Clock, QueryRewritePort
 from evidence_retrieval.domain.entities import EvidenceCandidate, RetrievalTrace
+from evidence_retrieval.domain.errors import EvidencePackNotFound
 from evidence_retrieval.domain.evidence_pack import EvidencePack
 from evidence_retrieval.domain.repositories import EvidencePackRepository, PassageSearchPort
 from evidence_retrieval.domain.services import (
@@ -37,6 +39,7 @@ from evidence_retrieval.domain.services import (
 from evidence_retrieval.domain.values import (
     AuthorityWeight,
     ClaimText,
+    EvidenceScore,
     PackId,
     PassageId,
     QueryRewrite,
@@ -191,7 +194,10 @@ class GetEvidencePack:
 
     async def execute(self, request: GetEvidencePackRequest) -> EvidencePackResult:
         """Return the pack or raise :class:`EvidencePackNotFound`."""
-        raise NotImplementedError("GetEvidencePack.execute is a frozen stub")
+        pack = await self._packs.get(PackId(request.pack_id))
+        if pack is None:
+            raise EvidencePackNotFound(request.pack_id)
+        return _pack_result(pack)
 
 
 class GetScoreBreakdown:
@@ -202,7 +208,16 @@ class GetScoreBreakdown:
 
     async def execute(self, request: GetScoreBreakdownRequest) -> ScoreBreakdownResult:
         """Return every candidate's component weights."""
-        raise NotImplementedError("GetScoreBreakdown.execute is a frozen stub")
+        pack = await self._packs.get(PackId(request.pack_id))
+        if pack is None:
+            raise EvidencePackNotFound(request.pack_id)
+        return ScoreBreakdownResult(
+            pack_id=str(pack.id),
+            candidates=[
+                CandidateScoreResult(passage_id=c.passage_id, score=c.score)
+                for c in pack.candidates
+            ],
+        )
 
 
 class ReweightEvidencePack:
@@ -221,4 +236,60 @@ class ReweightEvidencePack:
 
     async def execute(self, request: ApplyRecencyPolicyRequest) -> EvidencePackResult:
         """Return a new frozen pack version; the previous version stays immutable."""
-        raise NotImplementedError("ReweightEvidencePack.execute is a frozen stub")
+        stored = await self._packs.get(PackId(request.pack_id))
+        if stored is None:
+            raise EvidencePackNotFound(request.pack_id)
+        rewritten = EvidencePack(
+            id=PackId(new_id("evp")),
+            claim=stored.claim,
+            snapshot_id=stored.snapshot_id,
+            index_version=stored.index_version,
+            trace=RetrievalTrace(
+                embedding_model=stored.trace.embedding_model,
+                reranker_model=stored.trace.reranker_model,
+                query_rewrite=QueryRewrite(
+                    original=stored.trace.query_rewrite.original,
+                    expanded=stored.trace.query_rewrite.expanded,
+                ),
+                stance_counts=dict(stored.trace.stance_counts),
+            ),
+        )
+        as_of = self._clock.now().date()
+        for candidate in stored.candidates:
+            provenance = candidate.provenance
+            recency = (
+                self._recency.apply(
+                    policy=request.policy,
+                    published_on=provenance.published_on,
+                    source_type=SourceType.OTHER,
+                    as_of=as_of,
+                )
+                if provenance is not None
+                else 0.0
+            )
+            rewritten.add_candidate(
+                EvidenceCandidate(
+                    passage_id=candidate.passage_id,
+                    stance=candidate.stance,
+                    score=EvidenceScore(
+                        authority=candidate.score.authority,
+                        lexical=candidate.score.lexical,
+                        semantic=candidate.score.semantic,
+                        recency=recency,
+                        directness=candidate.score.directness,
+                        final=(
+                            candidate.score.authority
+                            + candidate.score.lexical
+                            + candidate.score.semantic
+                            + recency
+                            + candidate.score.directness
+                        ),
+                    ),
+                    provenance=provenance,
+                )
+            )
+        if stored.absence is not None:
+            rewritten.record_absence(list(stored.absence.queries), stored.absence.reason)
+        rewritten.freeze()
+        await self._packs.save(rewritten)
+        return _pack_result(rewritten)

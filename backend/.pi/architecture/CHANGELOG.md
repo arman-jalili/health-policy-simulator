@@ -48,6 +48,39 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - EvidenceRetrieval runtime integration (issue #77)
+
+### Changed
+- Module: evidence-retrieval
+  - Runtime entry: `shared.app.create_app` builds the retrieval container after the corpus and
+    mounts the router.
+  - Corpus access: `CorpusPassageSearch` consumes only published corpus ports.
+  - Persistence: migration `0201_evidence_retrieval` and the SQLAlchemy JSONB pack adapter.
+  - Readiness: `/readyz` reports `evidence_retrieval` and returns 503 when embeddings or reranker
+    are unreachable.
+  - Legacy path: none existed; pre-wiring `NotImplementedError` stubs are retired.
+
+### Impact Analysis
+- Files affected:
+  - `src/shared/app.py`, `src/shared/http/health.py`
+  - `src/evidence_retrieval/composition.py`, `infrastructure/adapters.py`,
+    `infrastructure/repository/sqlalchemy.py`
+  - `migrations/versions/0201_evidence_retrieval.py`
+  - `tests/integration/test_evidence_retrieval_e2e.py`
+- Canonical refs: `.pi/architecture/modules/evidence-retrieval.md`,
+  `.pi/architecture/decisions/ADR-010-evidence-retrieval-runtime-integration.md`
+- Validators required: tests, architecture, runtime reachability, canonical
+
+### Migration Steps
+1. Apply `alembic upgrade head` (creates `evidence_retrieval_pack`).
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-05] - EvidenceRetrieval contract frozen (issue #61)
 
 ### Changed

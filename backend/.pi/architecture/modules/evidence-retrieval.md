@@ -64,6 +64,7 @@ issue; a TODO body must never answer a real request.
 | ADR-003 Cross-Context Communication | Consumes corpus as open host; publishes to NegotiationSession through an ACL |
 | ADR-006 Cost Tracking | Embedding calls are metered like LLM calls |
 | ADR-008 Proportional Modeling Depth | Tactical: invariants and triage apply |
+| ADR-010 EvidenceRetrieval Runtime Integration | Router-mounted entry path, published corpus ports, readiness-red on embedding outage |
 
 ## Diagrams
 
