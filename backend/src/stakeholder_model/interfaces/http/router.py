@@ -15,9 +15,25 @@ from fastapi import APIRouter, Depends, status
 
 from identity_access.interfaces.http.dependencies import require_declared_scope
 from shared.http.schemas import error_responses
+from stakeholder_model.application.commands import (
+    BindAgentPersonaRequest,
+    ListHistoricalPositionsRequest,
+    ListStakeholdersRequest,
+    SelectRelevantStakeholdersRequest,
+)
+from stakeholder_model.domain.values import RunId, StakeholderId
 from stakeholder_model.interfaces.http.deps import StakeholderModelContainer, get_container
+from stakeholder_model.interfaces.http.mappers import (
+    to_cite_request,
+    to_position_response,
+    to_record_request,
+    to_register_request,
+    to_summary_response,
+    to_update_request,
+)
 from stakeholder_model.interfaces.http.schemas import (
     BindBody,
+    BindingResponse,
     BindResponse,
     CitePowerSourceBody,
     CitePowerSourceResponse,
@@ -26,6 +42,7 @@ from stakeholder_model.interfaces.http.schemas import (
     RegisterStakeholderBody,
     RegisterStakeholderResponse,
     SelectionBody,
+    SelectionItem,
     SelectionResponse,
     StakeholdersResponse,
     UpdateProfileBody,
@@ -53,7 +70,8 @@ async def list_stakeholders(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> StakeholdersResponse:
     """Return the registry with profile summaries."""
-    raise NotImplementedError("list_stakeholders is implemented by issue #117")
+    summaries = await container.list_stakeholders.execute(ListStakeholdersRequest())
+    return StakeholdersResponse(items=[to_summary_response(item) for item in summaries])
 
 
 @router.post(
@@ -69,7 +87,11 @@ async def register_stakeholder(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> RegisterStakeholderResponse:
     """Validate the persona profile and register the institution."""
-    raise NotImplementedError("register_stakeholder is implemented by issue #117")
+    result = await container.register_stakeholder.execute(to_register_request(body))
+    return RegisterStakeholderResponse(
+        stakeholder_id=result.stakeholder_id,
+        profile_version=result.profile_version,
+    )
 
 
 @router.patch(
@@ -85,7 +107,12 @@ async def update_profile(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> UpdateProfileResponse:
     """Apply a profile revision; active bindings stay immutable."""
-    raise NotImplementedError("update_profile is implemented by issue #117")
+    result = await container.update_profile.execute(to_update_request(stakeholder_id, body))
+    return UpdateProfileResponse(
+        stakeholder_id=result.stakeholder_id,
+        profile_version=result.profile_version,
+        changed_fields=list(result.changed_fields),
+    )
 
 
 @router.post(
@@ -101,7 +128,8 @@ async def cite_power_source(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> CitePowerSourceResponse:
     """Ground a veto/mandate/budget claim or return an explicit refusal."""
-    raise NotImplementedError("cite_power_source is implemented by issue #108")
+    result = await container.cite_power_source.execute(to_cite_request(stakeholder_id, body))
+    return CitePowerSourceResponse(accepted=result.accepted, reason=result.reason)
 
 
 @router.get(
@@ -117,7 +145,16 @@ async def list_historical_positions(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> HistoricalPositionsResponse:
     """Return provenance-backed positions, optionally usable-only."""
-    raise NotImplementedError("list_historical_positions is implemented by issue #117")
+    result = await container.list_positions.execute(
+        ListHistoricalPositionsRequest(
+            stakeholder_id=StakeholderId(stakeholder_id),
+            usable_only=usable_only,
+        )
+    )
+    return HistoricalPositionsResponse(
+        stakeholder_id=result.stakeholder_id,
+        positions=[to_position_response(item) for item in result.positions],
+    )
 
 
 @router.post(
@@ -134,7 +171,11 @@ async def record_historical_position(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> HistoricalPositionsResponse:
     """Record a position; weak attribution is stored unusable."""
-    raise NotImplementedError("record_historical_position is implemented by issue #110")
+    result = await container.record_position.execute(to_record_request(stakeholder_id, body))
+    return HistoricalPositionsResponse(
+        stakeholder_id=stakeholder_id,
+        positions=[to_position_response(result)],
+    )
 
 
 @router.post(
@@ -150,7 +191,18 @@ async def select_relevant_stakeholders(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> SelectionResponse:
     """Score all institutions and return materiality in [0, 1]."""
-    raise NotImplementedError("select_relevant_stakeholders is implemented by issue #116")
+    result = await container.select_stakeholders.execute(
+        SelectRelevantStakeholdersRequest(run_id=RunId(run_id), mandate=body.mandate)
+    )
+    return SelectionResponse(
+        items=[
+            SelectionItem(
+                stakeholder_id=selection.stakeholder_id,
+                materiality=selection.materiality.value,
+            )
+            for selection in result.selections
+        ]
+    )
 
 
 @router.post(
@@ -166,4 +218,19 @@ async def bind_agent_persona(
     container: Annotated[StakeholderModelContainer, Depends(get_container)],
 ) -> BindResponse:
     """Bind complete, institutions-only profiles for the run."""
-    raise NotImplementedError("bind_agent_persona is implemented by issue #117")
+    result = await container.bind_persona.execute(
+        BindAgentPersonaRequest(
+            run_id=RunId(run_id),
+            stakeholder_ids=tuple(StakeholderId(value) for value in body.stakeholder_ids),
+        )
+    )
+    return BindResponse(
+        bindings=[
+            BindingResponse(
+                binding_id=binding.binding_id,
+                stakeholder_id=binding.stakeholder_id,
+                persona_version=binding.persona_version,
+            )
+            for binding in result.bindings
+        ]
+    )
