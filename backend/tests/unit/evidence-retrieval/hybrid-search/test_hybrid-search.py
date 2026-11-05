@@ -13,6 +13,7 @@ from evidence_retrieval.application.ports import EmbeddingPort, RerankerPort
 from evidence_retrieval.domain.repositories import PassageSearchPort
 from evidence_retrieval.domain.services import ReciprocalRankFusion
 from evidence_retrieval.domain.values import QueryRewrite
+from evidence_retrieval.infrastructure.query_rewrite import GermanQueryRewrite
 from evidence_retrieval.interfaces.http.router import router
 
 
@@ -58,3 +59,22 @@ def test_candidates_endpoint_is_frozen_in_openapi() -> None:
 
     assert operation["x-required-scope"] == "runs:read"
     assert "SearchCandidatesBody" in str(operation["requestBody"])
+
+
+def test_german_rewrite_expands_a_compound_but_keeps_the_original_term_first() -> None:
+    rewrite = GermanQueryRewrite().rewrite("Kassenstellen")
+
+    terms = rewrite.expanded.split(" OR ")
+
+    assert rewrite.original == "Kassenstellen"
+    assert terms[0] == "Kassenstellen"
+    assert "Kasse" in terms
+    assert "stellen" in terms
+    assert len(terms) == len(set(terms))
+
+
+def test_german_rewrite_is_deterministic() -> None:
+    first = GermanQueryRewrite().rewrite("Kassenstellen")
+    second = GermanQueryRewrite().rewrite("Kassenstellen")
+
+    assert first == second
