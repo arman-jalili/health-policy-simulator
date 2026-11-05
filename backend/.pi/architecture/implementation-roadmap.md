@@ -93,8 +93,8 @@ Bootstrap only — no bounded contexts.
 ### Database Migrations
 
 - `0101_evidence_corpus_documents`: `evidence_corpus_document`, `_publication`, `_article`, `_passage`
-- `0102_evidence_corpus_index`: `_passage_embedding` (pgvector HNSW), `tsvector` column + GIN index
-- `0103_evidence_corpus_snapshots`: `_corpus_snapshot`, `_index_manifest`, `_ingestion_run`
+- `0102_evidence_corpus_index`: `_indexed_passage` (`tsvector` + GIN), `_index_manifest`
+- `0103_evidence_corpus_snapshots`: `_snapshot`, `_snapshot_document`, `_ingestion_run`
 - `0104_identity_access`: `_api_key`
 
 ### Acceptance Criteria

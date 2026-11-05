@@ -8,17 +8,20 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import asdict
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from evidence_corpus.domain.events import DomainEvent
+from shared.db import UnitOfWork
 from shared.outbox import OutboxWriter
 
 
 class OutboxEventPublisher:
-    """Writes every drained domain event to ``shared_event_outbox``."""
+    """Writes every drained domain event to ``shared_event_outbox``.
 
-    def __init__(self, session: AsyncSession, writer: OutboxWriter | None = None) -> None:
-        self._session = session
+    The writer joins the ambient unit of work, so the row and the aggregate state change commit in
+    the same transaction (ADR-002). Outside a request it opens its own transaction.
+    """
+
+    def __init__(self, unit_of_work: UnitOfWork, writer: OutboxWriter | None = None) -> None:
+        self._uow = unit_of_work
         self._writer = writer or OutboxWriter()
 
     async def publish(
@@ -28,16 +31,19 @@ class OutboxEventPublisher:
         actor: str,
         trace_id: str | None = None,
     ) -> None:
-        for event in events:
-            await self._writer.write(
-                self._session,
-                event_name=event.name,
-                aggregate_type="EvidenceCorpus",
-                aggregate_id=self._aggregate_id(event),
-                payload=asdict(event),
-                actor=actor,
-                trace_id=trace_id,
-            )
+        if not events:
+            return
+        async with self._uow.session() as session:
+            for event in events:
+                await self._writer.write(
+                    session,
+                    event_name=event.name,
+                    aggregate_type="EvidenceCorpus",
+                    aggregate_id=self._aggregate_id(event),
+                    payload=asdict(event),
+                    actor=actor,
+                    trace_id=trace_id,
+                )
 
     @staticmethod
     def _aggregate_id(event: DomainEvent) -> str:

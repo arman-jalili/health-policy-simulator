@@ -2,9 +2,9 @@
 
 Canonical: .pi/architecture/modules/evidence-corpus.md
 
-Used by the composition root until the SQLAlchemy adapters land, and by the unit tests. They
-implement the domain-owned ports exactly, so replacing them with PostgreSQL adapters is a wiring
-change, not a domain change.
+Selected by ``PERSISTENCE=memory`` for unit tests and a database-less local demo. They implement
+the domain-owned ports exactly, so switching to the PostgreSQL adapters is a wiring change, never a
+domain change.
 """
 
 from __future__ import annotations

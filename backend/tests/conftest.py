@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from shared.app import create_app
 from shared.clock import FixedClock
 from shared.config import Settings
+from shared.enums import Persistence
 
 TEST_DATABASE_URL = "postgresql+asyncpg://hps:hps@localhost:5433/health_policy"
 FIXED_MOMENT = datetime(2026, 11, 5, 9, 30, tzinfo=UTC)
@@ -25,6 +26,7 @@ _ENV_VARS = (
     "DB_POOL_SIZE",
     "DB_MAX_OVERFLOW",
     "DB_CONNECT_TIMEOUT_S",
+    "PERSISTENCE",
     "LOG_LEVEL",
     "LOG_FORMAT",
     "CORS_ORIGINS",
@@ -42,7 +44,11 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(_env_file=None, database_url=TEST_DATABASE_URL)
+    return Settings(
+        _env_file=None,
+        database_url=TEST_DATABASE_URL,
+        persistence=Persistence.MEMORY,
+    )
 
 
 class StubDatabase:

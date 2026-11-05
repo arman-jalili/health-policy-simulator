@@ -1,15 +1,16 @@
 """Composition root of the modular monolith (ADR-001) — application shell, not kernel code.
 
-Contexts are added to :func:`create_app` as they are built; at bootstrap only the shared kernel
-and the health probes exist. Run with ``uvicorn shared.app:create_app --factory`` or ``hps-api``.
+Every context is wired here for the configured persistence family; the in-process outbox relay
+runs for PostgreSQL mode. Run with ``uvicorn shared.app:create_app --factory`` or ``hps-api``.
 
 Canonical: .pi/architecture/decisions/ADR-001-architecture-pattern.md
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from fastapi import FastAPI
@@ -19,11 +20,14 @@ from evidence_corpus.composition import build_container
 from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
 from shared.config import Settings, get_settings
 from shared.db import Database
+from shared.enums import Persistence
 from shared.http.errors import register_error_handlers
 from shared.http.health import router as health_router
 from shared.http.metrics import router as metrics_router
 from shared.http.middleware import RequestContextMiddleware
 from shared.log_setup import configure_logging, get_logger
+from shared.outbox import OutboxEvent
+from shared.relay import WILDCARD, OutboxRelay
 
 logger = get_logger(__name__)
 
@@ -36,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        relay_task: asyncio.Task[None] | None = None
         logger.info(
             "service_starting",
             env=str(app_settings.env),
@@ -51,9 +56,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await database.ping()
         except Exception as error:
             logger.warning("database_unreachable_at_startup", error=str(error))
+        if app_settings.persistence is Persistence.POSTGRES:
+            relay = OutboxRelay(database.session_factory, poll_interval_s=5.0)
+            relay.subscribe(WILDCARD, _log_dispatched_event)
+            relay_task = asyncio.create_task(relay.run(), name="outbox-relay")
         try:
             yield
         finally:
+            if relay_task is not None:
+                relay_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await relay_task
             await database.dispose()
             logger.info("service_stopped")
 
@@ -65,7 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = app_settings
     app.state.db = database
-    app.state.corpus = build_container()
+    app.state.corpus = build_container(app_settings, database)
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -83,6 +96,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(metrics_router)
     app.include_router(evidence_corpus_router)
     return app
+
+
+async def _log_dispatched_event(event: OutboxEvent) -> None:
+    """Phase 1 in-process subscriber: make relayed events observable until consumers exist."""
+    logger.info(
+        "domain_event_dispatched",
+        event_name=event.event_name,
+        event_id=event.event_id,
+        aggregate_type=event.aggregate_type,
+        aggregate_id=event.aggregate_id,
+    )
 
 
 def main() -> None:

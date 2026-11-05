@@ -2,9 +2,9 @@
 
 Canonical: .pi/architecture/modules/evidence-corpus.md
 
-The routes, their scopes, payload shapes and error envelopes are the contract. Handlers are not
-wired yet: they answer `501 ENDPOINT_NOT_IMPLEMENTED` with the standard envelope, so a caller can
-already integrate against the contract without mistaking a stub for working ingestion.
+The routes, their scopes, payload shapes and error envelopes are the contract. Every handler
+delegates to a use case in the application container; the container is wired for the configured
+persistence family by `evidence_corpus.composition.build_container`.
 
 Required scopes are declared as `x-required-scope` in the OpenAPI document; Phase 1 IdentityAccess
 supplies the `require_scope` dependency that enforces them at runtime (ADR-005).
@@ -29,7 +29,7 @@ from evidence_corpus.application.commands import (
 )
 from evidence_corpus.composition import CorpusContainer
 from evidence_corpus.domain.values import ClaimType
-from evidence_corpus.interfaces.http.deps import get_container
+from evidence_corpus.interfaces.http.deps import corpus_unit_of_work, get_container
 from evidence_corpus.interfaces.http.schemas import (
     AuthorityRuleResponse,
     DocumentIngestionBody,
@@ -43,19 +43,16 @@ from evidence_corpus.interfaces.http.schemas import (
     StartIngestionRunBody,
     StartIngestionRunResponse,
 )
-from shared.errors import EndpointNotImplementedError
 from shared.http.schemas import error_responses
 
-router = APIRouter(prefix="/api/v1", tags=["corpus"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["corpus"],
+    dependencies=[Depends(corpus_unit_of_work)],
+)
 
 READ_ERRORS = error_responses(401, 403, 404, 503)
 WRITE_ERRORS = error_responses(401, 403, 409, 422, 503)
-
-
-def _not_implemented(operation: str) -> EndpointNotImplementedError:
-    return EndpointNotImplementedError(
-        f"{operation} is part of the frozen EvidenceCorpus contract and not implemented yet"
-    )
 
 
 @router.post(

@@ -1,4 +1,4 @@
-"""In-memory index writer used by tests and the composition root until PostgreSQL is wired."""
+"""In-memory index writer selected by ``PERSISTENCE=memory`` (tests, database-less demo)."""
 
 from __future__ import annotations
 

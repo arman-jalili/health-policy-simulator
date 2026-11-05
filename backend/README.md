@@ -87,16 +87,22 @@ Bounded contexts are added in Phase 1 as `src/<context>/{domain,application,infr
 
 Required: `DATABASE_URL`. Everything else has a safe default; see `.env.example`.
 
-Two boot-time guards are deliberate:
+`PERSISTENCE` selects the adapter family: `postgres` (default) or `memory`. Memory is explicit, is
+intended for tests and a database-less local demo, and is refused outside `ENV=local`.
+
+Three boot-time guards are deliberate:
 
 - a missing or malformed `DATABASE_URL` aborts startup instead of serving half a system;
-- `AUTH_MODE=demo` with `ENV=production` is refused (ADR-005).
+- `AUTH_MODE=demo` with `ENV=production` is refused (ADR-005);
+- `PERSISTENCE=memory` outside `ENV=local` is refused: restart would silently destroy the corpus.
 
 ## Migration policy
 
 - One revision chain, table names prefixed with the owning context (`shared_event_outbox`,
   `evidence_corpus_document`, …, per ADR-002) so ownership is visible at a glance.
 - `0000_bootstrap` enables `pgvector` + `pg_trgm` and creates the shared outbox and audit tables.
+- `0101` owns document/publication/article/passage, `0102` the search index, `0103` snapshots and
+  ingestion runs. Revision identifiers keep their roadmap names; the chain order is authoritative.
 - The downgrade drops tables but keeps the extensions: later revisions depend on them and dropping
   `vector` requires superuser rights on managed databases.
 

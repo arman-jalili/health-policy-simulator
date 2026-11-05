@@ -60,10 +60,13 @@ class IngestDocumentHandler:
         outcome = await self._extraction.execute(
             ExtractDocumentTextRequest(document_id=document.id)
         )
+        # Extraction saves through its own repository read, so the local instance may still hold
+        # the pre-extraction state. Re-read the aggregate instead of aliasing repository internals.
+        reloaded = await self._documents.get(document.id)
         return DocumentIngestionResult(
             document_id=document.id,
             quality=outcome.quality,
-            citable=document.is_citable(),
+            citable=reloaded.is_citable() if reloaded is not None else False,
         )
 
 

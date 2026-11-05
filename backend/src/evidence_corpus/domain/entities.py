@@ -452,7 +452,15 @@ class Document:
         return [passage for article in self.articles for passage in article.publishable_passages()]
 
     def drain_events(self) -> list[DomainEvent]:
-        """Return and clear pending events for the outbox writer."""
+        """Return and clear pending events for the outbox writer.
+
+        Article-level facts (attribution, detections) belong to this aggregate root: an article is
+        never persisted on its own, so leaving its events behind would strand them outside the
+        outbox forever.
+        """
         events = list(self.events)
         self.events.clear()
+        for article in self.articles:
+            events.extend(article.events)
+            article.events.clear()
         return events
