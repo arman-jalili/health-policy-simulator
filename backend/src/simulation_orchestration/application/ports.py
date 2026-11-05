@@ -18,6 +18,7 @@ from simulation_orchestration.application.values import (
     NegotiationTurnCommand,
     NegotiationTurnView,
     RunId,
+    RunPhase,
 )
 
 
@@ -52,6 +53,7 @@ class GraphNode(Protocol):
     """One sequencing step. It receives and returns state; it never mutates domain state."""
 
     name: str
+    phase: RunPhase
 
     async def execute(self, state: GraphState) -> GraphState: ...
 
