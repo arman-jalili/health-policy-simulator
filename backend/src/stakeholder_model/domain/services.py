@@ -93,5 +93,13 @@ class CorpusAttributionRule:
 def select_current_position(
     history: Sequence[HistoricalPosition],
 ) -> HistoricalPosition | None:
-    """Choose the current persona position; weak attribution never overrides explicit (#111)."""
-    raise NotImplementedError("select_current_position is implemented by issue #111")
+    """Choose the current persona position.
+
+    Only usable (explicit) positions can establish the current stance. A weak mention never
+    overrides an explicit statement, even when it is more recent; if no explicit position exists,
+    the result is ``None`` rather than a fabricated stance.
+    """
+    usable = [position for position in history if position.usable]
+    if not usable:
+        return None
+    return max(usable, key=lambda position: (position.stated_on, position.id))
