@@ -42,6 +42,13 @@ class InMemoryIndexWriter:
         self._rows.pop(passage_id, None)
 
     def search(self, query: str) -> list[PassageView]:
+        if " OR " in query:
+            terms = [term.strip().lower() for term in query.split(" OR ") if term.strip()]
+            return [
+                passage
+                for passage in self._rows.values()
+                if any(term in passage.text.lower() for term in terms)
+            ]
         terms = [term for term in query.lower().split() if term]
         return [
             passage
