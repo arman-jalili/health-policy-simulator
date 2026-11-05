@@ -99,10 +99,16 @@ class ReferenceFigure:
     source_id: str
 
     def __post_init__(self) -> None:
+        from claim_validation.domain.errors import ReferenceFigureNotAuthoritative
+
         if self.value < 0:
             raise ValueError("reference figure value must not be negative")
         if not self.source_id.strip():
             raise ValueError("reference figure needs a source id")
+        if self.tier is AuthorityTier.PRESS_REPORT:
+            raise ReferenceFigureNotAuthoritative(
+                "press reports cannot be reference figures; use an authoritative tier"
+            )
 
 
 @dataclass(frozen=True, slots=True)
