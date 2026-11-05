@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from claim_validation.domain.entities import ContradictionFinding
 from claim_validation.domain.values import (
     CausalSupport,
+    ClaimId,
     ClaimType,
+    ContradictionId,
     MeasureReference,
     ToleranceBand,
     VerificationPath,
@@ -38,6 +41,36 @@ class ContradictionDetector:
 
     def is_contradiction(self, a: Decimal, b: Decimal, band: ToleranceBand) -> bool:
         return not band.contains(a, b)
+
+    def finding_for(
+        self,
+        claim_a: object,
+        claim_b: object,
+        band: ToleranceBand,
+    ) -> ContradictionFinding | None:
+        """Return a finding when two verified claims disagree for the same measure."""
+        from claim_validation.domain.claim import Claim
+        from shared.ids import new_id
+
+        if not isinstance(claim_a, Claim) or not isinstance(claim_b, Claim):
+            return None
+        if claim_a.measure is None or claim_a.measure != claim_b.measure:
+            return None
+        first = claim_a.verification
+        second = claim_b.verification
+        if first is None or second is None:
+            return None
+        if first.asserted_value is None or second.asserted_value is None:
+            return None
+        if not self.is_contradiction(first.asserted_value, second.asserted_value, band):
+            return None
+        return ContradictionFinding(
+            id=ContradictionId(new_id("con")),
+            claim_id_a=ClaimId(str(claim_a.id)),
+            claim_id_b=ClaimId(str(claim_b.id)),
+            measure=claim_a.measure,
+            delta=abs(first.asserted_value - second.asserted_value),
+        )
 
 
 class CausalAppraiser:
