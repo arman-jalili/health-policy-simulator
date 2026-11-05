@@ -151,7 +151,12 @@ class PauseOrResumeSimulation:
             )
         if job.status is not JobStatus.PAUSED:
             raise InvalidJobTransition(f"cannot resume a {job.status.value} job")
-        resumed = replace(job, status=JobStatus.RUNNING)
+        resumed = replace(
+            job,
+            status=JobStatus.RUNNING,
+            claimed_by=None,
+            updated_at=self._clock.now(),
+        )
         await self._jobs.save(resumed)
         resumed_event = RunResumed(run_id=job.run_id, checkpoint=job.checkpoint)
         await self._publish(job.run_id, ProgressKind.RESUMED, resumed_event)

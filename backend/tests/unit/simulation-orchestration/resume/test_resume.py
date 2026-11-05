@@ -32,3 +32,113 @@ def test_resume_reads_the_persisted_checkpoint() -> None:
 
 def test_job_store_exposes_both_run_lookup_and_save() -> None:
     assert {"get_by_run", "save", "list_resumable"} <= method_names(JobStore)
+
+
+# --- behaviour: resume at the next turn with identical prior state (issue #211) -------------
+
+from datetime import UTC, datetime  # noqa: E402
+from decimal import Decimal  # noqa: E402
+from typing import Any, cast  # noqa: E402
+
+import pytest  # noqa: E402
+
+from simulation_orchestration.application.commands import (  # noqa: E402
+    PauseOrResumeSimulationRequest,
+)
+from simulation_orchestration.application.dto import JobRecord  # noqa: E402
+from simulation_orchestration.application.errors import InvalidJobTransition  # noqa: E402
+from simulation_orchestration.application.services import (  # noqa: E402
+    PauseOrResumeSimulation,
+)
+from simulation_orchestration.application.state import initial_state  # noqa: E402
+from simulation_orchestration.application.values import (  # noqa: E402
+    BudgetUsage,
+    JobId,
+    PauseAction,
+    RunId,
+    RunPhase,
+)
+from simulation_orchestration.infrastructure.memory import (  # noqa: E402
+    InMemoryJobStore,
+    InMemoryProgressStore,
+)
+
+
+class _Clock:
+    def now(self) -> datetime:
+        return datetime(2026, 11, 6, 12, 0, tzinfo=UTC)
+
+
+def _checkpoint() -> GraphState:
+    base = initial_state(RunId("run_1"))
+    return GraphState(
+        run_id=base.run_id,
+        round=4,
+        phase=RunPhase.ROUNDS,
+        next_actor="patientenanwaltschaft",
+        budget_used=BudgetUsage(invocations=8, tokens=4096, cost=Decimal("0.42")),
+    )
+
+
+def _job(status: JobStatus) -> JobRecord:
+    now = datetime(2026, 11, 6, 11, 0, tzinfo=UTC)
+    return JobRecord(
+        job_id=JobId("job_1"),
+        run_id=RunId("run_1"),
+        status=status,
+        attempts=2,
+        checkpoint=_checkpoint(),
+        budget_used=BudgetUsage(invocations=8, tokens=4096, cost=Decimal("0.42")),
+        error="old failure",
+        claimed_by="worker-1",
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def test_resume_preserves_round_phase_budget_and_clears_worker_claim() -> None:
+    jobs = InMemoryJobStore()
+    await jobs.add(_job(JobStatus.PAUSED))
+    service = PauseOrResumeSimulation(
+        jobs=jobs,
+        progress=InMemoryProgressStore(),
+        clock=_Clock(),
+        uow=cast(Any, object()),
+    )
+
+    await service.execute(
+        PauseOrResumeSimulationRequest(run_id=RunId("run_1"), action=PauseAction.RESUME)
+    )
+
+    job = await jobs.get_by_run(RunId("run_1"))
+    assert job is not None
+    assert job.status is JobStatus.RUNNING
+    assert job.checkpoint == _checkpoint()
+    assert job.budget_used == BudgetUsage(invocations=8, tokens=4096, cost=Decimal("0.42"))
+    assert job.claimed_by is None
+    assert job.updated_at == _Clock().now()
+
+
+async def test_completed_job_cannot_resume() -> None:
+    jobs = InMemoryJobStore()
+    await jobs.add(_job(JobStatus.COMPLETED))
+    service = PauseOrResumeSimulation(
+        jobs=jobs,
+        progress=InMemoryProgressStore(),
+        clock=_Clock(),
+        uow=cast(Any, object()),
+    )
+
+    with pytest.raises(InvalidJobTransition, match="cannot resume"):
+        await service.execute(
+            PauseOrResumeSimulationRequest(run_id=RunId("run_1"), action=PauseAction.RESUME)
+        )
+
+
+async def test_paused_job_is_visible_to_worker_resume_scan() -> None:
+    jobs = InMemoryJobStore()
+    await jobs.add(_job(JobStatus.PAUSED))
+
+    resumable = await jobs.list_resumable()
+
+    assert [item.job_id for item in resumable] == ["job_1"]
