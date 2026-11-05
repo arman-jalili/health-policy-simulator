@@ -10,6 +10,7 @@ from tests.unit.stakeholder_contract_helpers import field_names, method_names
 
 from evidence_corpus.domain.values import AuthorityTier
 from stakeholder_model.domain.agent_binding import AgentBinding
+from stakeholder_model.domain.errors import BindingIncomplete
 from stakeholder_model.domain.repositories import AgentBindingRepository
 from stakeholder_model.domain.values import (
     BindingId,
@@ -55,3 +56,35 @@ def test_binding_view_is_also_frozen() -> None:
         "allowed_evidence_tiers",
         "red_lines",
     ]
+
+
+def test_complete_binding_passes_the_institution_guard() -> None:
+    _binding().assert_institution_only()
+
+
+def test_empty_persona_version_is_refused() -> None:
+    binding = AgentBinding(
+        id=BindingId("bnd_2"),
+        run_id=RunId("run_1"),
+        stakeholder_id=StakeholderId("stk_1"),
+        persona_version=PersonaVersion(""),
+        allowed_evidence_tiers=frozenset(),
+        red_lines=(),
+    )
+
+    with pytest.raises(BindingIncomplete):
+        binding.assert_institution_only()
+
+
+def test_empty_stakeholder_id_is_refused() -> None:
+    binding = AgentBinding(
+        id=BindingId("bnd_3"),
+        run_id=RunId("run_1"),
+        stakeholder_id=StakeholderId(""),
+        persona_version=PersonaVersion("v1"),
+        allowed_evidence_tiers=frozenset(),
+        red_lines=(),
+    )
+
+    with pytest.raises(BindingIncomplete):
+        binding.assert_institution_only()
