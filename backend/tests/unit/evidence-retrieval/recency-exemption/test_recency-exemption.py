@@ -42,3 +42,38 @@ def test_a_1995_statute_and_a_1995_press_report_are_distinguishable() -> None:
     assert policy.is_exempt(SourceType.LEGISLATION) is True
     assert policy.is_exempt(SourceType.PRESS_REPORT) is False
     assert date(1995, 1, 1) < date(2026, 1, 1)
+
+
+def test_1995_statute_keeps_full_weight_while_press_decays() -> None:
+    service = ApplyRecencyPolicy()
+    policy = RecencyPolicy()
+    as_of = date(2026, 1, 1)
+
+    statute = service.apply(
+        policy=policy,
+        published_on=date(1995, 1, 1),
+        source_type=SourceType.LEGISLATION,
+        as_of=as_of,
+    )
+    press = service.apply(
+        policy=policy,
+        published_on=date(1995, 1, 1),
+        source_type=SourceType.PRESS_REPORT,
+        as_of=as_of,
+    )
+
+    assert statute == 1.0
+    assert 0.0 <= press < 0.5
+
+
+def test_fresh_material_keeps_full_recency_weight() -> None:
+    service = ApplyRecencyPolicy()
+
+    weight = service.apply(
+        policy=RecencyPolicy(),
+        published_on=date(2026, 1, 1),
+        source_type=SourceType.PRESS_REPORT,
+        as_of=date(2026, 1, 1),
+    )
+
+    assert weight == 1.0
