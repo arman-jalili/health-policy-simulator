@@ -15,25 +15,17 @@ from typing import cast
 
 from fastapi import Request
 
+from identity_access.interfaces.demo import demo_principal, is_loopback_host
 from identity_access.interfaces.errors import (
     AuthenticationRequiredError,
     InsufficientScopeError,
 )
 from identity_access.interfaces.ports import PrincipalPort
-from identity_access.interfaces.types import Principal, Role, Scope
+from identity_access.interfaces.types import Principal, Scope
 from shared.errors import ErrorDetail
 from shared.http.deps import get_app_settings
 
 PrincipalDependency = Callable[..., Awaitable[Principal]]
-
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
-
-
-def _demo_principal() -> Principal:
-    # TODO(issue #35): restrict demo mode to anonymous reads + runs:write from loopback.
-    # The full-scope principal keeps the local demo and the existing corpus tests working until
-    # the demo guard issue lands.
-    return Principal(label="demo", role=Role.ANALYST, scopes=frozenset(Scope), is_demo=True)
 
 
 async def _resolve_principal(request: Request) -> Principal:
@@ -41,9 +33,9 @@ async def _resolve_principal(request: Request) -> Principal:
 
     if settings.is_demo:
         host = request.client.host if request.client is not None else None
-        if host not in _LOOPBACK_HOSTS:
+        if not is_loopback_host(host):
             raise AuthenticationRequiredError("Demo mode is only available from localhost")
-        return _demo_principal()
+        return demo_principal()
 
     api_key = request.headers.get("X-API-Key")
     if not api_key:
