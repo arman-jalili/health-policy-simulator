@@ -1,7 +1,7 @@
-"""Application entrypoint: composition root for the modular monolith (ADR-001).
+"""Composition root of the modular monolith (ADR-001) — application shell, not kernel code.
 
 Contexts are added to :func:`create_app` as they are built; at bootstrap only the shared kernel
-and the health probes exist. Run with ``uvicorn main:create_app --factory`` or ``hps-api``.
+and the health probes exist. Run with ``uvicorn shared.app:create_app --factory`` or ``hps-api``.
 
 Canonical: .pi/architecture/decisions/ADR-001-architecture-pattern.md
 """
@@ -15,6 +15,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
 from shared.config import Settings, get_settings
 from shared.db import Database
 from shared.http.errors import register_error_handlers
@@ -76,6 +77,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
     register_error_handlers(app)
     app.include_router(health_router)
+    app.include_router(evidence_corpus_router)
     return app
 
 
@@ -83,7 +85,7 @@ def main() -> None:
     """Console entrypoint (``hps-api``)."""
     settings = get_settings()
     uvicorn.run(
-        "main:create_app",
+        "shared.app:create_app",
         factory=True,
         host=settings.api_host,
         port=settings.api_port,

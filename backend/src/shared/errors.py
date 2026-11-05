@@ -152,6 +152,14 @@ class InternalError(AppError):
     default_message = "Unexpected error"
 
 
+class EndpointNotImplementedError(AppError):
+    """Contract frozen, behaviour not wired yet. Never a 500: clients can branch on the code."""
+
+    code = "ENDPOINT_NOT_IMPLEMENTED"
+    status_code = 501
+    default_message = "This operation is declared but not implemented yet"
+
+
 STATUS_CODE_TO_ERROR: dict[int, type[AppError]] = {
     400: BadRequestError,
     401: UnauthorizedError,
@@ -160,6 +168,7 @@ STATUS_CODE_TO_ERROR: dict[int, type[AppError]] = {
     409: ConflictError,
     422: ValidationFailedError,
     429: RateLimitedError,
+    501: EndpointNotImplementedError,
     503: ServiceUnavailableError,
     500: InternalError,
 }

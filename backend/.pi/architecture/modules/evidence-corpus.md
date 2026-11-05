@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** In Progress — contract frozen 2026-11-05
 **Depends:** — (foundation context, no upstream module)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -26,6 +26,39 @@ chunking and citation-grade provenance. Publishes passages as an open host for r
 | **Interfaces** | FastAPI routers, event subscribers, OpenAPI models | `src/evidence_corpus/interfaces/` |
 
 Layers depend inward only. `domain/` imports neither SQLAlchemy nor FastAPI.
+
+### Frozen contract (2026-11-05)
+
+The public surface below is frozen; implementation issues fill in bodies and may not rename fields,
+change enum members, add rubric entries or alter route paths without re-opening the contract.
+
+| Artifact | Path |
+|---|---|
+| Value objects, enums, authority rubric data | `src/evidence_corpus/domain/values.py` |
+| Aggregates and entities (stub behaviour) | `src/evidence_corpus/domain/entities.py` |
+| Domain events (payloads) | `src/evidence_corpus/domain/events.py` |
+| Error codes | `src/evidence_corpus/domain/errors.py` |
+| Repository ports (domain-owned) | `src/evidence_corpus/domain/repositories.py` |
+| Domain services (CitabilitySpec, NativeVsOcrSelection, ArticleBoundaryStrategy) | `src/evidence_corpus/domain/services.py` |
+| Published language (`PassageView`, `ProvenanceView`) | `src/evidence_corpus/domain/published.py` |
+| Use-case interfaces + request DTOs + response DTOs | `src/evidence_corpus/application/{services,commands,dto}.py` |
+| Ports consumed by the application | `src/evidence_corpus/application/ports.py` |
+| Concrete router + OpenAPI schemas | `src/evidence_corpus/interfaces/http/{router,schemas}.py` |
+| Adapter stubs (persistence, extraction, index) | `src/evidence_corpus/infrastructure/` |
+| Executable contract tests | `tests/unit/evidence_corpus/` |
+
+Frozen behaviour decisions recorded in the contract:
+
+- `AUTHORITY_RULES` is data: press reporting ranks second-to-last for every claim type, and
+  `SourceType.UNKNOWN` is absent from every rule (it can never be promoted).
+- `ExtractionQuality.is_acceptable` defaults to `DEFAULT_MINIMUM_CONFIDENCE = 0.85`; the gate may be
+  called with an explicit threshold but the default is contract.
+- `CITABLE_SPEAKER_KINDS == {SpeakerKind.INSTITUTION}`: person- and anonymous-attributed quotations
+  are excluded at segmentation, not filtered later.
+- Endpoints answer `501 ENDPOINT_NOT_IMPLEMENTED` (with the standard envelope) until wired, so a
+  client never mistakes a stub for working ingestion.
+- Required scopes are published as `x-required-scope` per operation; Phase 1 IdentityAccess supplies
+  the enforcing dependency.
 
 ## Related ADRs
 

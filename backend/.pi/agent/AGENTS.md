@@ -104,8 +104,7 @@ delegation:
 ```
 backend/
 ├── src/
-│   ├── main.py       # composition root (create_app)
-│   └── shared/       # shared kernel (config, errors, ids, clock, db, outbox, audit, log, http)
+│   └── shared/       # shared kernel + app factory (app.py = composition root)
 ├── migrations/       # Alembic revision chain (versions/0000_bootstrap.py)
 ├── tests/            # unit/ (fast) and integration/ (needs PostgreSQL)
 ├── docs/             # runbook.md, dr-plan.md

@@ -32,7 +32,7 @@ docker compose up -d db
 uv run alembic upgrade head
 
 # 4. Run
-uv run hps-api                # or: uv run uvicorn main:create_app --factory --reload
+uv run hps-api                # or: uv run uvicorn shared.app:create_app --factory --reload
 
 # 5. Verify
 curl -s localhost:8000/healthz
@@ -61,8 +61,8 @@ OpenAPI is served at `/docs` and `/openapi.json`.
 
 ```
 src/
-  main.py                 # composition root (create_app); one deployable app
   shared/                 # shared kernel — no domain vocabulary
+    app.py                # composition root (create_app, console entrypoint)
     config.py             # pydantic-settings, fail-fast, demo/production guard
     errors.py             # AppError hierarchy + error envelope
     enums.py              # technical enums only

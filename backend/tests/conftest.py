@@ -10,7 +10,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from main import create_app
+from shared.app import create_app
 from shared.clock import FixedClock
 from shared.config import Settings
 
