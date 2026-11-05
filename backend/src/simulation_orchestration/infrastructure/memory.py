@@ -140,3 +140,10 @@ class InMemoryProgressStore:
 
     async def max_sequence(self, run_id: RunId) -> int:
         return await self.latest_sequence(run_id)
+
+    async def get(self, event_id: str) -> ProgressEventView | None:
+        for stream in self._events.values():
+            for event in stream:
+                if event.event_id == event_id:
+                    return event
+        return None
