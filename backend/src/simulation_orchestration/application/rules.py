@@ -9,14 +9,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from decimal import Decimal
 
+from simulation_orchestration.application.events import RunBudgetExhausted
 from simulation_orchestration.application.values import (
     BudgetDecision,
+    BudgetDimension,
     BudgetUsage,
     GraphState,
     PauseAction,
     PauseDecision,
     PromptTemplate,
     RunBudget,
+    RunId,
 )
 
 
@@ -31,7 +34,40 @@ class BudgetGuard:
         requested_tokens: int,
         requested_cost: Decimal,
     ) -> BudgetDecision:
-        raise NotImplementedError("BudgetGuard is implemented by issue #209")
+        if requested_tokens < 0 or requested_cost < 0:
+            raise ValueError("requested tokens and cost must not be negative")
+        checks = (
+            (
+                BudgetDimension.INVOCATIONS,
+                budget.max_invocations,
+                Decimal(usage.invocations + 1),
+            ),
+            (BudgetDimension.TOKENS, budget.max_tokens, Decimal(usage.tokens + requested_tokens)),
+            (BudgetDimension.COST, budget.max_cost, usage.cost + requested_cost),
+        )
+        for dimension, limit, used in checks:
+            if limit is not None and used > Decimal(limit):
+                return BudgetDecision(
+                    allowed=False,
+                    dimension=dimension,
+                    limit=Decimal(limit),
+                    used=used,
+                    reason=f"{dimension.value} budget exhausted: {used} > {limit}",
+                )
+        return BudgetDecision(allowed=True)
+
+    def exhaustion_event(self, run_id: RunId, decision: BudgetDecision) -> RunBudgetExhausted:
+        """Build the event for a rejected call; the caller pauses the job atomically."""
+        if decision.allowed or decision.dimension is None:
+            raise ValueError("only a rejected budget decision can produce an exhaustion event")
+        if decision.limit is None or decision.used is None:
+            raise ValueError("a rejected budget decision must carry limit and used")
+        return RunBudgetExhausted(
+            run_id=run_id,
+            dimension=decision.dimension,
+            limit=decision.limit,
+            used=decision.used,
+        )
 
 
 class CheckpointPolicy:
