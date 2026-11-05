@@ -168,7 +168,13 @@ class Article:
         raise PassageNotFound(passage_id)
 
     def publishable_passages(self) -> list[Passage]:
-        """Only citable passages leave this article (invariant 5)."""
+        """Only citable passages of the canonical article leave it (invariants 5 and 9).
+
+        A syndicated copy never contributes citations: the owning article is the single source, so
+        duplicate coverage cannot inflate support.
+        """
+        if not self.is_canonical:
+            return []
         return [passage for passage in self.passages if passage.citable]
 
     def passage_count(self) -> int:

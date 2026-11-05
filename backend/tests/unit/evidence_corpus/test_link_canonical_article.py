@@ -13,10 +13,10 @@ import pytest
 from evidence_corpus.application.commands import LinkCanonicalArticleRequest
 from evidence_corpus.application.dto import CanonicalLinkResult
 from evidence_corpus.application.services import LinkCanonicalArticle
-from evidence_corpus.domain.entities import Article
+from evidence_corpus.domain.entities import Article, Document
 from evidence_corpus.domain.events import DuplicateArticleLinked
 from evidence_corpus.domain.repositories import ArticleRepository
-from evidence_corpus.domain.values import CanonicalArticleRef
+from evidence_corpus.domain.values import CanonicalArticleRef, Offsets, SpeakerKind
 
 from .contract_helpers import field_names, parameter_names
 
@@ -93,3 +93,121 @@ class TestNoDoubleCounting:
         """Duplicates must not appear as separate citation sources for the same text."""
         assert "is_canonical" in field_names(Article)
         assert "passage_count" in dir(Article)
+
+
+class TestCanonicalLinking:
+    def _document_with_article(self, outlet: str, body: str) -> tuple[Document, Article]:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+            SourceType,
+        )
+
+        document = Document.register(
+            source_uri=f"s3://corpus/{outlet}.pdf",
+            content_hash=f"sha256:{outlet}",
+            publication=Publication(outlet, date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction(body, ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0))
+        article = document.add_article("Kassenstellen", body, 1, 1)
+        article.add_passage(
+            text=body,
+            offsets=Offsets(0, len(body)),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+        document.drain_events()
+        return document, article
+
+    async def test_identical_texts_link_to_one_canonical_article(self) -> None:
+        from evidence_corpus.application.canonical_handler import LinkCanonicalArticleHandler
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryArticleRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        body = "Die Kassenstellen werden aufgestockt."
+        original_doc, original = self._document_with_article("standard", body)
+        copy_doc, copy = self._document_with_article("kurier", body)
+        await documents.save(original_doc)
+        await documents.save(copy_doc)
+        publisher = RecordingEventPublisher()
+
+        result = await LinkCanonicalArticleHandler(
+            InMemoryArticleRepository(documents), publisher
+        ).execute(LinkCanonicalArticleRequest(article_id=copy.id))
+
+        assert result.canonical_article_id == original.id
+        assert result.similarity == pytest.approx(1.0)
+        assert copy.is_canonical is False
+        assert original.is_canonical is True
+        from evidence_corpus.domain.events import DuplicateArticleLinked
+
+        assert isinstance(publisher.events[0], DuplicateArticleLinked)
+
+    async def test_duplicate_never_doubles_the_citation_count(self) -> None:
+        from evidence_corpus.application.canonical_handler import LinkCanonicalArticleHandler
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryArticleRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        body = "Die Kassenstellen werden aufgestockt."
+        original_doc, _original = self._document_with_article("standard", body)
+        copy_doc, copy = self._document_with_article("kurier", body)
+        await documents.save(original_doc)
+        await documents.save(copy_doc)
+        articles = InMemoryArticleRepository(documents)
+
+        before = len(original_doc.publishable_passages())
+        await LinkCanonicalArticleHandler(articles, RecordingEventPublisher()).execute(
+            LinkCanonicalArticleRequest(article_id=copy.id)
+        )
+
+        assert copy.publishable_passages() == []
+        assert len(original_doc.publishable_passages()) == before
+
+    async def test_unique_text_becomes_its_own_canonical_owner(self) -> None:
+        from evidence_corpus.application.canonical_handler import LinkCanonicalArticleHandler
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryArticleRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        document, article = self._document_with_article("standard", "Einzigartiger Text.")
+        await documents.save(document)
+
+        result = await LinkCanonicalArticleHandler(
+            InMemoryArticleRepository(documents), RecordingEventPublisher()
+        ).execute(LinkCanonicalArticleRequest(article_id=article.id))
+
+        assert result.canonical_article_id == article.id
+        assert article.is_canonical is True
+
+    async def test_unknown_article_is_not_found(self) -> None:
+        from evidence_corpus.application.canonical_handler import LinkCanonicalArticleHandler
+        from evidence_corpus.domain.errors import ArticleNotFound
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryArticleRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        handler = LinkCanonicalArticleHandler(
+            InMemoryArticleRepository(documents), RecordingEventPublisher()
+        )
+
+        with pytest.raises(ArticleNotFound):
+            await handler.execute(LinkCanonicalArticleRequest(article_id="art_missing"))

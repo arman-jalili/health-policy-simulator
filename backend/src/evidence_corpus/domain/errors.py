@@ -92,6 +92,13 @@ class DocumentNotFound(NotFoundError):
         super().__init__(f"document {document_id} not found")
 
 
+class ArticleNotFound(NotFoundError):
+    code = "ARTICLE_NOT_FOUND"
+
+    def __init__(self, article_id: str) -> None:
+        super().__init__(f"article {article_id} not found")
+
+
 class PassageNotFound(NotFoundError):
     code = "PASSAGE_NOT_FOUND"
 
