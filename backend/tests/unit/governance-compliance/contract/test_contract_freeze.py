@@ -501,6 +501,7 @@ class TestPublishedAndComposition:
             "settings",
             "database",
             "allowlist_source",
+            "figure_verdicts",
         }
 
     def test_published_mappers_exist(self) -> None:

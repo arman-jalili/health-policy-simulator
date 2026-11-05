@@ -138,6 +138,7 @@ async def readyz(request: Request) -> JSONResponse:
     if governance is not None:
         checks["governance_compliance"] = "ok"
         checks["governance_allowlist"] = str(len(governance.allowlist.institutions))
+        checks["governance_provenance"] = "deferred"
 
     if failures:
         raise ServiceUnavailableError(

@@ -41,7 +41,7 @@ def _chain() -> GuardRuleChain:
     return GuardRuleChain(
         [
             PersonReferenceRule(RegexPersonNameDetector()),
-            PersonalQuotationRule(),
+            PersonalQuotationRule(RegexPersonNameDetector()),
             InstitutionAliasRule(AllowlistInstitutionResolver()),
             UnsupportedFactRule(),
             ContradictedFigureRule(UnknownFigureVerdicts()),
@@ -68,9 +68,12 @@ def test_same_input_and_rule_version_yield_identical_verdicts() -> None:
     second = _evaluate('Dr. Müller sagte: "Die Ausgaben steigen um 4,2 Prozent."')
 
     assert [item.decision for item in first] == [item.decision for item in second]
-    assert first[-1].decision is GuardDecision.REWRITE
-    assert first[-1].violation_class == second[-1].violation_class
-    assert first[-1].offending_span == second[-1].offending_span
+    first_hits = [item for item in first if item.decision is not GuardDecision.ACCEPT]
+    second_hits = [item for item in second if item.decision is not GuardDecision.ACCEPT]
+    assert first_hits
+    assert [item.decision for item in first_hits] == [item.decision for item in second_hits]
+    assert first_hits[0].violation_class == second_hits[0].violation_class
+    assert first_hits[0].offending_span == second_hits[0].offending_span
 
 
 def test_guard_context_carries_no_llm_client() -> None:

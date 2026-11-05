@@ -110,6 +110,24 @@ tests/integration/test_stakeholder_persistence.py      (new, model on corpus)
 
 ---
 
+## D-005 — GovernanceCompliance provenance facts source
+
+**Status:** Deferred (visible; endpoint fails closed)
+**Recorded:** 2026-11-06 · governance-compliance epic (#269)
+**Estimate:** ~2 h once NegotiationSession exposes position/argument/run-log reads.
+
+`DisclosePositionProvenance` is wired to a stub `ProvenanceFactsSource` that returns empty facts, so
+`POST /positions/{id}/provenance` always returns `PROVENANCE_INCOMPLETE`. That is fail-closed, but no
+caller can satisfy it. Boot logs `governance_provenance_source_deferred` and `/readyz` reports
+`governance_provenance: deferred`.
+
+**Exit criterion:** bind a real adapter that reads evidence + argument ids from NegotiationSession,
+invocation/prompt/model from SimulationOrchestration, and claim verdicts from ClaimValidation. Replace
+the stub, remove the `deferred` readyz value, and add the public E2E disclosure test named in the module
+W8 table.
+
+---
+
 ## Also accepted for the demo (smaller, same treatment)
 
 | ID | Item | Cost | Risk if left |

@@ -80,7 +80,7 @@ def _verdict(text: str, speaker_kind: SpeakerKind) -> GuardDecision:
     chain = GuardRuleChain(
         [
             PersonReferenceRule(RegexPersonNameDetector()),
-            PersonalQuotationRule(),
+            PersonalQuotationRule(RegexPersonNameDetector()),
             InstitutionAliasRule(AllowlistInstitutionResolver()),
             UnsupportedFactRule(),
             ContradictedFigureRule(UnknownFigureVerdicts()),
@@ -97,7 +97,11 @@ def _verdict(text: str, speaker_kind: SpeakerKind) -> GuardDecision:
             )
         )
     )
-    return results[-1].decision
+    if any(result.decision is GuardDecision.REJECT for result in results):
+        return GuardDecision.REJECT
+    if any(result.decision is GuardDecision.REWRITE for result in results):
+        return GuardDecision.REWRITE
+    return GuardDecision.ACCEPT
 
 
 @pytest.mark.parametrize("text", PERSON_STRINGS)

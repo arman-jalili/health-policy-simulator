@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
+import pytest
+
 from governance_compliance.application.commands import EnforceInstitutionOnlyOutputRequest
 from governance_compliance.application.rules import GuardRuleChain, PersonReferenceRule
 from governance_compliance.application.services import EnforceInstitutionOnlyOutput
@@ -79,6 +81,30 @@ def test_person_reference_is_never_accepted() -> None:
     assert len(result.violations) == 1
     assert result.violations[0].violation_class.value == "person_named"
     assert result.violations[0].rule_id.value == "GC-001"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Sebastian Kurz kündigte Reformen an.",
+        "Kurz kündigte Reformen an.",
+        "DR. KURZ kündigte Reformen an.",
+        "S. Kurz kündigte Reformen an.",
+    ],
+)
+def test_unadorned_person_names_are_never_accepted(text: str) -> None:
+    store = InMemoryViolationStore()
+    result = asyncio.run(
+        _guard(store).execute(
+            EnforceInstitutionOnlyOutputRequest(
+                text=text,
+                speaker_kind=SpeakerKind.INSTITUTION,
+                invocation_id=InvocationId("inv_name"),
+            )
+        )
+    )
+
+    assert result.decision is not GuardDecision.ACCEPT
 
 
 def test_institution_only_statement_is_accepted() -> None:

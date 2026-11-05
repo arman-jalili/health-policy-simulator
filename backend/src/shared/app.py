@@ -24,6 +24,7 @@ from evidence_retrieval.composition import build_container as build_retrieval_co
 from evidence_retrieval.interfaces.http.router import router as evidence_retrieval_router
 from governance_compliance.composition import build_container as build_governance_container
 from governance_compliance.infrastructure.allowlist import StaticAllowlistSource, from_published
+from governance_compliance.infrastructure.figures import ClaimValidationFigureVerdicts
 from governance_compliance.interfaces.http.router import router as governance_compliance_router
 from identity_access.composition import build_identity_access_container
 from identity_access.interfaces.http.router import router as identity_access_router
@@ -124,6 +125,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allowlist_source=StaticAllowlistSource(
             from_published(app.state.stakeholder_model.allowlist)
         ),
+        figure_verdicts=ClaimValidationFigureVerdicts(app.state.claim_validation.claims),
     )
 
     if app_settings.cors_origins:
