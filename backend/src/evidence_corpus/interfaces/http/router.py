@@ -43,12 +43,13 @@ from evidence_corpus.interfaces.http.schemas import (
     StartIngestionRunBody,
     StartIngestionRunResponse,
 )
+from identity_access.interfaces.http.dependencies import require_declared_scope
 from shared.http.schemas import error_responses
 
 router = APIRouter(
     prefix="/api/v1",
     tags=["corpus"],
-    dependencies=[Depends(corpus_unit_of_work)],
+    dependencies=[Depends(require_declared_scope), Depends(corpus_unit_of_work)],
 )
 
 READ_ERRORS = error_responses(401, 403, 404, 503)
