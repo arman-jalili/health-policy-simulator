@@ -16,13 +16,14 @@ from governance_compliance.application.values import (
     InstitutionalAllowlist,
     SpeakerKind,
 )
+from governance_compliance.infrastructure.ner import RegexPersonNameDetector
 
 ALLOWLIST = InstitutionalAllowlist()
 
 
 def _run(text: str, speaker_kind: SpeakerKind) -> Sequence[RuleResult]:
     return asyncio.run(
-        GuardRuleChain([PersonalQuotationRule()]).evaluate(
+        GuardRuleChain([PersonalQuotationRule(RegexPersonNameDetector())]).evaluate(
             context_for(
                 text=text,
                 speaker_kind=speaker_kind,
@@ -36,6 +37,14 @@ def _run(text: str, speaker_kind: SpeakerKind) -> Sequence[RuleResult]:
 
 def test_person_quotation_is_rejected() -> None:
     results = _run('Der Minister sagte: "Die Reform ist beschlossen."', SpeakerKind.PERSON)
+
+    assert results[-1].decision is GuardDecision.REJECT
+    assert results[-1].violation_class is not None
+    assert results[-1].violation_class.value == "personal_quotation"
+
+
+def test_person_quote_relabelled_as_institution_is_still_rejected() -> None:
+    results = _run('Kurz sagte: "Wir werden das ändern."', SpeakerKind.INSTITUTION)
 
     assert results[-1].decision is GuardDecision.REJECT
     assert results[-1].violation_class is not None

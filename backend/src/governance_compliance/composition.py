@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from governance_compliance.application.commands import ValidateInstitutionalAllowlistRequest
 from governance_compliance.application.dto import ProvenanceFacts
 from governance_compliance.application.errors import AllowlistContainsPerson, AllowlistEmpty
-from governance_compliance.application.ports import AllowlistSource
+from governance_compliance.application.ports import AllowlistSource, FigureVerdictLookup
 from governance_compliance.application.repositories import ProvenanceStore, ViolationStore
 from governance_compliance.application.rules import (
     ContradictedFigureRule,
@@ -72,6 +72,7 @@ def build_container(
     database: Database | None = None,
     *,
     allowlist_source: AllowlistSource | None = None,
+    figure_verdicts: FigureVerdictLookup | None = None,
 ) -> GovernanceComplianceContainer:
     if allowlist_source is None:
         raise AllowlistEmpty("an allowlist source is required at boot")
@@ -96,14 +97,21 @@ def build_container(
     chain = GuardRuleChain(
         [
             PersonReferenceRule(RegexPersonNameDetector()),
-            PersonalQuotationRule(),
+            PersonalQuotationRule(RegexPersonNameDetector()),
             InstitutionAliasRule(AllowlistInstitutionResolver()),
             UnsupportedFactRule(),
-            ContradictedFigureRule(UnknownFigureVerdicts()),
+            ContradictedFigureRule(figure_verdicts or UnknownFigureVerdicts()),
         ]
     )
     guard = EnforceInstitutionOnlyOutput(
         rules=chain, allowlist=allowlist, violations=violations, clock=clock, uow=uow
+    )
+    logger.warning(
+        "governance_provenance_source_deferred",
+        detail=(
+            "DisclosePositionProvenance has no NegotiationSession/SimulationOrchestration "
+            "facts source yet"
+        ),
     )
     logger.info(
         "governance_compliance_wired",

@@ -78,7 +78,7 @@ class _Clock:
 def _register_service() -> tuple[RegisterPromptTemplate, InMemoryPromptRegistry]:
     registry = InMemoryPromptRegistry()
     return (
-        RegisterPromptTemplate(registry=registry, versioning=PromptVersioning(), clock=_Clock()),  # type: ignore[arg-type]
+        RegisterPromptTemplate(registry=registry, versioning=PromptVersioning(), clock=_Clock()),
         registry,
     )
 
@@ -117,7 +117,7 @@ async def test_resolve_latest_and_explicit_version() -> None:
     register = RegisterPromptTemplate(
         registry=registry,
         versioning=PromptVersioning(),
-        clock=_Clock(),  # type: ignore[arg-type]
+        clock=_Clock(),
     )
     resolve = ResolvePromptTemplate(registry=registry)
     await register.execute(RegisterPromptTemplateRequest("policy", "one"))

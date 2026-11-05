@@ -48,6 +48,24 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Governance guard correctness batch (#265-#269)
+
+### Changed
+- GC-001 detects case-insensitive titles, curated full/surname forms and initial+surname, not only
+  honourific+name.
+- GC-002 no longer trusts the caller's `speaker_kind`: a quotation attributed to a detected person is
+  rejected even when relabelled as institution speech.
+- GC-005 is bound to `ClaimValidationFigureVerdicts`; a contradicted reference figure now rejects.
+- The rule chain evaluates every rule; decision precedence is REJECT > REWRITE > ACCEPT, every
+  violation is persisted, and `violation_hash` includes the guarded text.
+- Provenance source limitation is explicit: boot warning, `/readyz` `governance_provenance: deferred`,
+  and DEFERRED D-005; the endpoint still fails closed.
+
+### Verification
+- 1089 tests pass; 78/0 governance contract checks; W8 strict passes.
+
+---
+
 ## [2026-11-06] - W8 ratchet emptied; attribution sourced from corpus (#245, #246)
 
 ### Changed

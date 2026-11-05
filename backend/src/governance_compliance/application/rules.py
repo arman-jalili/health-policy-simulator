@@ -95,11 +95,15 @@ class PersonReferenceRule:
 class PersonalQuotationRule:
     rule_id = GuardRuleId.GC_002
 
+    def __init__(self, detector: PersonNameDetector) -> None:
+        self._detector = detector
+
     async def evaluate(self, context: GuardRuleContext) -> RuleResult:
-        if context.speaker_kind is not SpeakerKind.PERSON:
-            return RuleResult(self.rule_id, GuardDecision.ACCEPT)
         match = _QUOTE.search(context.text)
         if match is None:
+            return RuleResult(self.rule_id, GuardDecision.ACCEPT)
+        person_attributed = bool(self._detector.detect(context.text))
+        if context.speaker_kind is not SpeakerKind.PERSON and not person_attributed:
             return RuleResult(self.rule_id, GuardDecision.ACCEPT)
         return RuleResult(
             self.rule_id,
@@ -188,13 +192,8 @@ class GuardRuleChain:
         return "+".join(rule.rule_id.value for rule in self._rules)
 
     async def evaluate(self, context: GuardRuleContext) -> Sequence[RuleResult]:
-        results: list[RuleResult] = []
-        for rule in self._rules:
-            result = await rule.evaluate(context)
-            results.append(result)
-            if result.decision is not GuardDecision.ACCEPT:
-                return tuple(results)
-        return tuple(results)
+        """Evaluate every rule; callers aggregate by severity (REJECT > REWRITE > ACCEPT)."""
+        return tuple([await rule.evaluate(context) for rule in self._rules])
 
 
 def context_for(

@@ -55,8 +55,11 @@ def _violation_hash(
     violation_class: ViolationClass,
     offending_span: str,
     rule_id: GuardRuleId,
+    text: str,
 ) -> str:
-    material = f"{run_id}|{invocation_id}|{violation_class.value}|{offending_span}|{rule_id.value}"
+    material = (
+        f"{run_id}|{invocation_id}|{violation_class.value}|{offending_span}|{rule_id.value}|{text}"
+    )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -87,8 +90,10 @@ class EnforceInstitutionOnlyOutput:
             reference_figure_ids=request.reference_figure_ids,
         )
         results = await self._rules.evaluate(context)
-        result = results[-1] if results else None
-        if result is None or result.decision is GuardDecision.ACCEPT:
+        violations = tuple(
+            result for result in results if result.decision is not GuardDecision.ACCEPT
+        )
+        if not violations:
             METRICS.increment("governance_guard_checks_total", labels={"decision": "accept"})
             return GuardVerdictResult(
                 decision=GuardDecision.ACCEPT,
@@ -96,49 +101,58 @@ class EnforceInstitutionOnlyOutput:
                 rewritten_text=None,
                 rule_version=self._rules.rule_version,
             )
-        rule_id = result.rule_id
-        violation_class = result.violation_class or ViolationClass.PERSON_NAMED
-        offending = result.offending_span or request.text
+        decision = (
+            GuardDecision.REJECT
+            if any(result.decision is GuardDecision.REJECT for result in violations)
+            else GuardDecision.REWRITE
+        )
         run_id = request.run_id or RunId("")
-        record = ViolationRecord(
-            violation_id=ViolationId(
-                "vio_"
-                + _violation_hash(
-                    run_id=run_id,
-                    invocation_id=request.invocation_id,
-                    violation_class=violation_class,
-                    offending_span=offending,
-                    rule_id=rule_id,
-                )[:26]
-            ),
-            run_id=run_id,
-            invocation_id=request.invocation_id,
-            violation_class=violation_class,
-            offending_span=offending,
-            rewritten_span=result.rewritten_span,
-            rule_id=rule_id,
-            rule_version=self._rules.rule_version,
-            violation_hash=_violation_hash(
+        records: list[ViolationRecord] = []
+        for result in violations:
+            violation_class = result.violation_class or ViolationClass.PERSON_NAMED
+            offending = result.offending_span or request.text
+            digest = _violation_hash(
                 run_id=run_id,
                 invocation_id=request.invocation_id,
                 violation_class=violation_class,
                 offending_span=offending,
-                rule_id=rule_id,
-            ),
-            detected_at=self._clock.now(),
-        )
+                rule_id=result.rule_id,
+                text=request.text,
+            )
+            records.append(
+                ViolationRecord(
+                    violation_id=ViolationId("vio_" + digest[:26]),
+                    run_id=run_id,
+                    invocation_id=request.invocation_id,
+                    violation_class=violation_class,
+                    offending_span=offending,
+                    rewritten_span=result.rewritten_span,
+                    rule_id=result.rule_id,
+                    rule_version=self._rules.rule_version,
+                    violation_hash=digest,
+                    detected_at=self._clock.now(),
+                )
+            )
         async with self._uow.transaction():
-            await self._violations.add(record)
-        METRICS.increment(
-            "governance_guard_checks_total", labels={"decision": result.decision.value}
+            for record in records:
+                await self._violations.add(record)
+        METRICS.increment("governance_guard_checks_total", labels={"decision": decision.value})
+        for record in records:
+            METRICS.increment(
+                "governance_violations_total", labels={"class": record.violation_class.value}
+            )
+        rewritten = next(
+            (
+                result.rewritten_text
+                for result in violations
+                if result.decision is GuardDecision.REWRITE
+            ),
+            None,
         )
-        METRICS.increment("governance_violations_total", labels={"class": violation_class.value})
         return GuardVerdictResult(
-            decision=result.decision,
-            violations=(record,),
-            rewritten_text=result.rewritten_text
-            if result.decision is GuardDecision.REWRITE
-            else None,
+            decision=decision,
+            violations=tuple(records),
+            rewritten_text=rewritten,
             rule_version=self._rules.rule_version,
         )
 
@@ -209,6 +223,7 @@ class RecordGovernanceViolation:
             violation_class=request.violation_class,
             offending_span=request.offending_span,
             rule_id=request.rule_id,
+            text=request.offending_span,
         )
         record = ViolationRecord(
             violation_id=ViolationId("vio_" + digest[:26]),
