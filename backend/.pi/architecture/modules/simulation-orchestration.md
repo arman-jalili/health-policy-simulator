@@ -203,6 +203,7 @@ defined by its application services and its persistence contract above.
 |---|---|---|
 | ``RunSimulationJob` / `StreamSimulationProgress` / `PauseOrResumeSimulation` / `RecordAgentInvocation`` | application | Job execution, streaming, metering (catalog above) |
 | `BudgetGuard`, `CheckpointPolicy`, `PauseBoundary`, `RetryPolicy`, `PromptVersioning` | application (rules) | Pre-call budget checks, safe-boundary pausing, bounded backoff, prompt versions |
+| `SequentialWorkflowGraph` | infrastructure | Pure sequencing: nodes receive/return `GraphState`; architecture test forbids state mutation and domain imports |
 | `JobStore`, `InvocationStore`, `ProgressStore`, `PromptRegistry` | infrastructure | Job/stream/metering persistence contract above |
 | `LLMClient` port, SSE endpoint | interfaces | Provider-independent LLM adapter and event stream |
 
