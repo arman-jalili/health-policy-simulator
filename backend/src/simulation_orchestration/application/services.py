@@ -106,8 +106,27 @@ class StreamSimulationProgress:
     def __init__(self, *, progress: ProgressStore) -> None:
         self._progress = progress
 
+    async def _events(
+        self, request: StreamSimulationProgressRequest
+    ) -> AsyncIterator[ProgressEventView]:
+        after = 0
+        if request.last_event_id:
+            previous = await self._progress.get(request.last_event_id)
+            if previous is None or previous.run_id != request.run_id:
+                raise ValueError(f"unknown Last-Event-ID {request.last_event_id!r}")
+            after = previous.sequence
+        while True:
+            batch = list(await self._progress.list_after(request.run_id, after, request.limit))
+            if not batch:
+                return
+            for event in batch:
+                yield event
+            if len(batch) < request.limit:
+                return
+            after = batch[-1].sequence
+
     def execute(self, request: StreamSimulationProgressRequest) -> AsyncIterator[ProgressEventView]:
-        raise NotImplementedError("StreamSimulationProgress is implemented by issue #213")
+        return self._events(request)
 
 
 class PauseOrResumeSimulation:

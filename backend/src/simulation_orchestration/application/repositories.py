@@ -57,6 +57,8 @@ class ProgressStore(Protocol):
 
     async def latest_sequence(self, run_id: RunId) -> int: ...
 
+    async def get(self, event_id: str) -> ProgressEventView | None: ...
+
 
 @runtime_checkable
 class PromptRegistry(Protocol):
