@@ -48,6 +48,41 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - IdentityAccess contract frozen (issue #31)
+
+### Changed
+- Module: identity-access — froze the ACL (`Role`, `Scope`, `ROLE_SCOPES`, `ActorId`,
+  `ResolutionState`, `Principal`), DTOs (`ResolutionOutcome`, key lifecycle records, readiness
+  records), error codes (`UNAUTHENTICATED`, `SCOPE_REQUIRED`, `API_KEY_NOT_FOUND`), ports
+  (`PrincipalPort`, `ApiKeyAdminPort`, `ReadinessPort`, `DemoModePolicy`), key-store contracts,
+  admin route shapes and the composition container
+- Module: identity-access — adapter-depth placement: the contract lives in `interfaces/` and is
+  implemented in `infrastructure/`; `domain/` and `application/` stay empty markers because the
+  ADR-008 machine projection forbids modules there
+- Tests: replaced the generated placeholder files with frozen-contract assertions for all ten
+  components (25 tests)
+
+### Impact Analysis
+- Files affected:
+  - `src/identity_access/**`
+  - `tests/unit/identity-access/**`
+- Canonical refs to update:
+  - `.pi/architecture/modules/identity-access.md#frozen-contracts-2026-11-05`
+- Validators required:
+  - architecture, canonical, ci
+
+### Migration Steps
+1. Review and approve the frozen contract (PR)
+2. Implement issues #32–#41 against these names; do not reshape them without a contract change
+3. Apply migration `0104_identity_access` in the key-store issue
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation stubs updated (contract only; bodies remain TODO)
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-05] - EvidenceCorpus wiring completed (issue #26, 276c4cc)
 
 ### Changed
@@ -195,7 +230,8 @@ Track which changes have been synced to implementation:
 | 2026-11-05 | Complete architecture package | claim-validation | pending | not run |
 | 2026-11-05 | Complete architecture package | governance-compliance | pending | not run |
 | 2026-11-05 | Complete architecture package | simulation-orchestration | pending | not run |
-| 2026-11-05 | Complete architecture package | identity-access | pending | not run |
+| 2026-11-05 | IdentityAccess contract freeze (#31) | identity-access | contract frozen | pass |
+| 2026-11-05 | Complete architecture package | identity-access | contract frozen | pass |
 
 ---
 

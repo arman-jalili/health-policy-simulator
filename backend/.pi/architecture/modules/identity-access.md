@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Contract frozen (2026-11-05)
 **Depends:** — (none; generic adapter)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -20,10 +20,10 @@ commands to an actor.
 
 | Layer | Responsibility | Path |
 |-------|--------------|------|
-| **Domain** | — (none; ADR-008 forbids entities here) | `src/identity_access/domain/` |
-| **Application** | `ResolvePrincipal` (the only application service) | `src/identity_access/application/` |
-| **Infrastructure** | Key hashing, key store, scope table | `src/identity_access/infrastructure/` |
-| **Interfaces** | FastAPI dependency `require_scope(...)`, `Principal` ACL | `src/identity_access/interfaces/` |
+| **Domain** | — (adapter depth forbids domain modules) | `src/identity_access/domain/` (empty marker) |
+| **Application** | — (adapter depth forbids application modules) | `src/identity_access/application/` (empty marker) |
+| **Infrastructure** | Key hashing, key store, scope table, key resolver | `src/identity_access/infrastructure/` |
+| **Interfaces** | Frozen ACL (`Principal`, `PrincipalPort`, DTOs, errors), `require_scope` contract, admin router | `src/identity_access/interfaces/` |
 
 **Anti-corruption edge:** the auth layer produces a `Principal`; handlers translate it to an
 `actor_id` string before calling any application service. No module ever imports API-key types.
@@ -123,7 +123,7 @@ stateDiagram-v2
 **Narrow interface the rest of the system consumes (only two things):**
 
 ```python
-# src/identity_access/application/ports.py
+# src/identity_access/interfaces/types.py + ports.py (adapter depth; see ADR-008)
 class PrincipalPort(Protocol):
     async def resolve(self, api_key: str | None) -> Principal: ...
 
@@ -161,6 +161,26 @@ leaves `infrastructure/`. `Principal` is the sole published concept.
 | `analyst` | `runs:read`, `runs:write`, `briefs:read` |
 | `operator` | + `corpus:read`, `corpus:write`, `briefs:publish` |
 | `admin` | `*` |
+
+### Frozen contracts (2026-11-05)
+
+The adapter-depth projection forbids Python modules in `domain/` and `application/`; the contract
+lives in `interfaces/` and is implemented by `infrastructure/`. Fields are frozen — implementation
+issues may fill bodies but must not rename or reshape these types.
+
+| Contract | File | Frozen contents |
+|---|---|---|
+| Identity types | `src/identity_access/interfaces/types.py` | `Role` (analyst/operator/admin), `Scope` (7 values), `ROLE_SCOPES`, `ActorId`, `ResolutionState` (anonymous/resolved/authorized/forbidden/revoked/rejected), `Principal(label, role, scopes, is_demo; has_scope, actor_id)` |
+| DTOs | `src/identity_access/interfaces/dto.py` | `ResolutionOutcome(state, principal, reason)`, `CreateApiKeyCommand(label, role)`, `IssuedApiKey(key_id, key[repr-hidden], label, role, created_at)`, `ApiKeySummary(key_id, label, role, created_at, revoked_at; is_active)`, `ReadinessCheck(name, ok, detail)`, `ReadinessReport(ready, checks)`, `LivenessReport(status, service, version)` |
+| Ports | `src/identity_access/interfaces/ports.py` | `PrincipalPort.resolve(api_key)`, `ApiKeyAdminPort.create_key/list_keys/revoke_key`, `ReadinessPort.check`, `DemoModePolicy.permits(client_host)` |
+| Errors | `src/identity_access/interfaces/errors.py` | `AUTHENTICATION_REQUIRED` → `UNAUTHENTICATED` (401), `SCOPE_REQUIRED` (403), `API_KEY_NOT_FOUND` (404) |
+| HTTP | `src/identity_access/interfaces/http/dependencies.py`, `.../schemas.py`, `.../router.py` | `require_scope(scope)` dependency contract; `CreateApiKeyRequest`, `IssuedApiKeyResponse`, `ApiKeySummaryResponse`; admin routes below |
+| Key store | `src/identity_access/infrastructure/ports.py`, `src/identity_access/infrastructure/repository/records.py`, `.../ports.py` | `KeyMaterial`, `ApiKeyFactory.generate`, `ApiKeyStore`, `ApiKeyRecord`, `ApiKeyRepository`; secrets/hashes are `repr=False` |
+| Composition | `src/identity_access/composition.py` | `IdentityAccessContainer(principal_port, api_key_admin, readiness, demo_policy)`; `build_identity_access_container(settings, database)` |
+
+Resolution is a request outcome, not an aggregate: `ResolutionState` is never persisted and no
+domain event is published (ADR-008). The only published concept is `Principal`; `ApiKeyRecord`,
+`KeyMaterial` and the repository port are key-store types that never leave `infrastructure/`.
 
 ## Application Services (authoritative catalog)
 
