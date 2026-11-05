@@ -63,6 +63,20 @@ async def test_registry_selection_and_binding_run_through_the_public_api() -> No
         assert recorded.status_code == 201, recorded.text
         assert recorded.json()["positions"][0]["usable"] is False
 
+        explicit_claim = await client.post(
+            f"/api/v1/stakeholders/{stakeholder_ids[0]}/history",
+            json={
+                "stance": "claims an explicit waiting-time target",
+                "attribution": "explicit",
+                "stated_on": "2026-01-02",
+                "passage_id": "psg_unresolvable",
+            },
+        )
+        assert explicit_claim.status_code == 201, explicit_claim.text
+        position = explicit_claim.json()["positions"][-1]
+        assert position["attribution"] == "mention"
+        assert position["usable"] is False
+
         history = await client.get(
             f"/api/v1/stakeholders/{stakeholder_ids[0]}/history",
             params={"usable_only": "true"},
