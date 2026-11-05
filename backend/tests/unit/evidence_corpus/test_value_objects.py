@@ -95,14 +95,21 @@ class TestExtractionQuality:
     def test_acceptance_threshold_is_frozen_at_contract_level(self) -> None:
         assert pytest.approx(0.85) == DEFAULT_MINIMUM_CONFIDENCE
 
-    def test_quality_gate_is_a_stub_until_its_issue_lands(self) -> None:
+    def test_quality_gate_accepts_good_extraction(self) -> None:
         quality = ExtractionQuality(
             method=ExtractionMethod.NATIVE,
             confidence=0.95,
             missing_glyph_rate=0.0,
         )
-        with pytest.raises(NotImplementedError):
-            quality.is_acceptable()
+
+        assert quality.is_acceptable() is True
+
+    def test_quality_gate_requires_both_confidence_and_low_glyph_damage(self) -> None:
+        low_confidence = ExtractionQuality(ExtractionMethod.OCR, 0.6, 0.0)
+        glyph_damage = ExtractionQuality(ExtractionMethod.OCR, 0.95, 0.4)
+
+        assert low_confidence.is_acceptable() is False
+        assert glyph_damage.is_acceptable() is False
 
     def test_gate_signature_accepts_an_override_threshold(self) -> None:
         parameters = field_names(ExtractionQuality)

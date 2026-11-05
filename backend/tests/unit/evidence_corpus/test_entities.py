@@ -1,4 +1,4 @@
-"""Contract freeze: entities and aggregates of EvidenceCorpus.
+"""Entity and aggregate contract: structure plus the behaviour that enforces the invariants.
 
 Aggregate boundaries are part of the contract: `Document` is per-file (not the corpus),
 `IngestionRun` records outcomes and contains no documents, snapshots are manifests.
@@ -7,7 +7,6 @@ Aggregate boundaries are part of the contract: `Document` is per-file (not the c
 from __future__ import annotations
 
 import dataclasses
-import inspect
 from datetime import UTC, date, datetime
 
 import pytest
@@ -23,6 +22,25 @@ from evidence_corpus.domain.entities import (
     Publication,
     RunStatus,
 )
+from evidence_corpus.domain.errors import (
+    AlreadyExtracted,
+    AuthorityAlreadyAssigned,
+    DocumentNotCitable,
+    OffsetsOutOfBounds,
+    OverlappingPassages,
+    RunAlreadyClosed,
+    SourceTypeUnknown,
+)
+from evidence_corpus.domain.events import (
+    ArticleSegmented,
+    AuthorityTierAssigned,
+    DocumentIngested,
+    DocumentQuarantined,
+    IngestionRunCompleted,
+    InstitutionalStatementAttributed,
+    PersonalQuotationExcluded,
+    QuotationBlockDetected,
+)
 from evidence_corpus.domain.values import (
     ArticleSection,
     AuthorityTier,
@@ -37,24 +55,12 @@ from evidence_corpus.domain.values import (
 
 from .contract_helpers import enum_values, field_names
 
-
-def _call_for(method: str):  # type: ignore[no-untyped-def]
-    def call(stub):  # type: ignore[no-untyped-def]
-        if method == "record_extraction":
-            stub("text", ExtractionQuality(ExtractionMethod.NATIVE, 0.9, 0.0))
-        elif method == "add_article":
-            stub("headline", "body", 1, 1)
-        elif method == "classify":
-            stub(AuthorityTier.PRESS_REPORT)
-        else:
-            stub()
-
-    return call
+GOOD_QUALITY = ExtractionQuality(ExtractionMethod.NATIVE, 0.95, 0.0)
+POOR_QUALITY = ExtractionQuality(ExtractionMethod.OCR, 0.41, 0.55)
 
 
-def _document() -> Document:
-    return Document(
-        id="doc_01J0000000000000000000000A",
+def _document(source_type: SourceType = SourceType.PRESS_REPORT) -> Document:
+    return Document.register(
         source_uri="s3://corpus/std-2026-10-01.pdf",
         content_hash="sha256:abc",
         publication=Publication(
@@ -62,9 +68,20 @@ def _document() -> Document:
             published_on=date(2026, 10, 1),
             medium="print",
         ),
-        source_type=SourceType.PRESS_REPORT,
+        source_type=source_type,
         language=LanguageTag("de-AT"),
     )
+
+
+def _extracted_document() -> Document:
+    document = _document()
+    document.record_extraction("Erster Artikel.\fZweiter Artikel.", GOOD_QUALITY)
+    return document
+
+
+def _article() -> Article:
+    document = _extracted_document()
+    return document.add_article("Kassenstellen", "Die Kassenstellen werden aufgestockt.", 1, 1)
 
 
 class TestPublication:
@@ -93,35 +110,135 @@ class TestDocumentAggregate:
         ]
         assert {"tier", "quality", "articles", "events"} <= set(names)
 
-    def test_owns_articles_and_events_but_not_the_corpus(self) -> None:
+    def test_register_creates_an_unclassified_document(self) -> None:
         document = _document()
 
+        assert document.id.startswith("doc_")
+        assert document.tier is None
+        assert document.quality is None
         assert document.articles == []
         assert document.events == []
 
-    def test_exposes_behaviour_methods_only_no_setters(self) -> None:
+    def test_mutation_goes_through_behaviour_not_setters(self) -> None:
+        assert {name for name in dir(Document) if name.startswith("set_")} == set()
         assert {"record_extraction", "add_article", "classify", "is_citable"} <= set(dir(Document))
-        setters = [name for name in dir(Document) if name.startswith("set_")]
-        assert setters == []
 
-    def test_tier_and_quality_start_unassigned(self) -> None:
+    def test_record_extraction_assigns_once(self) -> None:
         document = _document()
 
+        document.record_extraction("Text", GOOD_QUALITY)
+
+        assert document.quality is GOOD_QUALITY
+        assert document.extracted_text == "Text"
+        with pytest.raises(AlreadyExtracted):
+            document.record_extraction("Anderer Text", GOOD_QUALITY)
+        assert document.quality is GOOD_QUALITY
+        assert document.extracted_text == "Text"
+
+    def test_record_extraction_emits_exactly_one_outcome_event(self) -> None:
+        document = _document()
+
+        document.record_extraction("Text", GOOD_QUALITY)
+
+        events = document.drain_events()
+        assert len(events) == 1
+        assert isinstance(events[0], DocumentIngested)
+        assert events[0].quality_method is ExtractionMethod.NATIVE
+        assert document.drain_events() == []
+
+    def test_below_threshold_extraction_quarantines_as_an_event(self) -> None:
+        document = _document()
+
+        document.record_extraction("garbled", POOR_QUALITY)
+
+        events = document.drain_events()
+        assert isinstance(events[0], DocumentQuarantined)
+        assert events[0].threshold > 0
+        assert document.is_citable() is False
+
+    def test_is_citable_requires_accepted_extraction(self) -> None:
+        document = _document()
+
+        assert document.is_citable() is False
+        document.record_extraction("Text", GOOD_QUALITY)
+        assert document.is_citable() is True
+
+    def test_unknown_source_type_is_never_citable(self) -> None:
+        document = _document(SourceType.UNKNOWN)
+        document.record_extraction("Text", GOOD_QUALITY)
+
+        assert document.is_citable() is False
+
+    def test_add_article_refuses_a_non_citable_document(self) -> None:
+        document = _document()
+
+        with pytest.raises(DocumentNotCitable):
+            document.add_article("headline", "body", 1, 1)
+
+    def test_add_article_segments_and_emits(self) -> None:
+        document = _extracted_document()
+        document.drain_events()
+
+        article = document.add_article(
+            "Kassenstellen", "Die Kassenstellen werden aufgestockt.", 3, 3
+        )
+
+        assert article.id.startswith("art_")
+        assert article.document_id == document.id
+        assert article.headline == "Kassenstellen"
+        events = document.drain_events()
+        assert isinstance(events[0], ArticleSegmented)
+        assert events[0].article_id == article.id
+        assert events[0].passage_count == 0
+
+    def test_add_article_rejects_empty_or_inverted_segments(self) -> None:
+        document = _extracted_document()
+
+        with pytest.raises(ValueError, match="headline"):
+            document.add_article("  ", "body", 1, 1)
+        with pytest.raises(ValueError, match="page range"):
+            document.add_article("headline", "body", 2, 1)
+
+    def test_classify_assigns_once_and_refuses_reclassification(self) -> None:
+        document = _extracted_document()
+        document.drain_events()
+
+        document.classify(AuthorityTier.PRESS_REPORT)
+
+        assert document.tier is AuthorityTier.PRESS_REPORT
+        events = document.drain_events()
+        assert isinstance(events[0], AuthorityTierAssigned)
+        with pytest.raises(AuthorityAlreadyAssigned):
+            document.classify(AuthorityTier.LEGISLATION)
+        assert document.tier is AuthorityTier.PRESS_REPORT
+
+    def test_classify_refuses_an_unknown_source_type(self) -> None:
+        document = _document(SourceType.UNKNOWN)
+
+        with pytest.raises(SourceTypeUnknown):
+            document.classify(AuthorityTier.OTHER)
         assert document.tier is None
-        assert document.quality is None
 
-    @pytest.mark.parametrize(
-        "method",
-        ["record_extraction", "add_article", "classify", "is_citable", "publishable_passages"],
-    )
-    def test_behaviour_is_a_frozen_stub_until_its_issue_lands(self, method: str) -> None:
-        document = _document()
-        stub = getattr(document, method)
+    def test_publishable_passages_flattens_citable_spans_only(self) -> None:
+        document = _extracted_document()
+        body = "Institution: wir zahlen. Person: ich auch."
+        split = body.index("Person")
+        article = document.add_article("headline", body, 1, 1)
+        article.add_passage(
+            text=body[:split].strip(),
+            offsets=Offsets(0, split),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+        article.add_passage(
+            text=body[split:].strip(),
+            offsets=Offsets(split, len(body)),
+            speaker_kind=SpeakerKind.PERSON,
+        )
 
-        assert inspect.iscoroutinefunction(stub) is False
-        call = _call_for(method)
-        with pytest.raises(NotImplementedError):
-            call(stub)
+        publishable = document.publishable_passages()
+
+        assert len(publishable) == 1
+        assert publishable[0].speaker_kind is SpeakerKind.INSTITUTION
 
 
 class TestArticle:
@@ -140,19 +257,75 @@ class TestArticle:
         ]
         assert {"passages", "quotation_blocks"} <= set(names)
 
-    def test_publishable_passages_is_a_stub(self) -> None:
-        article = Article(
-            id="art_01J0000000000000000000000B",
-            document_id="doc_01J0000000000000000000000A",
-            headline="Kassenstellen",
-            body="Text",
-            page_from=1,
-            page_to=1,
-            language=LanguageTag("de-AT"),
+    def test_add_passage_assigns_ordinals_and_citability(self) -> None:
+        article = _article()
+        article.events.clear()
+
+        passage = article.add_passage(
+            text="Die Kassenstellen werden",
+            offsets=Offsets(0, 22),
+            speaker_kind=SpeakerKind.INSTITUTION,
         )
 
-        with pytest.raises(NotImplementedError):
-            article.publishable_passages()
+        assert passage.id.startswith("psg_")
+        assert passage.ord == 0
+        assert passage.citable is True
+        assert article.passage_count() == 1
+        assert [type(event) for event in article.events] == [InstitutionalStatementAttributed]
+
+    def test_person_attributed_quotations_are_non_citable_and_recorded(self) -> None:
+        article = _article()
+        article.events.clear()
+
+        passage = article.add_passage(
+            text="Die Kassenstellen werden",
+            offsets=Offsets(0, 22),
+            speaker_kind=SpeakerKind.PERSON,
+            section=ArticleSection.QUOTATION,
+        )
+
+        assert passage.citable is False
+        assert article.publishable_passages() == []
+        assert [type(event) for event in article.events] == [
+            QuotationBlockDetected,
+            PersonalQuotationExcluded,
+        ]
+
+    def test_offsets_outside_the_body_are_refused(self) -> None:
+        article = _article()
+
+        with pytest.raises(OffsetsOutOfBounds):
+            article.add_passage(
+                text="beyond",
+                offsets=Offsets(0, len(article.body) + 1),
+                speaker_kind=SpeakerKind.INSTITUTION,
+            )
+
+    def test_overlapping_siblings_are_refused(self) -> None:
+        article = _article()
+        article.add_passage(
+            text="Die Kassenstellen",
+            offsets=Offsets(0, 17),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+
+        with pytest.raises(OverlappingPassages):
+            article.add_passage(
+                text="stellen werden",
+                offsets=Offsets(10, 24),
+                speaker_kind=SpeakerKind.INSTITUTION,
+            )
+
+    def test_publishable_passages_returns_only_citable_spans(self) -> None:
+        article = _article()
+
+        assert article.publishable_passages() == []
+        article.add_passage(
+            text="Die Kassenstellen",
+            offsets=Offsets(0, 17),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+        assert len(article.publishable_passages()) == 1
 
 
 class TestPassage:
@@ -171,24 +344,50 @@ class TestPassage:
         ]
         assert "section" in names
 
-    def test_carries_offsets_and_speaker_kind_not_free_text_bounds(self) -> None:
-        passage = Passage(
-            id="psg_01J0000000000000000000000C",
-            article_id="art_01J0000000000000000000000B",
-            document_id="doc_01J0000000000000000000000A",
+    def test_new_derives_citability_from_attribution(self) -> None:
+        institutional = Passage.new(
+            article_id="art_1",
+            document_id="doc_1",
             ord=0,
-            text="Die Kassenstellen werden aufgestockt.",
-            offsets=Offsets(0, 42),
+            text="Institution: wir zahlen.",
+            offsets=Offsets(0, 24),
             speaker_kind=SpeakerKind.INSTITUTION,
-            citable=True,
+        )
+        personal = Passage.new(
+            article_id="art_1",
+            document_id="doc_1",
+            ord=1,
+            text=" Person: ich auch.",
+            offsets=Offsets(24, 43),
+            speaker_kind=SpeakerKind.PERSON,
         )
 
-        assert passage.offsets == Offsets(0, 42)
-        assert passage.speaker_kind is SpeakerKind.INSTITUTION
-        assert passage.section is ArticleSection.BODY
+        assert institutional.citable is True
+        assert personal.citable is False
 
     def test_provenance_is_attached_for_citation_resolution(self) -> None:
         assert "provenance" in field_names(Passage)
+
+        passage = Passage.new(
+            article_id="art_1",
+            document_id="doc_1",
+            ord=0,
+            text="Text",
+            offsets=Offsets(0, 4),
+            speaker_kind=SpeakerKind.INSTITUTION,
+            provenance=Provenance(
+                outlet="Der Standard",
+                published_on=date(2026, 10, 1),
+                medium="print",
+                page_from=3,
+                page_to=3,
+                offsets=Offsets(0, 4),
+                source_uri="s3://corpus/std-2026-10-01.pdf",
+            ),
+        )
+
+        assert passage.provenance is not None
+        assert passage.provenance.page_from == 3
 
 
 class TestIngestionRun:
@@ -203,20 +402,43 @@ class TestIngestionRun:
         assert enum_values(RunStatus) == {"running", "completed", "failed"}
         assert enum_values(IngestionOutcome) == {"accepted", "quarantined", "failed"}
 
-    def test_record_and_complete_are_stubs(self) -> None:
-        run = IngestionRun(id="run_01J0000000000000000000000D", shard_label="shard-1")
+    def test_record_counts_each_outcome_once(self) -> None:
+        run = IngestionRun(id="run_1", shard_label="shard-1")
 
-        with pytest.raises(NotImplementedError):
-            run.record(IngestionOutcome.ACCEPTED)
-        with pytest.raises(NotImplementedError):
+        run.record(IngestionOutcome.ACCEPTED)
+        run.record(IngestionOutcome.QUARANTINED)
+        run.record(IngestionOutcome.FAILED)
+
+        assert (run.attempted, run.accepted, run.quarantined, run.failed) == (3, 1, 1, 1)
+
+    def test_complete_closes_once_and_emits_counts(self) -> None:
+        run = IngestionRun(id="run_1", shard_label="shard-1")
+        run.record(IngestionOutcome.ACCEPTED)
+
+        run.complete()
+
+        assert run.status is RunStatus.COMPLETED
+        event = run.events[-1]
+        assert isinstance(event, IngestionRunCompleted)
+        assert event.accepted == 1
+        with pytest.raises(RunAlreadyClosed):
             run.complete()
+
+    def test_fail_marks_the_run_without_losing_counts(self) -> None:
+        run = IngestionRun(id="run_1", shard_label="shard-1")
+        run.record(IngestionOutcome.FAILED)
+
+        run.fail("ocr backend unavailable")
+
+        assert run.status is RunStatus.FAILED
+        assert run.failure_reason == "ocr backend unavailable"
+        with pytest.raises(RunAlreadyClosed):
+            run.record(IngestionOutcome.ACCEPTED)
 
 
 class TestSnapshotAndIndexManifest:
     def test_snapshot_is_a_manifest_not_a_corpus_root(self) -> None:
-        names = field_names(CorpusSnapshot)
-
-        assert names == [
+        assert field_names(CorpusSnapshot) == [
             "id",
             "label",
             "manifest_hash",
@@ -233,47 +455,22 @@ class TestSnapshotAndIndexManifest:
             "passage_count",
         ]
 
-    def test_snapshot_pins_documents_plus_index_version(self) -> None:
+    def test_pin_sorts_and_freezes_the_document_set(self) -> None:
         manifest = IndexManifest(
             index_version="idx-2026-11-05.1",
             embedding_model="text-embedding-3-small",
             searchable_since=datetime(2026, 11, 5, 9, 0, tzinfo=UTC),
             passage_count=120,
         )
-        snapshot = CorpusSnapshot(
-            id="snp_01J0000000000000000000000E",
+
+        snapshot = CorpusSnapshot.pin(
             label="baseline",
-            manifest_hash="sha256:def",
-            pinned_at=datetime(2026, 11, 5, 9, 5, tzinfo=UTC),
-            document_ids=[_document().id],
+            document_ids=["doc_b", "doc_a"],
             index_manifest=manifest,
+            pinned_at=datetime(2026, 11, 5, 9, 5, tzinfo=UTC),
+            manifest_hash="sha256:def",
         )
 
+        assert snapshot.id.startswith("snp_")
+        assert snapshot.document_ids == ["doc_a", "doc_b"]
         assert snapshot.index_manifest.index_version == "idx-2026-11-05.1"
-        assert snapshot.document_ids == ["doc_01J0000000000000000000000A"]
-
-
-class TestProvenanceOnPassage:
-    def test_provenance_reuses_the_frozen_locator_bundle(self) -> None:
-        passage = Passage(
-            id="psg_01J0000000000000000000000F",
-            article_id="art_01J0000000000000000000000B",
-            document_id="doc_01J0000000000000000000000A",
-            ord=0,
-            text="Text",
-            offsets=Offsets(0, 4),
-            speaker_kind=SpeakerKind.INSTITUTION,
-            citable=True,
-            provenance=Provenance(
-                outlet="Der Standard",
-                published_on=date(2026, 10, 1),
-                medium="print",
-                page_from=3,
-                page_to=3,
-                offsets=Offsets(0, 4),
-                source_uri="s3://corpus/std-2026-10-01.pdf",
-            ),
-        )
-
-        assert passage.provenance is not None
-        assert passage.provenance.page_from == 3

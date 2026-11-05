@@ -49,15 +49,20 @@ class ExtractionQuality:
     page_count: int = 1
 
     def is_acceptable(self, minimum_confidence: float = 0.85) -> bool:
-        """Return whether this extraction may produce citable passages.
+        """Whether this extraction may produce citable passages (invariant 4).
 
-        TODO(extraction-quality-gate): implemented by ISSUE extraction-quality-gate.
-        Contract: `confidence >= minimum_confidence and missing_glyph_rate <= MAX_MISSING_GLYPHS`.
+        Both signals must hold: enough confidence in the text, and little glyph damage. A high
+        confidence on a badly damaged scan is still unusable evidence.
         """
-        raise NotImplementedError("ExtractionQuality.is_acceptable is a frozen stub")
+        return (
+            self.page_count > 0
+            and self.confidence >= minimum_confidence
+            and self.missing_glyph_rate <= MAX_MISSING_GLYPH_RATE
+        )
 
 
 DEFAULT_MINIMUM_CONFIDENCE: Final[float] = 0.85
+MAX_MISSING_GLYPH_RATE: Final[float] = 0.15
 
 
 # ── Text geometry ─────────────────────────────────────────────────────────────
@@ -67,12 +72,29 @@ DEFAULT_MINIMUM_CONFIDENCE: Final[float] = 0.85
 class Offsets:
     """Half-open `[start, end)` span into the parent Article body.
 
-    TODO(passage-offsets): construction-time bounds and sibling-overlap validation
-    (`OffsetsOutOfBounds`, `OverlappingPassages`) is added by ISSUE passage-offsets.
+    Intrinsic sanity is enforced here; containment in the parent article and sibling overlap are
+    enforced by the aggregate (`Document.add_article` / `Article.add_passage`), which own the text.
     """
 
     start: int
     end: int
+
+    def __post_init__(self) -> None:
+        if self.start < 0:
+            raise ValueError("offset start must not be negative")
+        if self.end <= self.start:
+            raise ValueError("offset end must be greater than start")
+
+    @property
+    def length(self) -> int:
+        return self.end - self.start
+
+    def overlaps(self, other: Offsets) -> bool:
+        """Half-open intervals overlap when each starts before the other ends."""
+        return self.start < other.end and other.start < self.end
+
+    def within(self, article_length: int) -> bool:
+        return self.start >= 0 and self.end <= article_length
 
 
 class ArticleSection(StrEnum):
