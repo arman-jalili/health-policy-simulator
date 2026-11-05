@@ -9,8 +9,15 @@ from shared.clock import SystemClock
 from shared.config import Settings
 from shared.db import Database
 from shared.db import UnitOfWork as DbUnitOfWork
+from shared.enums import Persistence
 from simulation_orchestration.application.errors import UnknownModel
 from simulation_orchestration.application.ports import NegotiationGateway, WorkerLoop
+from simulation_orchestration.application.repositories import (
+    InvocationStore,
+    JobStore,
+    ProgressStore,
+    PromptRegistry,
+)
 from simulation_orchestration.application.rules import (
     BudgetGuard,
     CheckpointPolicy,
@@ -37,6 +44,12 @@ from simulation_orchestration.infrastructure.memory import (
 )
 from simulation_orchestration.infrastructure.negotiation import NoopNegotiationGateway
 from simulation_orchestration.infrastructure.pricing import StaticPriceTable
+from simulation_orchestration.infrastructure.repository.sqlalchemy import (
+    SqlAlchemyInvocationStore,
+    SqlAlchemyJobStore,
+    SqlAlchemyProgressStore,
+    SqlAlchemyPromptRegistry,
+)
 from simulation_orchestration.infrastructure.worker import BackgroundWorker
 
 _SUPPORTED_MODELS = frozenset({"scripted-local"})
@@ -64,10 +77,16 @@ def build_container(
     if model_id not in _SUPPORTED_MODELS:
         raise UnknownModel(f"no price entry for configured model {model_id!r}")
     clock = SystemClock()
-    jobs = InMemoryJobStore()
-    invocations = InMemoryInvocationStore()
-    progress = InMemoryProgressStore()
-    registry = InMemoryPromptRegistry()
+    if settings.persistence is Persistence.POSTGRES:
+        jobs: JobStore = SqlAlchemyJobStore(database.session_factory)
+        invocations: InvocationStore = SqlAlchemyInvocationStore(database.session_factory)
+        progress: ProgressStore = SqlAlchemyProgressStore(database.session_factory)
+        registry: PromptRegistry = SqlAlchemyPromptRegistry(database.session_factory)
+    else:
+        jobs = InMemoryJobStore()
+        invocations = InMemoryInvocationStore()
+        progress = InMemoryProgressStore()
+        registry = InMemoryPromptRegistry()
     prices = StaticPriceTable(
         {
             model_id: ModelPrice(

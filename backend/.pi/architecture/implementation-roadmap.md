@@ -192,7 +192,7 @@ persistence (migration `0301`) are implemented.
 ### Database Migrations
 
 - `0301_claim_validation`: `_claim`, `_verification`, `_reference_figure`, `_contradiction_finding`, `_expert_review`
-- `0302_simulation_orchestration`: `_job`, `_invocation`, `_progress`, `_prompt`
+- [x] `0302_simulation_orchestration`: `_job`, `_invocation`, `_progress`, `_prompt`
 - `0303_governance_compliance`: `_violation`, `_provenance`, `_allowlist`
 
 ### Acceptance Criteria

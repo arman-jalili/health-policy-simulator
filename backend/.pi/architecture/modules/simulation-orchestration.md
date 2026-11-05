@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Implemented — contract frozen in #205; wiring delivered in #216
+**Status:** Implemented — contract frozen #205; wiring #216; durable runtime #217
 **Depends:** NegotiationSession (ACL — invokes domain commands), StakeholderModel (persona versions), EvidenceRetrieval (packs per turn)
 **Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -74,6 +74,7 @@ the rule and persists. The graph is a sequencer, not a model.
 | ADR-004 API Design | SSE with `Last-Event-ID` replay; `202` for long-running work |
 | ADR-006 Cost Tracking | `AgentInvocation` is owned here and is the reproducibility record |
 | ADR-008 Proportional Modeling Depth | Service depth: no domain model, persistence contract only |
+| ADR-013 SimulationOrchestration Runtime Integration | Router+worker wiring; durable `0302` stores; boot-time model failure |
 
 ## Diagrams
 
@@ -296,11 +297,12 @@ replay and audit depend on framework internals, and it was rejected in ADR-003.
 | Composition | LLM provider, price table, budget defaults and prompt registry selected from settings; a missing price entry must fail at boot, not silently meter zero | boot test with an unknown model id |
 | Persistence | Migration `0302` applied; jobs resumable across restart | kill-and-restart test |
 
-**Current wiring (issue #216):** the router is mounted in `shared/app.py`, the background worker is
-started by the lifespan, and `build_container` selects the scripted provider. Until the
-NegotiationSession Phase 4 graph lands, a deterministic bootstrap node closes the run so
-`POST :start` produces `run.started` → `run.completed` without a manual step. Durable stores and
-migration `0302` are delivered by runtime integration (#217).
+**Runtime (ADR-013):** the router is mounted in `shared/app.py`, the background worker is started by
+the lifespan, and `build_container` selects the scripted provider. `PERSISTENCE=postgres` uses the
+`0302_simulation_orchestration` tables through SQLAlchemy adapters; jobs, invocation envelopes,
+progress events and prompt versions survive restart. Until the NegotiationSession Phase 4 graph
+lands, a deterministic bootstrap node closes the run so `POST :start` produces
+`run.started` → `run.completed` without a manual step.
 | Broker sharing | Progress broker instance shared with the NegotiationSession SSE endpoint | integration test: one stream, two publishers |
 | Metering | Every call writes `agent_invocation` with model, `prompt@version`, tokens, cost | usage endpoint reflects a live run |
 | Ownership | Graph holds only ids/phase/budget; no domain state | architecture test on graph state schema |
