@@ -1,12 +1,9 @@
-"""Frozen application services of GovernanceCompliance (contract freeze, issue #248).
-
-Canonical: .pi/architecture/modules/governance-compliance.md
-
-Constructors, names and ``execute`` signatures are frozen. Bodies raise ``NotImplementedError``
-naming the implementing component; later issues may not rename or remove a frozen member.
-"""
+"""Application services of GovernanceCompliance (implemented governance epic)."""
 
 from __future__ import annotations
+
+import hashlib
+import re
 
 from governance_compliance.application.commands import (
     DisclosePositionProvenanceRequest,
@@ -21,9 +18,14 @@ from governance_compliance.application.dto import (
     AllowlistResult,
     AllowlistValidationResult,
     GuardVerdictResult,
+    ProvenanceRecord,
     ProvenanceResult,
     ViolationListResult,
     ViolationRecord,
+)
+from governance_compliance.application.errors import (
+    GovernanceViolationNotFound,
+    ProvenanceIncomplete,
 )
 from governance_compliance.application.ports import (
     Clock,
@@ -31,8 +33,30 @@ from governance_compliance.application.ports import (
     UnitOfWork,
 )
 from governance_compliance.application.repositories import ProvenanceStore, ViolationStore
-from governance_compliance.application.rules import GuardRuleChain
-from governance_compliance.application.values import InstitutionalAllowlist
+from governance_compliance.application.rules import GuardRuleChain, context_for
+from governance_compliance.application.values import (
+    GuardDecision,
+    GuardRuleId,
+    InstitutionalAllowlist,
+    InvocationId,
+    RunId,
+    ViolationClass,
+    ViolationId,
+)
+
+_PERSON_TITLE = re.compile(r"\b(?:Dr\.|Mag\.|Prof\.|Obmann|Obfrau|Präsident(?:in)?)\s+\S+")
+
+
+def _violation_hash(
+    *,
+    run_id: RunId,
+    invocation_id: InvocationId,
+    violation_class: ViolationClass,
+    offending_span: str,
+    rule_id: GuardRuleId,
+) -> str:
+    material = f"{run_id}|{invocation_id}|{violation_class.value}|{offending_span}|{rule_id.value}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 class EnforceInstitutionOnlyOutput:
@@ -54,7 +78,63 @@ class EnforceInstitutionOnlyOutput:
         self._uow = uow
 
     async def execute(self, request: EnforceInstitutionOnlyOutputRequest) -> GuardVerdictResult:
-        raise NotImplementedError("EnforceInstitutionOnlyOutput is implemented by GC-001..GC-005")
+        context = context_for(
+            text=request.text,
+            speaker_kind=request.speaker_kind,
+            allowlist=self._allowlist,
+            cited_passage_ids=request.cited_passage_ids,
+            reference_figure_ids=request.reference_figure_ids,
+        )
+        results = await self._rules.evaluate(context)
+        result = results[-1] if results else None
+        if result is None or result.decision is GuardDecision.ACCEPT:
+            return GuardVerdictResult(
+                decision=GuardDecision.ACCEPT,
+                violations=(),
+                rewritten_text=None,
+                rule_version=self._rules.rule_version,
+            )
+        rule_id = result.rule_id
+        violation_class = result.violation_class or ViolationClass.PERSON_NAMED
+        offending = result.offending_span or request.text
+        run_id = request.run_id or RunId("")
+        record = ViolationRecord(
+            violation_id=ViolationId(
+                "vio_"
+                + _violation_hash(
+                    run_id=run_id,
+                    invocation_id=request.invocation_id,
+                    violation_class=violation_class,
+                    offending_span=offending,
+                    rule_id=rule_id,
+                )[:26]
+            ),
+            run_id=run_id,
+            invocation_id=request.invocation_id,
+            violation_class=violation_class,
+            offending_span=offending,
+            rewritten_span=result.rewritten_span,
+            rule_id=rule_id,
+            rule_version=self._rules.rule_version,
+            violation_hash=_violation_hash(
+                run_id=run_id,
+                invocation_id=request.invocation_id,
+                violation_class=violation_class,
+                offending_span=offending,
+                rule_id=rule_id,
+            ),
+            detected_at=self._clock.now(),
+        )
+        async with self._uow.transaction():
+            await self._violations.add(record)
+        return GuardVerdictResult(
+            decision=result.decision,
+            violations=(record,),
+            rewritten_text=result.rewritten_text
+            if result.decision is GuardDecision.REWRITE
+            else None,
+            rule_version=self._rules.rule_version,
+        )
 
 
 class DisclosePositionProvenance:
@@ -74,9 +154,37 @@ class DisclosePositionProvenance:
         self._uow = uow
 
     async def execute(self, request: DisclosePositionProvenanceRequest) -> ProvenanceResult:
-        raise NotImplementedError(
-            "DisclosePositionProvenance is implemented by the provenance issue"
+        facts = await self._facts.load(request.position_id)
+        if facts is None:
+            raise ProvenanceIncomplete("position facts are missing")
+        missing = [
+            name
+            for name, value in (
+                ("evidence", facts.evidence_ids),
+                ("arguments", facts.argument_ids),
+                ("invocation", facts.invocation_id),
+                ("prompt_version", facts.prompt_version),
+                ("model", facts.model),
+            )
+            if not value
+        ]
+        if missing:
+            raise ProvenanceIncomplete("provenance is incomplete: " + ", ".join(missing))
+        existing = await self._store.list_for_position(request.position_id)
+        version = request.version or (max((row.version for row in existing), default=0) + 1)
+        record = ProvenanceRecord(
+            position_id=request.position_id,
+            evidence_ids=facts.evidence_ids,
+            argument_ids=facts.argument_ids,
+            invocation_id=facts.invocation_id or "",
+            prompt_version=facts.prompt_version or "",
+            model=facts.model or "",
+            disclosed_at=self._clock.now(),
+            version=version,
         )
+        async with self._uow.transaction():
+            await self._store.save(record)
+        return ProvenanceResult(record)
 
 
 class RecordGovernanceViolation:
@@ -88,9 +196,27 @@ class RecordGovernanceViolation:
         self._uow = uow
 
     async def execute(self, request: RecordGovernanceViolationRequest) -> ViolationRecord:
-        raise NotImplementedError(
-            "RecordGovernanceViolation is implemented by the persistence issue"
+        digest = _violation_hash(
+            run_id=request.run_id,
+            invocation_id=request.invocation_id,
+            violation_class=request.violation_class,
+            offending_span=request.offending_span,
+            rule_id=request.rule_id,
         )
+        record = ViolationRecord(
+            violation_id=ViolationId("vio_" + digest[:26]),
+            run_id=request.run_id,
+            invocation_id=request.invocation_id,
+            violation_class=request.violation_class,
+            offending_span=request.offending_span,
+            rewritten_span=request.rewritten_span,
+            rule_id=request.rule_id,
+            rule_version=request.rule_id.value,
+            violation_hash=digest,
+            detected_at=self._clock.now(),
+        )
+        async with self._uow.transaction():
+            return await self._violations.add(record)
 
 
 class ValidateInstitutionalAllowlist:
@@ -100,8 +226,16 @@ class ValidateInstitutionalAllowlist:
         pass
 
     def execute(self, request: ValidateInstitutionalAllowlistRequest) -> AllowlistValidationResult:
-        raise NotImplementedError(
-            "ValidateInstitutionalAllowlist is implemented by the allowlist issue"
+        problems: list[str] = []
+        if request.allowlist.is_empty:
+            problems.append("allowlist is empty")
+        for entry in request.allowlist.institutions:
+            if _PERSON_TITLE.search(entry.canonical_name) or _PERSON_TITLE.search(entry.short_name):
+                problems.append(f"{entry.code} looks like a natural person")
+        return AllowlistValidationResult(
+            valid=not problems,
+            institution_count=len(request.allowlist.institutions),
+            problems=tuple(problems),
         )
 
 
@@ -110,7 +244,12 @@ class ListViolations:
         self._violations = violations
 
     async def execute(self, request: ListViolationsRequest) -> ViolationListResult:
-        raise NotImplementedError("ListViolations is implemented by the read-model issue")
+        rows = await self._violations.list(
+            run_id=request.run_id,
+            violation_class=request.violation_class,
+            limit=request.limit,
+        )
+        return ViolationListResult(tuple(rows))
 
 
 class GetPositionProvenance:
@@ -118,7 +257,10 @@ class GetPositionProvenance:
         self._store = store
 
     async def execute(self, request: GetPositionProvenanceRequest) -> ProvenanceResult:
-        raise NotImplementedError("GetPositionProvenance is implemented by the read-model issue")
+        record = await self._store.get(request.position_id, request.version)
+        if record is None:
+            raise GovernanceViolationNotFound(f"no provenance for position {request.position_id}")
+        return ProvenanceResult(record)
 
 
 class ListAllowlist:
@@ -126,4 +268,7 @@ class ListAllowlist:
         self._allowlist = allowlist
 
     async def execute(self, request: ListAllowlistRequest) -> AllowlistResult:
-        raise NotImplementedError("ListAllowlist is implemented by the read-model issue")
+        return AllowlistResult(
+            institutions=self._allowlist.institutions,
+            version=self._allowlist.version,
+        )
