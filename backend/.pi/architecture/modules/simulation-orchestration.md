@@ -2,9 +2,9 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Contract Frozen (implementation pending)
 **Depends:** NegotiationSession (ACL — invokes domain commands), StakeholderModel (persona versions), EvidenceRetrieval (packs per turn)
-**Last reviewed:** 2026-11-05
+**Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description
@@ -16,6 +16,42 @@ negotiation state.
 **Modeling Depth:** service (supporting subdomain)
 **Subdomain Rationale:** Necessary plumbing; correctness deferred to NegotiationSession aggregates.
 **Context Map:** anticorruption-layer → NegotiationSession (LangGraph invokes domain commands; domain state is never read from graph state).
+
+## Contract Freeze (issue #205)
+
+All public interfaces for this epic are frozen before implementation. The frozen surface lives in:
+
+| Surface | File |
+|---|---|
+| Values, enums, graph state, budget and prompt records | `src/simulation_orchestration/application/values.py` |
+| Commands and result DTOs | `application/commands.py`, `application/dto.py` |
+| Service interfaces | `application/services.py` |
+| Rules (`BudgetGuard`, `CheckpointPolicy`, `PauseBoundary`, `RetryPolicy`, `PromptVersioning`) | `application/rules.py` |
+| LLM/graph/worker/negotiation ports | `application/ports.py` |
+| Repository ports | `application/repositories.py` (re-exported by `infrastructure/repository/ports.py`) |
+| Progress event schemas | `application/events.py` |
+| Stable error codes | `application/errors.py` |
+| Concrete HTTP router and schemas | `interfaces/http/router.py`, `interfaces/http/schemas.py` |
+| Published ACL views | `interfaces/published.py` |
+| Composition factory | `composition.py` |
+
+**ADR-008 note:** this is a service-depth context, so there is no domain model. The `domain/`
+directory is an empty layout marker; event payloads live in `application/events.py`, because the
+modeling-depth validator forbids Python modules under `domain/`.
+
+**Frozen API:** `POST /api/v1/runs/{run_id}:start` (202), `GET /api/v1/runs/{run_id}/stream`
+(SSE), `POST /api/v1/runs/{run_id}:pause` (202), `POST /api/v1/runs/{run_id}:resume` (202),
+`GET /api/v1/runs/{run_id}/usage`, `GET /api/v1/jobs/{job_id}`. Write routes require `runs:write`;
+read/stream routes require `runs:read`.
+
+**Error codes:** `SIMULATION_JOB_NOT_FOUND`, `SIMULATION_RUN_NOT_FOUND`,
+`INVALID_JOB_TRANSITION`, `RUN_BUDGET_EXHAUSTED`, `UNKNOWN_MODEL`, `PROMPT_NOT_FOUND`,
+`INVALID_PROMPT_TEMPLATE`.
+
+**Freeze policy:** signatures, field names, enum values, route paths and status codes are
+additive-only. Renaming or removing a frozen member requires a new freeze entry. Service and
+repository bodies raise `NotImplementedError` naming their implementing issue until that issue
+lands.
 
 ## Architecture
 
@@ -166,7 +202,7 @@ defined by its application services and its persistence contract above.
 | Component | Layer | Responsibility |
 |---|---|---|
 | ``RunSimulationJob` / `StreamSimulationProgress` / `PauseOrResumeSimulation` / `RecordAgentInvocation`` | application | Job execution, streaming, metering (catalog above) |
-| `BudgetGuard`, `CheckpointPolicy`, `RetryPolicy` | domain (rules) | Pre-call budget checks, safe-boundary pausing, bounded backoff |
+| `BudgetGuard`, `CheckpointPolicy`, `PauseBoundary`, `RetryPolicy`, `PromptVersioning` | application (rules) | Pre-call budget checks, safe-boundary pausing, bounded backoff, prompt versions |
 | `JobStore`, `InvocationStore`, `ProgressStore`, `PromptRegistry` | infrastructure | Job/stream/metering persistence contract above |
 | `LLMClient` port, SSE endpoint | interfaces | Provider-independent LLM adapter and event stream |
 

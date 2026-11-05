@@ -48,6 +48,33 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - SimulationOrchestration contract freeze (issue #205)
+
+### Changed
+- Module: simulation-orchestration — froze all public interfaces and schemas before implementation:
+  graph sequencing ports, graph state, invocation envelope, budget/pause/retry/prompt rules,
+  job/invocation/progress/prompt repository ports, progress event payloads, error codes, HTTP routes,
+  published ACL views and composition factory.
+- Added 40 contract-freeze checks across the 11 epic components; placeholders replaced because their
+  hyphenated generated identifiers were invalid.
+- Set module status to **Contract Frozen (implementation pending)** and documented the ADR-008
+  service-depth exception (no domain modules; event schemas in `application/`).
+
+### Impact Analysis
+- Files affected: `src/simulation_orchestration/**`, `tests/unit/simulation-orchestration/**`,
+  `tests/unit/simulation_orchestration_contract_helpers.py`, module doc
+- Canonical refs: module doc `## Contract Freeze`, API/persistence tables
+- Validators: unit, architecture conformance, modeling depth, canonical
+
+### Status
+- [x] All component interfaces defined as stubs
+- [x] DTO/event/error contracts documented
+- [x] API contract frozen with scopes and status codes
+- [x] Implementation stubs depend on the frozen ports
+- [x] Architecture docs updated
+
+---
+
 ## [2026-11-06] - ClaimValidation runtime defect fixes (#200, #201, #202)
 
 ### Changed

@@ -4,8 +4,9 @@ Institutional negotiation simulator for Austrian healthcare policy: nine grounde
 policy question on citation-grade evidence, and the result is an auditable decision brief.
 
 **Status:** Phase 3 in progress — shared kernel, EvidenceCorpus, EvidenceRetrieval, IdentityAccess,
-StakeholderModel and ClaimValidation are implemented and mounted. StakeholderModel still keeps
-mutable profiles/history/bindings in memory; ClaimValidation is durable via migration `0301`. See
+StakeholderModel and ClaimValidation are implemented and mounted. SimulationOrchestration public
+contracts are frozen and implementation is in progress. StakeholderModel still keeps mutable
+profiles/history/bindings in memory; ClaimValidation is durable via migration `0301`. See
 [`.pi/architecture/implementation-roadmap.md`](.pi/architecture/implementation-roadmap.md).
 
 ## Stack
