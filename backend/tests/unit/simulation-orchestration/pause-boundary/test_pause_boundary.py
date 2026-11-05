@@ -142,7 +142,7 @@ def test_uncommitted_turn_is_discarded_before_checkpoint() -> None:
 
 
 async def test_pause_changes_status_only_and_emits_an_ordered_event() -> None:
-    service, jobs, progress = await _service(_job())
+    service, jobs, progress = await _service(_job(JobStatus.QUEUED))
     before = await jobs.get_by_run(RunId("run_1"))
 
     result = await service.execute(
@@ -162,7 +162,7 @@ async def test_pause_changes_status_only_and_emits_an_ordered_event() -> None:
     assert events[0].payload["reason"] == "operator"
 
 
-async def test_resume_returns_to_running_from_the_same_checkpoint() -> None:
+async def test_resume_requeues_from_the_same_checkpoint() -> None:
     service, jobs, progress = await _service(_job(JobStatus.PAUSED))
     checkpoint = (await jobs.get_by_run(RunId("run_1"))).checkpoint  # type: ignore[union-attr]
 
@@ -172,8 +172,9 @@ async def test_resume_returns_to_running_from_the_same_checkpoint() -> None:
 
     job = await jobs.get_by_run(RunId("run_1"))
     events = await progress.list_after(RunId("run_1"), 0, 10)
-    assert result.status is JobStatus.RUNNING
+    assert result.status is JobStatus.QUEUED
     assert job is not None
+    assert job.status is JobStatus.QUEUED
     assert job.checkpoint == checkpoint
     assert events[0].payload["checkpoint"]["round"] == checkpoint.round
 

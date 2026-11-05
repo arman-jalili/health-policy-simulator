@@ -33,7 +33,7 @@ mode is non-durable and local/test only.
 
 1. Restore the repository at the last known-good commit and deploy the previous image if needed.
 2. Restore the database from the latest dump/PITR target.
-3. `alembic upgrade head`; confirm `alembic current` reports `0303_simulation_lease`.
+3. `alembic upgrade head`; confirm `alembic current` reports `0304_simulation_pause_reason`.
 4. Start one API instance; the lifespan worker starts automatically.
 5. `GET /healthz` → 200; `GET /readyz` → `simulation_orchestration=ok`,
    `simulation_orchestration_persistence` matches the configured family.

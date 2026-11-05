@@ -10,7 +10,7 @@ architecture: `.pi/architecture/modules/simulation-orchestration.md`; runtime de
 |---|---|
 | Entry path | `shared.app.create_app` → `simulation_orchestration.composition.build_container` → router + lifespan worker |
 | Public API | `POST /api/v1/runs/{run_id}:start`, `GET /runs/{run_id}/stream`, `POST /runs/{run_id}:pause`, `POST /runs/{run_id}:resume`, `GET /runs/{run_id}/usage`, `GET /jobs/{job_id}` |
-| Persistence | Migrations `0302_simulation_orchestration` + `0303_simulation_lease`: `_job`, `_invocation`, `_progress`, `_prompt` |
+| Persistence | Migrations `0302_simulation_orchestration` + `0303_simulation_lease` + `0304_simulation_pause_reason`: `_job`, `_invocation`, `_progress`, `_prompt` |
 | Memory mode | explicit `PERSISTENCE=memory`; test/local only |
 | Worker | in-process task `simulation-worker`; supervised, per-job failure isolation, 60 s job lease |
 | Readiness | `/readyz` reports `simulation_orchestration`, `simulation_orchestration_persistence`, `simulation_model` |
@@ -19,7 +19,7 @@ architecture: `.pi/architecture/modules/simulation-orchestration.md`; runtime de
 
 ## Startup sequence
 
-1. `alembic upgrade head` — must reach `0303_simulation_lease`.
+1. `alembic upgrade head` — must reach `0304_simulation_pause_reason`.
 2. Set `DATABASE_URL`, `PERSISTENCE=postgres`, and a supported `SIMULATION_MODEL_ID`
    (currently `scripted-local`); an unknown model aborts boot with `UNKNOWN_MODEL`.
 3. Start `hps-api`.
@@ -51,14 +51,16 @@ on every claim (60 s default); an expired lease makes the job claimable again.
 | Duplicate progress sequence | Two workers wrote the same stream | Unique `(run_id, sequence)` rejects it; inspect worker ownership |
 | Invocation duplicate | Provider retried an existing id | Append-once is intentional; inspect the existing envelope |
 | Budget exhaustion | `max_cost`/`max_tokens`/`max_invocations` breached | Raise the budget and resume; no partial argument is persisted |
-| `INVALID_JOB_TRANSITION` | Pause/resume from a terminal state | Read `GET /jobs/{id}`; only paused/running transitions are legal |
+| `INVALID_JOB_TRANSITION` | Pause/resume from a terminal state | Read `GET /jobs/{id}`; only queued/running pause and paused resume are legal |
+| Resume returns `queued`, not `running` | Resume re-queues the job for the worker | Wait for the worker to claim it; inspect `attempts` and progress sequence |
 
 ## Incident response and escalation
 
 1. Capture `run_id`, `job_id`, status, checkpoint, last progress sequence and trace id.
 2. Stop accepting new starts for the affected run; do not delete progress or invocation rows.
 3. Inspect `simulation_orchestration_job`, `_progress`, `_invocation` and the worker logs.
-4. Resume from the checkpoint if the job is paused/running; never hand-edit a checkpoint in SQL.
+4. Resume from the checkpoint if the job is paused; resume re-queues and the worker continues at the
+   next node. Never hand-edit a checkpoint in SQL.
 5. Add a regression test before closing the incident.
 6. Escalate to the single prototype owner.
 

@@ -48,6 +48,28 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - SimulationOrchestration pause/resume runtime (issue #236)
+
+### Changed
+- The worker re-reads job status before every node, so a pause stops the loop before the next node.
+- An in-flight turn commits its checkpoint; the deferred `run.paused` event carries that checkpoint.
+- Resume sets `queued` (not `running`), so the worker claims the job and continues from the persisted
+  checkpoint. `0304_simulation_pause_reason` stores the operator reason while a pause is deferred.
+- `PauseBoundary.resolve` receives the real claim-derived `turn_committed` value.
+
+### Impact Analysis
+- Files affected: `application/services.py`, job DTO/model/adapters, migration 0304, tests/docs
+- Canonical refs: module doc, runbook, DR plan
+- Validators: tests, migration, architecture, runtime wiring
+
+### Status
+- [x] Pause stops before the next node
+- [x] Resume re-queues and worker progresses
+- [x] No node runs twice
+- [x] Public API pause/resume proof
+
+---
+
 ## [2026-11-06] - SimulationOrchestration lifecycle hardening (issue #235)
 
 ### Changed

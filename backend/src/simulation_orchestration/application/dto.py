@@ -142,6 +142,7 @@ class JobRecord:
     updated_at: datetime
     budget: RunBudget = field(default_factory=RunBudget)
     lease_expires_at: datetime | None = None
+    pause_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
