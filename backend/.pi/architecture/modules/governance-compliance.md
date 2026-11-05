@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Implemented
 **Depends:** StakeholderModel (institutional allowlist), EvidenceCorpus (`speaker_kind` attribution), ClaimValidation (figure findings), SimulationOrchestration (invocation records)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd

@@ -134,6 +134,11 @@ async def readyz(request: Request) -> JSONResponse:
                 )
             )
 
+    governance = getattr(request.app.state, "governance_compliance", None)
+    if governance is not None:
+        checks["governance_compliance"] = "ok"
+        checks["governance_allowlist"] = str(len(governance.allowlist.institutions))
+
     if failures:
         raise ServiceUnavailableError(
             "A required dependency is unavailable",

@@ -43,6 +43,7 @@ from governance_compliance.application.values import (
     ViolationClass,
     ViolationId,
 )
+from shared.metrics import METRICS
 
 _PERSON_TITLE = re.compile(r"\b(?:Dr\.|Mag\.|Prof\.|Obmann|Obfrau|Präsident(?:in)?)\s+\S+")
 
@@ -88,6 +89,7 @@ class EnforceInstitutionOnlyOutput:
         results = await self._rules.evaluate(context)
         result = results[-1] if results else None
         if result is None or result.decision is GuardDecision.ACCEPT:
+            METRICS.increment("governance_guard_checks_total", labels={"decision": "accept"})
             return GuardVerdictResult(
                 decision=GuardDecision.ACCEPT,
                 violations=(),
@@ -127,6 +129,10 @@ class EnforceInstitutionOnlyOutput:
         )
         async with self._uow.transaction():
             await self._violations.add(record)
+        METRICS.increment(
+            "governance_guard_checks_total", labels={"decision": result.decision.value}
+        )
+        METRICS.increment("governance_violations_total", labels={"class": violation_class.value})
         return GuardVerdictResult(
             decision=result.decision,
             violations=(record,),
@@ -184,6 +190,7 @@ class DisclosePositionProvenance:
         )
         async with self._uow.transaction():
             await self._store.save(record)
+        METRICS.increment("governance_provenance_disclosures_total")
         return ProvenanceResult(record)
 
 

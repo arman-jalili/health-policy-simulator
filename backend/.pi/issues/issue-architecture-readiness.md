@@ -1,9 +1,9 @@
 ---
 guardian_issue:
   id: "ISSUE-READINESS"
-  epic: "evidence-corpus"
+  epic: "governance-compliance"
   component: "Architecture Readiness"
-  module: "evidence-corpus"
+  module: "governance-compliance"
   status: planned
   priority: critical
   dependencies: []
@@ -32,7 +32,7 @@ guardian_issue:
       - Verify proofing scripts + validators in CI
 
   canonical_references:
-    - module: ".pi/architecture/modules/evidence-corpus.md"
+    - module: ".pi/architecture/modules/governance-compliance.md"
 
   acceptance_criteria:
     - "Runbook created and reviewed"
@@ -58,30 +58,30 @@ guardian_issue:
     and CI will catch regressions (proofing scripts + validators).
 
   file_changes:
-    - "create: docs/runbook-evidence-corpus.md"
-    - "create: docs/dr-plan-evidence-corpus.md"
+    - "create: docs/runbook-governance-compliance.md"
+    - "create: docs/dr-plan-governance-compliance.md"
     - "modify: .pi/architecture/CHANGELOG.md"
-    - "modify: .pi/architecture/modules/evidence-corpus.md"
+    - "modify: .pi/architecture/modules/governance-compliance.md"
 ---
 
-# Architecture Readiness: evidence-corpus
+# Architecture Readiness: governance-compliance
 
 ## Intent
 
-Make the evidence-corpus module production-ready. This is the final issue in every epic
+Make the governance-compliance module production-ready. This is the final issue in every epic
 — it closes the loop between implementation and operability.
 
 ## Deliverables
 
 ### Runbook
-`docs/runbook-evidence-corpus.md` covering:
+`docs/runbook-governance-compliance.md` covering:
 - Startup sequence and dependencies
 - Graceful shutdown procedure
 - Common failure modes and recovery
 - Configuration reference
 
 ### DR Plan
-`docs/dr-plan-evidence-corpus.md` covering:
+`docs/dr-plan-governance-compliance.md` covering:
 - Backup strategy and schedule
 - Restore procedure
 - Failover plan

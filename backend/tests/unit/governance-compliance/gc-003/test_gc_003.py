@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
 from governance_compliance.application.rules import (
     GuardRuleChain,
     InstitutionAliasRule,
+    RuleResult,
     context_for,
 )
 from governance_compliance.application.values import (
@@ -31,7 +33,7 @@ ALLOWLIST = InstitutionalAllowlist(
 )
 
 
-def _run(text: str, allowlist: InstitutionalAllowlist):
+def _run(text: str, allowlist: InstitutionalAllowlist) -> Sequence[RuleResult]:
     return asyncio.run(
         GuardRuleChain([InstitutionAliasRule(AllowlistInstitutionResolver())]).evaluate(
             context_for(
@@ -56,4 +58,5 @@ def test_unresolved_person_owned_ministry_is_rejected() -> None:
     result = _run("The minister's ministry confirmed the plan.", InstitutionalAllowlist())[-1]
 
     assert result.decision is GuardDecision.REJECT
+    assert result.violation_class is not None
     assert result.violation_class.value == "institution_ambiguous"

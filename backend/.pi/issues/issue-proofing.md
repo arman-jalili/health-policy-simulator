@@ -1,9 +1,9 @@
 ---
 guardian_issue:
   id: "ISSUE-PROOFING"
-  epic: "evidence-corpus"
+  epic: "governance-compliance"
   component: "Proofing & CI Enforcement"
-  module: "evidence-corpus"
+  module: "governance-compliance"
   status: planned
   priority: critical
   dependencies: []
@@ -26,7 +26,7 @@ guardian_issue:
       - Updated CI stage configuration
 
   canonical_references:
-    - module: ".pi/architecture/modules/evidence-corpus.md"
+    - module: ".pi/architecture/modules/governance-compliance.md"
 
   acceptance_criteria:
     - "All proofing scripts created and executable"
@@ -47,11 +47,11 @@ guardian_issue:
     every build for zero token cost.
 
   file_changes:
-    - "create: .pi/scripts/ci/check_evidence-corpus_contracts.sh"
+    - "create: .pi/scripts/ci/check_governance-compliance_contracts.sh"
     - "modify: .pi/scripts/ci/run_hardening_stages.sh"
 ---
 
-# Proofing & CI Enforcement: evidence-corpus
+# Proofing & CI Enforcement: governance-compliance
 
 ## Intent
 
@@ -85,16 +85,16 @@ on every PR. No LLM cost. No human review. Just pass or fail.
 
 | Script | Purpose | Location |
 |--------|---------|----------|
-| check_evidence-corpus_contracts.sh | Validate contract implementation | .pi/scripts/ci/ |
-| stage_evidence-corpus_proofing.sh | CI stage wrapper | .pi/scripts/ci/ |
+| check_governance-compliance_contracts.sh | Validate contract implementation | .pi/scripts/ci/ |
+| stage_governance-compliance_proofing.sh | CI stage wrapper | .pi/scripts/ci/ |
 
 ## CI Pipeline Update
 
 Add the new stage to `run_hardening_stages.sh`:
 
 ```bash
-run_stage "11" "evidence-corpus_proofing" \
-    "${SCRIPTS_DIR}/stage_evidence-corpus_proofing.sh" \
+run_stage "11" "governance-compliance_proofing" \
+    "${SCRIPTS_DIR}/stage_governance-compliance_proofing.sh" \
     "always"
 ```
 

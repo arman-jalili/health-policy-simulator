@@ -76,7 +76,7 @@ FACT_STRINGS = [
 ]
 
 
-def _verdict(text: str, speaker_kind: SpeakerKind):
+def _verdict(text: str, speaker_kind: SpeakerKind) -> GuardDecision:
     chain = GuardRuleChain(
         [
             PersonReferenceRule(RegexPersonNameDetector()),

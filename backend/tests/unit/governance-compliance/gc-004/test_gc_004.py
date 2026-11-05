@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
-from governance_compliance.application.rules import GuardRuleChain, UnsupportedFactRule, context_for
+from governance_compliance.application.rules import (
+    GuardRuleChain,
+    RuleResult,
+    UnsupportedFactRule,
+    context_for,
+)
 from governance_compliance.application.values import (
     GuardDecision,
     InstitutionalAllowlist,
@@ -12,7 +18,7 @@ from governance_compliance.application.values import (
 )
 
 
-def _run(text: str, cited: tuple[str, ...] = ()):
+def _run(text: str, cited: tuple[str, ...] = ()) -> Sequence[RuleResult]:
     return asyncio.run(
         GuardRuleChain([UnsupportedFactRule()]).evaluate(
             context_for(
@@ -30,6 +36,7 @@ def test_uncited_fact_is_rewritten_to_unsupported() -> None:
     result = _run("Die Ausgaben steigen 2026 um 4,2 Prozent.")[-1]
 
     assert result.decision is GuardDecision.REWRITE
+    assert result.violation_class is not None
     assert result.violation_class.value == "unsupported_fact"
     assert (result.rewritten_text or "").startswith("unsupported:")
 
