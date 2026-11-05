@@ -243,7 +243,7 @@ class CorpusSnapshot:
             label=label,
             manifest_hash=manifest_hash,
             pinned_at=pinned_at,
-            document_ids=sorted(document_ids),
+            document_ids=sorted(set(document_ids)),
             index_manifest=index_manifest,
         )
 

@@ -2,14 +2,14 @@
 
 Canonical: .pi/architecture/modules/evidence-corpus.md
 
-CONTRACT FREEZE — this module declares shapes, not behaviour. Validation that enforces the module
-invariants is added by the implementation issues that follow; the signatures and the rubric data
-below are frozen. Changing a member, a field name or a rubric order requires re-opening the contract
-issue.
+Value objects validate themselves on construction: a value that exists is a value that is valid.
+The rubric data below is frozen; changing a member, a field name or a rubric order requires
+re-opening the contract issue.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
@@ -47,6 +47,14 @@ class ExtractionQuality:
     confidence: float
     missing_glyph_rate: float
     page_count: int = 1
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence must be within [0, 1]")
+        if not 0.0 <= self.missing_glyph_rate <= 1.0:
+            raise ValueError("missing_glyph_rate must be within [0, 1]")
+        if self.page_count < 1:
+            raise ValueError("page_count must be at least 1")
 
     def is_acceptable(self, minimum_confidence: float = 0.85) -> bool:
         """Whether this extraction may produce citable passages (invariant 4).
@@ -113,6 +121,16 @@ class LanguageTag:
 
     tag: str
 
+    def __post_init__(self) -> None:
+        if not _LANGUAGE_TAG_PATTERN.match(self.tag):
+            raise ValueError(f"invalid BCP-47 language tag: {self.tag!r}")
+
+    def __str__(self) -> str:
+        return self.tag
+
+
+_LANGUAGE_TAG_PATTERN = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
+
 
 LANGUAGE_DE_AT: Final[LanguageTag] = LanguageTag("de-AT")
 
@@ -129,6 +147,14 @@ class ArticleDraft:
     page_from: int
     page_to: int
 
+    def __post_init__(self) -> None:
+        if not self.headline.strip():
+            raise ValueError("an article draft requires a headline")
+        if not self.body.strip():
+            raise ValueError("an article draft requires a body")
+        if self.page_from < 1 or self.page_to < self.page_from:
+            raise ValueError("article draft page range must be 1-based and ordered")
+
 
 # ── Citation provenance ───────────────────────────────────────────────────────
 
@@ -144,6 +170,18 @@ class Provenance:
     page_to: int
     offsets: Offsets
     source_uri: str
+
+    def __post_init__(self) -> None:
+        if not self.outlet.strip():
+            raise ValueError("provenance requires an outlet")
+        if not self.source_uri.strip():
+            raise ValueError("provenance requires a source URI")
+        if self.page_from < 1:
+            raise ValueError("page numbers are 1-based")
+        if self.page_to < self.page_from:
+            raise ValueError("page_to must not precede page_from")
+        if self.medium not in ("print", "online", "broadcast", "agency"):
+            raise ValueError(f"unknown publication medium: {self.medium!r}")
 
 
 class SpeakerKind(StrEnum):
@@ -165,6 +203,10 @@ class QuotationBlock:
     speaker_kind: SpeakerKind
     offsets: Offsets
 
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ValueError("a quotation block must contain text")
+
 
 @dataclass(frozen=True, slots=True)
 class CanonicalArticleRef:
@@ -172,6 +214,12 @@ class CanonicalArticleRef:
 
     canonical_article_id: str
     similarity: float
+
+    def __post_init__(self) -> None:
+        if not self.canonical_article_id.strip():
+            raise ValueError("canonical article id must not be empty")
+        if not 0.0 <= self.similarity <= 1.0:
+            raise ValueError("similarity must be within [0, 1]")
 
 
 # ── Authority rubric ──────────────────────────────────────────────────────────
@@ -227,6 +275,14 @@ class AuthorityRule:
 
     claim_type: ClaimType
     ordered_source_types: tuple[SourceType, ...]
+
+    def __post_init__(self) -> None:
+        if not self.ordered_source_types:
+            raise ValueError("an authority rule must order at least one source type")
+        if SourceType.UNKNOWN in self.ordered_source_types:
+            raise ValueError("an unknown source type can never appear in a rubric")
+        if len(set(self.ordered_source_types)) != len(self.ordered_source_types):
+            raise ValueError("an authority rule must not repeat a source type")
 
 
 AUTHORITY_RULES: Final[Mapping[ClaimType, tuple[SourceType, ...]]] = MappingProxyType(

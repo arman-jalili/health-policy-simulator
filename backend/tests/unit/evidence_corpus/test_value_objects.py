@@ -221,3 +221,101 @@ class TestStructuralValueObjects:
 
     def test_article_draft_is_what_a_boundary_strategy_emits(self) -> None:
         assert field_names(ArticleDraft) == ["headline", "body", "page_from", "page_to"]
+
+
+class TestValueObjectValidation:
+    """A value object that exists is a value object that is valid."""
+
+    @pytest.mark.parametrize(
+        "quality",
+        [
+            {"confidence": 1.4, "missing_glyph_rate": 0.0},
+            {"confidence": -0.1, "missing_glyph_rate": 0.0},
+            {"confidence": 0.9, "missing_glyph_rate": 1.5},
+            {"confidence": 0.9, "missing_glyph_rate": 0.0, "page_count": 0},
+        ],
+    )
+    def test_extraction_quality_rejects_impossible_measurements(
+        self, quality: dict[str, float]
+    ) -> None:
+        with pytest.raises(ValueError, match=r"confidence|glyph|page_count"):
+            ExtractionQuality(method=ExtractionMethod.NATIVE, **quality)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("tag", ["", "de_AT", "DE", "d", "de-AT-"])
+    def test_language_tag_rejects_malformed_bcp47(self, tag: str) -> None:
+        with pytest.raises(ValueError, match="BCP-47"):
+            LanguageTag(tag)
+
+    def test_language_tag_renders_as_its_tag(self) -> None:
+        assert str(LanguageTag("de-AT")) == "de-AT"
+
+    @pytest.mark.parametrize("value", [-1, 0, 5])
+    def test_offsets_reject_degenerate_spans(self, value: int) -> None:
+        with pytest.raises(ValueError, match="offset"):
+            Offsets(start=value, end=value)
+
+    def test_offsets_report_length_overlap_and_containment(self) -> None:
+        span = Offsets(10, 20)
+
+        assert span.length == 10
+        assert span.overlaps(Offsets(15, 25)) is True
+        assert span.overlaps(Offsets(20, 30)) is False
+        assert span.within(20) is True
+        assert span.within(15) is False
+
+    @pytest.mark.parametrize(
+        "provenance",
+        [
+            {"outlet": "", "medium": "print", "page_from": 1, "page_to": 1},
+            {"outlet": "Der Standard", "medium": "pigeon", "page_from": 1, "page_to": 1},
+            {"outlet": "Der Standard", "medium": "print", "page_from": 0, "page_to": 1},
+            {"outlet": "Der Standard", "medium": "print", "page_from": 3, "page_to": 2},
+        ],
+    )
+    def test_provenance_rejects_unresolvable_locators(self, provenance: dict[str, object]) -> None:
+        with pytest.raises(ValueError, match=r"outlet|medium|page|source URI"):
+            Provenance(
+                published_on=date(2026, 10, 1),
+                offsets=Offsets(0, 10),
+                source_uri="s3://corpus/std.pdf",
+                **provenance,  # type: ignore[arg-type]
+            )
+
+    def test_provenance_accepts_a_complete_locator(self) -> None:
+        provenance = Provenance(
+            outlet="Der Standard",
+            published_on=date(2026, 10, 1),
+            medium="print",
+            page_from=3,
+            page_to=3,
+            offsets=Offsets(120, 240),
+            source_uri="s3://corpus/std.pdf",
+        )
+
+        assert provenance.page_from == 3
+
+    def test_authority_rule_rejects_unknown_duplicates_and_empty_rules(self) -> None:
+        with pytest.raises(ValueError, match="unknown"):
+            AuthorityRule(ClaimType.LEGAL, (SourceType.UNKNOWN,))
+        with pytest.raises(ValueError, match="repeat"):
+            AuthorityRule(ClaimType.LEGAL, (SourceType.LEGISLATION, SourceType.LEGISLATION))
+        with pytest.raises(ValueError, match="at least one"):
+            AuthorityRule(ClaimType.LEGAL, ())
+
+    def test_canonical_reference_similarity_is_bounded(self) -> None:
+        with pytest.raises(ValueError, match="similarity"):
+            CanonicalArticleRef("art_1", 1.5)
+        with pytest.raises(ValueError, match="canonical"):
+            CanonicalArticleRef("", 0.9)
+
+    def test_article_draft_requires_headline_body_and_ordered_pages(self) -> None:
+        with pytest.raises(ValueError, match="headline"):
+            ArticleDraft("", "body", 1, 1)
+        with pytest.raises(ValueError, match="body"):
+            ArticleDraft("headline", " ", 1, 1)
+        with pytest.raises(ValueError, match="page range"):
+            ArticleDraft("headline", "body", 3, 2)
+
+    def test_quotation_block_requires_text(self) -> None:
+        with pytest.raises(ValueError, match="text"):
+            QuotationBlock("   ", SpeakerKind.PERSON, Offsets(0, 1))
