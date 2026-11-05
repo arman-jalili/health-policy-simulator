@@ -10,6 +10,7 @@ remove a frozen member without a new freeze entry.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from decimal import Decimal
 
 from simulation_orchestration.application.commands import (
     CollectUsageReportRequest,
@@ -22,6 +23,7 @@ from simulation_orchestration.application.commands import (
     StreamSimulationProgressRequest,
 )
 from simulation_orchestration.application.dto import (
+    InvocationEnvelope,
     InvocationRecordResult,
     JobSnapshotResult,
     PauseResumeResult,
@@ -122,7 +124,39 @@ class RecordAgentInvocation:
         self._clock = clock
 
     async def execute(self, request: RecordAgentInvocationRequest) -> InvocationRecordResult:
-        raise NotImplementedError("RecordAgentInvocation is implemented by issue #208")
+        if request.input_tokens < 0 or request.output_tokens < 0:
+            raise ValueError("token counts must not be negative")
+        if request.latency_ms < 0:
+            raise ValueError("latency must not be negative")
+        price = self._prices.price_for(request.model)
+        cost = (
+            Decimal(request.input_tokens) * price.input_per_1k
+            + Decimal(request.output_tokens) * price.output_per_1k
+        ) / Decimal("1000")
+        envelope = InvocationEnvelope(
+            invocation_id=request.invocation_id,
+            run_id=request.run_id,
+            round=request.round,
+            stakeholder=request.stakeholder,
+            purpose=request.purpose,
+            model=request.model,
+            prompt=request.prompt,
+            parameters=request.parameters,
+            evidence_pack_ids=request.evidence_pack_ids,
+            input_tokens=request.input_tokens,
+            output_tokens=request.output_tokens,
+            cost_estimate=cost,
+            latency_ms=request.latency_ms,
+            outcome=request.outcome,
+            created_at=self._clock.now(),
+        )
+        await self._invocations.add(envelope)
+        return InvocationRecordResult(
+            invocation_id=envelope.invocation_id,
+            run_id=envelope.run_id,
+            prompt=envelope.prompt,
+            cost_estimate=envelope.cost_estimate,
+        )
 
 
 class GetJob:
