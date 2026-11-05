@@ -48,6 +48,29 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Phase 2 acceptance recorded (issue #141)
+
+### Changed
+- Roadmap: Phase 2 ACs 1–7 now checked with executable test references.
+- Roadmap: EvidenceRetrieval deliverables corrected to prefix-aware `tsvector`/`ts_rank` lexical +
+  feature-hashing dense; no BM25 or pgvector claim.
+- Roadmap/module docs: `0201` recorded as the single `evidence_retrieval_pack` JSONB table;
+  `0202_stakeholder_model` recorded as deferred D-001 rather than delivered.
+
+### Impact Analysis
+- Files affected: `.pi/architecture/implementation-roadmap.md`,
+  `.pi/architecture/modules/{evidence-retrieval,stakeholder-model}.md`
+- Canonical refs: Phase 2, D-001, ADR-010, ADR-011
+- Validators: architecture, canonical, readiness
+
+### Status
+- [x] Phase 2 ACs recorded
+- [x] Migration claims match the tree
+- [x] Deliverable wording matches the module doc
+- [x] Stale module-doc persistence entries corrected
+
+---
+
 ## [2026-11-06] - Postgres compound lexical search (issue #140)
 
 ### Changed

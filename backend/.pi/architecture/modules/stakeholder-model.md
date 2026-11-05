@@ -409,7 +409,7 @@ audit-critical — recorded without an audit obligation.
 |---|---|---|
 | Router | `app.include_router(stakeholder_model_router)` in `src/shared/app.py` | boot test asserting registration |
 | Composition | persona loader runs at startup and fails fast if any of the 9 personas is invalid (missing interest/constraint, personal name) | startup test: a malformed persona aborts boot |
-| Persistence | Migration `0202` (stakeholder, profile, historical_position, mandate_source, agent_binding) applied | profiles survive restart |
+| Persistence | Migration `0202` is **deferred** (D-001); the registry is in-memory and seeded from personas | personas load at boot; profile/history/binding changes do **not** survive restart |
 | Downstream publication | `StakeholderProfileView` exposed to NegotiationSession; **institutional allowlist published to GovernanceCompliance** (the guard's source of truth) | integration test: guard recognises all 9 institutions |
 | Events | Registrations, powers and weak attributions published through the outbox | `MandateSourceCited` / `AuthorityClaimRejected` rows present |
 | Grounding data | Every veto/budget limit ships with a `MandateSource`; seeded via migration or operator endpoint, never defaulted | integration test: persona without grounding is refused at boot |

@@ -123,11 +123,13 @@ Bootstrap only — no bounded contexts.
 
 **Goal:** A claim can be turned into a balanced, inspectable evidence pack, and nine institutions exist with grounded authority.
 
+**Verified:** 2026-11-06 — AC 1–7 checked against the tests named below; migration scope recorded truthfully.
+
 ### Modules
 
 | Module | Deliverables | Architecture Doc |
 |--------|-------------|------------------|
-| EvidenceRetrieval | Hybrid search (BM25 via `tsvector` + dense), fusion, reranking, stance classification, `EvidencePack` aggregate, absence recording, inspectable score breakdown, recency exemptions | `.pi/architecture/modules/evidence-retrieval.md` |
+| EvidenceRetrieval | Hybrid search (prefix-aware `tsvector`/`ts_rank` lexical + feature-hashing dense), reciprocal-rank fusion, reranking, stance classification, `EvidencePack` aggregate, absence recording, inspectable score breakdown, recency exemptions | `.pi/architecture/modules/evidence-retrieval.md` |
 | StakeholderModel | `Stakeholder` + `AgentBinding` aggregates, 9 persona YAMLs, interests/constraints/red lines, `MandateSource` grounding for vetoes and budget, historical positions with attribution strength | `.pi/architecture/modules/stakeholder-model.md` |
 
 ### Dependencies
@@ -137,18 +139,31 @@ Bootstrap only — no bounded contexts.
 
 ### Database Migrations
 
-- `0201_evidence_retrieval`: `_evidence_pack`, `_evidence_candidate`, `_retrieval_trace`
-- `0202_stakeholder_model`: `_stakeholder`, `_profile`, `_historical_position`, `_mandate_source`, `_agent_binding`
+- `0201_evidence_retrieval`: `evidence_retrieval_pack` — frozen pack JSONB payload; candidates and
+  retrieval trace are embedded in the payload, not separate tables
+- `0202_stakeholder_model`: **not delivered** — deferred as **D-001** in
+  `.pi/architecture/DEFERRED.md`; stakeholder profiles, history and bindings run in memory
 
 ### Acceptance Criteria
 
-- [ ] A German compound query (`Kassenstellen`) returns hits a naive term query misses
-- [ ] A claim with no contradicting evidence returns `absence != null` and HTTP 200 — never an empty list or an error
-- [ ] Every candidate exposes authority / lexical / semantic / recency / directness components
-- [ ] A statute from 1995 keeps full recency weight; a press report from 1995 does not
-- [ ] All 9 personas load with ≥1 interest and ≥1 constraint, institutions only
-- [ ] A veto right without a `MandateSource` is refused with `AuthorityClaimRejected`
-- [ ] A mention-only source yields a history entry with `usable = false`
+- [x] A German compound query (`Kassenstellen`) returns hits a naive term query misses —
+  `tests/integration/test_index_writer.py` (compound, adapter parity, monotone recall) and
+  `tests/integration/test_evidence_retrieval_hybrid_search.py` (trace records the rewrite)
+- [x] A claim with no contradicting evidence returns `absence != null` and HTTP 2xx (`201 Created` for
+  pack creation) — never an empty list or an error —
+  `tests/integration/test_evidence_retrieval_e2e.py`
+- [x] Every candidate exposes authority / lexical / semantic / recency / directness components —
+  `tests/integration/test_evidence_retrieval_score_derivation.py` + `/packs/{id}/scores`
+- [x] A statute from 1995 keeps full recency weight; a press report from 1995 does not —
+  `tests/integration/test_evidence_retrieval_score_derivation.py`
+- [x] All 9 personas load with ≥1 interest and ≥1 constraint, institutions only —
+  `tests/unit/stakeholder-model/persona-cards/test_persona-cards.py`
+- [x] A veto right without a `MandateSource` is refused with `AuthorityClaimRejected` —
+  `tests/unit/stakeholder-model/unsourced-authority/test_unsourced-authority.py` and
+  `tests/integration/test_stakeholder_wiring.py`
+- [x] A mention-only source yields a history entry with `usable = false` —
+  `tests/unit/stakeholder-model/weak-attribution/test_weak-attribution.py` and
+  `tests/integration/test_stakeholder_wiring.py`
 
 ---
 
