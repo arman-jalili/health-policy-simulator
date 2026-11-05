@@ -64,12 +64,21 @@ class MeasureReference:
     period: str
     geography: str
 
+    def __post_init__(self) -> None:
+        for name in ("measure", "unit", "period", "geography"):
+            if not getattr(self, name).strip():
+                raise ValueError(f"measure reference {name} must not be empty")
+
 
 @dataclass(frozen=True, slots=True)
 class ToleranceBand:
     """Relative admissible deviation below which two figures are equal."""
 
     relative: Decimal = Decimal("0.02")
+
+    def __post_init__(self) -> None:
+        if self.relative < 0 or self.relative > 1:
+            raise ValueError("tolerance band must be between 0 and 1")
 
     def contains(self, asserted: Decimal, reference: Decimal) -> bool:
         """Return whether the asserted value is within the relative band."""
@@ -88,6 +97,12 @@ class ReferenceFigure:
     tier: AuthorityTier
     as_of: date
     source_id: str
+
+    def __post_init__(self) -> None:
+        if self.value < 0:
+            raise ValueError("reference figure value must not be negative")
+        if not self.source_id.strip():
+            raise ValueError("reference figure needs a source id")
 
 
 @dataclass(frozen=True, slots=True)
