@@ -38,7 +38,7 @@ Layers depend inward only. `domain/` imports neither SQLAlchemy nor FastAPI.
 | Indexing | implemented | PostgreSQL `tsvector` (German, GIN) + published index manifest |
 | Snapshots | implemented | document set + index version, hashed manifest |
 | API | implemented | 8 endpoints, uniform envelope, scopes published as `x-required-scope` |
-| Persistence | partially deferred | documents/articles/passages are held in memory (`infrastructure/memory.py`); the SQLAlchemy adapters in `infrastructure/repository/sqlalchemy.py` still raise. The search index **is** persisted (migration `0102`). Re-ingestion is therefore required after a restart — recorded as the next persistence slice. |
+| Persistence | implemented | PostgreSQL by default: documents, publications, articles, passages, snapshots and ingestion runs are owned by migrations `0101`/`0103` and served by `src/evidence_corpus/infrastructure/repository/sqlalchemy.py`; the search index is `0102`. `PERSISTENCE=memory` is explicit, local-only and never the silent default (ADR-002). |
 | Embeddings | deferred | `passage_embedding` (pgvector) lands with EvidenceRetrieval, which owns the model choice |
 
 ### Frozen contract (2026-11-05)
@@ -69,8 +69,8 @@ Frozen behaviour decisions recorded in the contract:
   called with an explicit threshold but the default is contract.
 - `CITABLE_SPEAKER_KINDS == {SpeakerKind.INSTITUTION}`: person- and anonymous-attributed quotations
   are excluded at segmentation, not filtered later.
-- Endpoints answer `501 ENDPOINT_NOT_IMPLEMENTED` (with the standard envelope) until wired, so a
-  client never mistakes a stub for working ingestion.
+- Endpoints are implemented; expected failures use the standard envelope with stable codes
+  (404/409/422/503), and no stub status remains.
 - Required scopes are published as `x-required-scope` per operation; Phase 1 IdentityAccess supplies
   the enforcing dependency.
 
@@ -471,7 +471,7 @@ Baseline for all other contexts (wired in issue #26).
 
 | Wiring point | Requirement | Proof |
 |---|---|---|
-| Router | `app.include_router(evidence_corpus_router)` in `shared/app.py` | boot test asserting every documented path exists in the generated OpenAPI document |
+| Router | `app.include_router(evidence_corpus_router)` in `src/shared/app.py` | boot test asserting every documented path exists in the generated OpenAPI document |
 | Composition | `build_container(settings)` selects adapters by config (`PERSISTENCE=postgres\|memory`); memory is never the silent default outside tests | integration test asserting `SqlAlchemy*Repository` when configured |
 | Persistence | Migrations `0101` (document/publication/article/passage) and `0103` (snapshot/snapshot_document/ingestion_run) own every table the repositories query; `0102` keeps the index tables | `alembic upgrade head` on empty DB then ingest + restart round-trip |
 | Events | `OutboxEventPublisher` writes drained events in the same transaction as the aggregate | row present in `shared_event_outbox` on ingest |

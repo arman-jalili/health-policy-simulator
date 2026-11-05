@@ -10,8 +10,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from shared.errors import EndpointNotImplementedError as EndpointNotImplementedError
-
 
 class ErrorDetailBody(BaseModel):
     """One machine-readable reason attached to an error."""
@@ -47,7 +45,6 @@ def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
         422: "Request validation failed",
         429: "Too many requests",
         500: "Unexpected error",
-        501: "Declared but not implemented yet",
         503: "Dependency unavailable",
     }
     return {

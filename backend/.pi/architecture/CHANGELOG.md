@@ -48,6 +48,44 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - EvidenceCorpus wiring completed (issue #26, 276c4cc)
+
+### Changed
+- Module: evidence-corpus — composition root selects adapters from `PERSISTENCE` (postgres default,
+  memory explicit and local-only); `UnitOfWork` gives each request one ambient transaction;
+  SQLAlchemy adapters cover document, article, passage, ingestion-run and snapshot ports
+- Module: evidence-corpus — migrations `0101` (document/publication/article/passage) and `0103`
+  (snapshot/snapshot_document/ingestion_run); `0102` keeps the index tables
+- Module: evidence-corpus — `OutboxEventPublisher` writes drained events in the aggregate
+  transaction; the lifespan `OutboxRelay` drains `shared_event_outbox` with `FOR UPDATE SKIP
+  LOCKED` and marks rows dispatched (at-least-once)
+- Module: evidence-corpus — `_not_implemented` residue removed; `Document.drain_events()` now drains
+  article-level events; `IngestDocument` re-reads the aggregate so `citable` is current
+- Roadmap: EvidenceCorpus satisfies the W1–W7 wiring definition of done (IdentityAccess remains)
+
+### Impact Analysis
+- Files affected:
+  - `src/shared/{app,config,db,enums,relay}.py`
+  - `src/evidence_corpus/{composition.py,infrastructure/**,interfaces/http/**}`
+  - `migrations/versions/0101_evidence_corpus_documents.py`, `0103_evidence_corpus_snapshots.py`
+  - `tests/unit/evidence_corpus/test_wiring.py`, `tests/integration/test_corpus_persistence.py`
+- Canonical refs to update:
+  - `.pi/architecture/modules/evidence-corpus.md#wiring-contract`
+- Validators required:
+  - ci, tests, architecture, security, operations, integration, canonical
+
+### Migration Steps
+1. Deploy with `PERSISTENCE=postgres` and run `alembic upgrade head` (applies `0101`, `0103`)
+2. Verify the relay drains `shared_event_outbox` and a restart preserves documents and passages
+3. Use `PERSISTENCE=memory` only for tests and a database-less local demo
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated (276c4cc)
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-05] - Wiring Contracts (post-implementation audit)
 
 ### Changed
@@ -74,9 +112,9 @@ Each entry follows this structure:
 ### Status
 - [x] Architecture doc updated
 - [x] CHANGELOG entry added
-- [ ] Implementation updated (issue #26 open)
-- [ ] Canonical refs updated
-- [ ] Validators run
+- [x] Implementation updated (issue #26 wired in 276c4cc)
+- [x] Canonical refs updated
+- [x] Validators run
 
 ## [2026-11-05] - Complete Architecture Package (ADR-001…ADR-008)
 
@@ -147,7 +185,8 @@ Track which changes have been synced to implementation:
 
 | Date | Change | Module | Sync Status | Validator Status |
 |------|--------|--------|-------------|------------------|
-| 2026-11-05 | Complete architecture package | evidence-corpus | pending | not run |
+| 2026-11-05 | EvidenceCorpus wiring completed (276c4cc) | evidence-corpus | complete | pass |
+| 2026-11-05 | Complete architecture package | evidence-corpus | complete | pass |
 | 2026-11-05 | Complete architecture package | evidence-retrieval | pending | not run |
 | 2026-11-05 | Complete architecture package | stakeholder-model | pending | not run |
 | 2026-11-05 | Complete architecture package | negotiation-session | pending | not run |
