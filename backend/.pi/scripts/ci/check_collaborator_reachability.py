@@ -58,6 +58,24 @@ _ALLOWED: dict[str, str] = {
     "src/evidence_corpus/infrastructure/indexing/memory.py:InMemoryIndexWriter.german_stopwords": (
         "#246 (stopwords configured, never applied — adapter parity)"
     ),
+    "src/governance_compliance/application/rules.py:PersonReferenceRule._detector": "#248 contract freeze; call site lands with GC-001",
+    "src/governance_compliance/application/rules.py:InstitutionAliasRule._resolver": "#248 contract freeze; call site lands with GC-003",
+    "src/governance_compliance/application/rules.py:ContradictedFigureRule._verdicts": "#248 contract freeze; call site lands with GC-005",
+    "src/governance_compliance/application/services.py:EnforceInstitutionOnlyOutput._allowlist": "#248 contract freeze; call site lands with GC-001..GC-005",
+    "src/governance_compliance/application/services.py:EnforceInstitutionOnlyOutput._clock": "#248 contract freeze; call site lands with GC-001..GC-005",
+    "src/governance_compliance/application/services.py:EnforceInstitutionOnlyOutput._rules": "#248 contract freeze; call site lands with GC-001..GC-005",
+    "src/governance_compliance/application/services.py:EnforceInstitutionOnlyOutput._uow": "#248 contract freeze; call site lands with GC-001..GC-005",
+    "src/governance_compliance/application/services.py:EnforceInstitutionOnlyOutput._violations": "#248 contract freeze; call site lands with GC-001..GC-005",
+    "src/governance_compliance/application/services.py:DisclosePositionProvenance._clock": "#248 contract freeze; call site lands with provenance issue",
+    "src/governance_compliance/application/services.py:DisclosePositionProvenance._facts": "#248 contract freeze; call site lands with provenance issue",
+    "src/governance_compliance/application/services.py:DisclosePositionProvenance._store": "#248 contract freeze; call site lands with provenance issue",
+    "src/governance_compliance/application/services.py:DisclosePositionProvenance._uow": "#248 contract freeze; call site lands with provenance issue",
+    "src/governance_compliance/application/services.py:RecordGovernanceViolation._clock": "#248 contract freeze; call site lands with violation persistence",
+    "src/governance_compliance/application/services.py:RecordGovernanceViolation._uow": "#248 contract freeze; call site lands with violation persistence",
+    "src/governance_compliance/application/services.py:RecordGovernanceViolation._violations": "#248 contract freeze; call site lands with violation persistence",
+    "src/governance_compliance/application/services.py:ListViolations._violations": "#248 contract freeze; call site lands with read models",
+    "src/governance_compliance/application/services.py:GetPositionProvenance._store": "#248 contract freeze; call site lands with read models",
+    "src/governance_compliance/application/services.py:ListAllowlist._allowlist": "#248 contract freeze; call site lands with read models",
 }
 
 
@@ -145,7 +163,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    ! {key} — {allowed[key]}")
 
     if unexplained:
-        print("\nA collaborator assigned in __init__ and never read is not wired: give it a call site or")
+        print(
+            "\nA collaborator assigned in __init__ and never read is not wired: give it a call site or"
+        )
         print("delete the injection. Tests that assert shapes cannot see this.")
         return 1
     if stale:
