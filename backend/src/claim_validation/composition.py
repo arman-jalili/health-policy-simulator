@@ -82,6 +82,7 @@ def build_container(
         contradictions = InMemoryContradictionRepository()
     parser = GermanNumberParser()
     evidence = EmptyEvidence()
+    record_contradiction = RecordContradiction(contradictions)
     logger.info(
         "claim_validation_wired",
         persistence=settings.persistence.value,
@@ -96,12 +97,13 @@ def build_container(
             references=references,
             parser=parser,
             evidence=evidence,
+            record_contradiction=record_contradiction,
         ),
         flag_unsupported=FlagUnsupportedAssertion(claims),
         get_claim=GetClaim(claims),
         register_reference_figure=RegisterReferenceFigure(references),
         list_reference_figures=ListReferenceFigures(references),
         list_contradictions=ListContradictions(contradictions),
-        record_contradiction=RecordContradiction(contradictions),
+        record_contradiction=record_contradiction,
         resolve_expert_review=ResolveExpertReview(claims),
     )

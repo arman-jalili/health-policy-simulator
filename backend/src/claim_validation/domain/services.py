@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
 
 from claim_validation.domain.entities import ContradictionFinding
@@ -78,7 +79,6 @@ class ContradictionDetector:
     ) -> ContradictionFinding | None:
         """Return a finding when two verified claims disagree for the same measure."""
         from claim_validation.domain.claim import Claim
-        from shared.ids import new_id
 
         if not isinstance(claim_a, Claim) or not isinstance(claim_b, Claim):
             return None
@@ -92,10 +92,23 @@ class ContradictionDetector:
             return None
         if not self.is_contradiction(first.asserted_value, second.asserted_value, band):
             return None
+        first_id = ClaimId(str(claim_a.id))
+        second_id = ClaimId(str(claim_b.id))
+        key = "|".join(
+            (
+                min(str(first_id), str(second_id)),
+                max(str(first_id), str(second_id)),
+                claim_a.measure.measure,
+                claim_a.measure.unit,
+                claim_a.measure.period,
+                claim_a.measure.geography,
+            )
+        )
+        fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()[:26]
         return ContradictionFinding(
-            id=ContradictionId(new_id("con")),
-            claim_id_a=ClaimId(str(claim_a.id)),
-            claim_id_b=ClaimId(str(claim_b.id)),
+            id=ContradictionId(f"con_{fingerprint}"),
+            claim_id_a=first_id,
+            claim_id_b=second_id,
             measure=claim_a.measure,
             delta=abs(first.asserted_value - second.asserted_value),
         )

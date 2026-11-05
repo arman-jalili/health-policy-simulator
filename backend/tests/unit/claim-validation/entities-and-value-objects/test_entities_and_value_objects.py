@@ -47,6 +47,7 @@ def test_value_objects_expose_required_fields() -> None:
         "method",
         "support",
         "study_ids",
+        "escalation_reason",
     ]
 
 

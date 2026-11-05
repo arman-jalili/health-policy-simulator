@@ -155,7 +155,17 @@ async def register_reference_figure(
             source_id=body.source_id,
         )
     )
-    return ReferenceFigureResponse(figure_id=result.figure_id)
+    return ReferenceFigureResponse(
+        figure_id=result.figure_id,
+        measure=result.measure,
+        unit=result.unit,
+        period=result.period,
+        geography=result.geography,
+        value=str(result.value),
+        tier=result.tier,
+        as_of=result.as_of,
+        source_id=result.source_id,
+    )
 
 
 @router.get(

@@ -48,6 +48,14 @@ class ReferenceFigureBody(BaseModel):
 
 class ReferenceFigureResponse(BaseModel):
     figure_id: str
+    measure: str
+    unit: str
+    period: str
+    geography: str
+    value: str
+    tier: str
+    as_of: str
+    source_id: str
 
 
 class ReferenceFigureItem(BaseModel):

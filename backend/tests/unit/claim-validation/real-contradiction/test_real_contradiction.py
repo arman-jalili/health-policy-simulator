@@ -105,3 +105,34 @@ def test_different_measures_never_collapse_into_a_finding() -> None:
     second.measure = MeasureReference("Wartezeit", "days", "2026", "AT")
 
     assert ContradictionDetector().finding_for(first, second, ToleranceBand()) is None
+
+
+# --- fix #201: deterministic id makes repeated recording idempotent --------------------------
+
+from claim_validation.infrastructure.repository.memory import (  # noqa: E402
+    InMemoryContradictionRepository,
+)
+
+
+def test_same_pair_produces_a_stable_finding_id() -> None:
+    first = _verified("clm_a", "4.1")
+    second = _verified("clm_b", "5.0")
+
+    one = ContradictionDetector().finding_for(first, second, ToleranceBand())
+    two = ContradictionDetector().finding_for(first, second, ToleranceBand())
+
+    assert one is not None
+    assert two is not None
+    assert one.id == two.id
+
+
+async def test_recording_the_same_finding_twice_upserts() -> None:
+    first = _verified("clm_a", "4.1")
+    second = _verified("clm_b", "5.0")
+    finding = ContradictionDetector().finding_for(first, second, ToleranceBand())
+    assert finding is not None
+    repository = InMemoryContradictionRepository()
+
+    await repository.save(finding)
+
+    assert len(await repository.list_all()) == 1

@@ -128,6 +128,7 @@ async def test_contradiction_finding_round_trip(
     )
     contradictions = SqlAlchemyContradictionRepository(session_factory)
     await contradictions.save(finding)
+    await contradictions.save(finding)
 
     restarted = SqlAlchemyContradictionRepository(session_factory)
     assert [item.id for item in await restarted.list_all() if item.id == finding.id] == [finding.id]

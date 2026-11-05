@@ -48,6 +48,32 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ClaimValidation runtime defect fixes (#200, #201, #202)
+
+### Changed
+- Measure identity: `ResolveMeasureIdentity` is now called on the verify/register/list paths;
+  register responses expose the normalised dimensions; mismatches escalate with a reason naming the
+  differing period/unit/geography.
+- Contradictions: `VerifyClaim` calls `ContradictionDetector.finding_for` and
+  `RecordContradiction.execute`; findings use a deterministic pair id and upsert.
+- Number parsing: multiple candidate numbers and year-leading text return `None`; scale/unit markers
+  are read from the immediate two-token window.
+
+### Impact Analysis
+- Files affected: `src/claim_validation/{application/services.py,domain/services.py,domain/claim.py,
+  domain/values.py,infrastructure/number_parser.py,interfaces/http/*}`, integration/unit tests,
+  proofing script
+- Canonical refs: module doc runtime fixes, AC 9/10, contradiction invariant
+- Validators: unit, integration, proofing (95 checks)
+
+### Status
+- [x] Public-API normalisation proof
+- [x] Contradiction pipeline and idempotency proof
+- [x] Parser ambiguity refusal proof
+- [x] Proofing checks tightened
+
+---
+
 ## [2026-11-06] - ClaimValidation architecture readiness (issue #181)
 
 ### Changed

@@ -55,17 +55,17 @@ class InMemoryReferenceFigureRepository:
 
 class InMemoryContradictionRepository:
     def __init__(self) -> None:
-        self._findings: list[ContradictionFinding] = []
+        self._findings: dict[str, ContradictionFinding] = {}
 
     async def save(self, finding: ContradictionFinding) -> None:
-        self._findings.append(finding)
+        self._findings[str(finding.id)] = finding
 
     async def list_for_claim(self, claim_id: ClaimId) -> list[ContradictionFinding]:
         return [
             finding
-            for finding in self._findings
+            for finding in self._findings.values()
             if claim_id in (finding.claim_id_a, finding.claim_id_b)
         ]
 
     async def list_all(self) -> list[ContradictionFinding]:
-        return list(self._findings)
+        return list(self._findings.values())
