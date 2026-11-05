@@ -47,3 +47,61 @@ def test_application_never_imports_infrastructure() -> None:
 def test_repository_boundary_reexports_the_ports() -> None:
     modules = imported_modules("infrastructure/repository/ports.py")
     assert "simulation_orchestration.application.repositories" in modules
+
+
+# --- behaviour: swapping adapters is an infrastructure change (issue #215) ------------------
+
+import pytest  # noqa: E402
+
+from simulation_orchestration.application.values import (  # noqa: E402
+    PromptRef,
+)
+from simulation_orchestration.infrastructure.llm import (  # noqa: E402
+    MappedLLMClient,
+    ScriptedLLMClient,
+)
+
+
+def _request() -> LLMRequest:
+    return LLMRequest(
+        model="model-a",
+        prompt="Take the turn",
+        prompt_ref=PromptRef("take-turn", 1),
+        parameters={},
+    )
+
+
+async def test_scripted_adapter_returns_a_complete_response_envelope() -> None:
+    response = await ScriptedLLMClient("model-a").complete(_request())
+
+    assert response.model == "model-a"
+    assert response.text.startswith("[take-turn@1]")
+    assert response.input_tokens >= 1
+    assert response.output_tokens >= 1
+
+
+async def test_two_providers_satisfy_the_same_port_without_application_changes() -> None:
+    scripted = ScriptedLLMClient("model-a")
+    mapped = MappedLLMClient("model-b", {"take-turn@1": "provider b answer"})
+
+    one = await scripted.complete(_request())
+    two = await mapped.complete(_request())
+
+    assert one.model == "model-a"
+    assert two.model == "model-b"
+    assert two.text == "provider b answer"
+
+
+async def test_provider_error_is_propagated_for_retry_policy() -> None:
+    async def explode(request: LLMRequest) -> str:
+        raise RuntimeError(f"provider failed for {request.prompt_ref.identity}")
+
+    with pytest.raises(RuntimeError, match="provider failed"):
+        await ScriptedLLMClient("model-a", completion=explode).complete(_request())
+
+
+def test_provider_sdk_imports_are_absent_from_application() -> None:
+    forbidden = ("openai", "anthropic", "httpx", "boto3")
+    for path in (SRC / "application").glob("*.py"):
+        modules = imported_modules(str(path.relative_to(SRC)))
+        assert not any(module.split(".")[0] in forbidden for module in modules)
