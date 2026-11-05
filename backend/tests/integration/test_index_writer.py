@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from evidence_corpus.domain.published import PassageView, ProvenanceView
 from evidence_corpus.domain.values import Offsets, SpeakerKind
+from evidence_corpus.infrastructure.indexing.memory import InMemoryIndexWriter
 from evidence_corpus.infrastructure.indexing.postgres import PostgresIndexWriter
+from evidence_retrieval.infrastructure.query_rewrite import GermanQueryRewrite
 from shared.config import get_settings
 
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("HPS_TEST_DATABASE_URL")
@@ -136,3 +138,74 @@ async def test_index_rows_carry_provenance_offsets(writer: PostgresIndexWriter) 
         assert row == (3, 0, len("Belegter Absatz."), "institution")
     finally:
         await engine.dispose()
+
+
+# --- issue #140: compound rewrite must work on the real adapter -------------------------------
+
+_COMPOUND_PASSAGES = [
+    _passage("psg_naive_140", "Neue Kassenstellen fuer Dermatologie."),
+    _passage("psg_contract_140", "Die Kassenvertragsstellen wurden aufgestockt."),
+    _passage("psg_kasse_140", "Die Kasse hat keine Stellen mehr."),
+    _passage("psg_unrelated_140", "Die Wartezeit auf Facharzttermine sank."),
+]
+
+_COMPOUND_IDS = {passage.passage_id for passage in _COMPOUND_PASSAGES}
+
+
+async def _seed_compound(writer: PostgresIndexWriter) -> InMemoryIndexWriter:
+    await writer.upsert_passages("doc_compound_140", _COMPOUND_PASSAGES)
+    memory = InMemoryIndexWriter()
+    await memory.upsert_passages("doc_compound_140", _COMPOUND_PASSAGES)
+    return memory
+
+
+async def _postgres_ids(writer: PostgresIndexWriter, query: str) -> set[str]:
+    return set(await writer.search(query, limit=100)) & _COMPOUND_IDS
+
+
+def _memory_ids(memory: InMemoryIndexWriter, query: str) -> set[str]:
+    return {passage.passage_id for passage in memory.search(query)} & _COMPOUND_IDS
+
+
+async def test_facharzttermine_is_found_through_the_rewritten_query(
+    writer: PostgresIndexWriter,
+) -> None:
+    await _seed_compound(writer)
+    query = GermanQueryRewrite().rewrite("Facharzttermine")
+
+    assert "psg_unrelated_140" in await _postgres_ids(writer, query.expanded)
+
+
+async def test_compound_rewrite_finds_hits_a_naive_query_misses(
+    writer: PostgresIndexWriter,
+) -> None:
+    await _seed_compound(writer)
+    rewrite = GermanQueryRewrite().rewrite("Kassenstellen")
+
+    naive = await _postgres_ids(writer, "Kassenstellen")
+    expanded = await _postgres_ids(writer, rewrite.expanded)
+
+    assert naive == {"psg_naive_140"}
+    assert {"psg_contract_140", "psg_kasse_140"} <= expanded
+    assert expanded - naive
+
+
+async def test_memory_and_postgres_adapters_agree_on_every_query_shape(
+    writer: PostgresIndexWriter,
+) -> None:
+    memory = await _seed_compound(writer)
+    rewrite = GermanQueryRewrite().rewrite("Kassenstellen")
+
+    for query in ("Kassenstellen", rewrite.expanded, "Spitalsreform", "Weltraumtourismus"):
+        assert _memory_ids(memory, query) == await _postgres_ids(writer, query), query
+
+
+async def test_rewrite_never_loses_recall_on_the_postgres_adapter(
+    writer: PostgresIndexWriter,
+) -> None:
+    await _seed_compound(writer)
+
+    for claim in ("Kassenstellen", "Facharzttermine", "Kasse"):
+        naive = await _postgres_ids(writer, claim)
+        expanded = await _postgres_ids(writer, GermanQueryRewrite().rewrite(claim).expanded)
+        assert naive <= expanded, claim

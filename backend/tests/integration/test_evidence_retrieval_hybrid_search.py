@@ -150,6 +150,7 @@ async def test_compound_query_returns_hits_that_a_naive_term_query_misses() -> N
         "psg_compound",
         "psg_parts",
     }
+    assert result.query_rewrite.startswith("Kassenstellen OR ")
 
 
 async def test_hybrid_path_calls_fusion_and_records_the_mode() -> None:

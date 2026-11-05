@@ -48,6 +48,31 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Postgres compound lexical search (issue #140)
+
+### Changed
+- Module: evidence-retrieval
+  - Lexical adapter: replaced `plainto_tsquery` with an explicit prefix `to_tsquery` built from the
+    rewritten `OR` terms; filter and `ts_rank` now share one expression.
+  - Memory adapter: prefix-token matching aligned with Postgres, replacing substring matching.
+  - New shared parser `evidence_corpus/infrastructure/indexing/lexical.py` so adapters cannot drift.
+
+### Impact Analysis
+- Files affected:
+  - `src/evidence_corpus/infrastructure/indexing/{postgres,memory,lexical}.py`
+  - `tests/integration/test_index_writer.py`
+  - `tests/integration/test_evidence_retrieval_hybrid_search.py`
+- Canonical refs: module doc Invariant 9; Phase 2 AC 1
+- Validators: integration (real PostgreSQL), ci, tests, architecture
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Real-Postgres regression tests added
+- [x] Adapter parity and monotone-recall tests added
+
+---
+
 ## [2026-11-06] - StakeholderModel architecture readiness (issue #120)
 
 ### Changed

@@ -8,6 +8,12 @@ from datetime import UTC, datetime
 
 from evidence_corpus.application.dto import IndexManifestView
 from evidence_corpus.domain.published import PassageView
+from evidence_corpus.infrastructure.indexing.lexical import (
+    is_disjunctive,
+    query_terms,
+    term_prefix_matches,
+    text_tokens,
+)
 from shared.text_embedding import MODEL_ID
 
 
@@ -50,16 +56,14 @@ class InMemoryIndexWriter:
         ]
 
     def search(self, query: str) -> list[PassageView]:
-        if " OR " in query:
-            terms = [term.strip().lower() for term in query.split(" OR ") if term.strip()]
-            return [
-                passage
-                for passage in self._rows.values()
-                if any(term in passage.text.lower() for term in terms)
-            ]
-        terms = [term for term in query.lower().split() if term]
-        return [
-            passage
-            for passage in self._rows.values()
-            if all(term in passage.text.lower() for term in terms)
-        ]
+        terms = query_terms(query)
+        if not terms:
+            return []
+        require_all = not is_disjunctive(query)
+        matches: list[PassageView] = []
+        for passage in self._rows.values():
+            tokens = text_tokens(passage.text)
+            results = [term_prefix_matches(term, tokens) for term in terms]
+            if all(results) if require_all else any(results):
+                matches.append(passage)
+        return matches
