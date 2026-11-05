@@ -34,6 +34,10 @@ from shared.http.middleware import RequestContextMiddleware
 from shared.log_setup import configure_logging, get_logger
 from shared.outbox import OutboxEvent
 from shared.relay import WILDCARD, OutboxRelay
+from simulation_orchestration.composition import build_container as build_simulation_container
+from simulation_orchestration.interfaces.http.router import (
+    router as simulation_orchestration_router,
+)
 from stakeholder_model.composition import build_container as build_stakeholder_container
 from stakeholder_model.interfaces.http.router import router as stakeholder_model_router
 
@@ -49,6 +53,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         relay_task: asyncio.Task[None] | None = None
+        worker_task: asyncio.Task[None] | None = None
+        worker_stop = asyncio.Event()
         logger.info(
             "service_starting",
             env=str(app_settings.env),
@@ -68,9 +74,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             relay = OutboxRelay(database.session_factory, poll_interval_s=5.0)
             relay.subscribe(WILDCARD, _log_dispatched_event)
             relay_task = asyncio.create_task(relay.run(), name="outbox-relay")
+        worker_task = asyncio.create_task(
+            app.state.simulation_orchestration.worker.run_forever(worker_stop),
+            name="simulation-worker",
+        )
         try:
             yield
         finally:
+            worker_stop.set()
+            if worker_task is not None:
+                with suppress(asyncio.CancelledError, TimeoutError):
+                    await asyncio.wait_for(worker_task, timeout=2.0)
             if relay_task is not None:
                 relay_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -93,6 +107,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.identity_access = build_identity_access_container(app_settings, database)
     app.state.stakeholder_model = build_stakeholder_container(app_settings, database)
     app.state.claim_validation = build_claim_validation_container(app_settings, database)
+    app.state.simulation_orchestration = build_simulation_container(app_settings, database)
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -113,6 +128,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(identity_access_router)
     app.include_router(stakeholder_model_router)
     app.include_router(claim_validation_router)
+    app.include_router(simulation_orchestration_router)
     return app
 
 
