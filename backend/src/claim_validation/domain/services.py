@@ -15,12 +15,40 @@ from claim_validation.domain.values import (
     VerificationPath,
 )
 
+_UNITS = {
+    "€": "EUR",
+    "eur": "EUR",
+    "euro": "EUR",
+    "%": "percent",
+    "prozent": "percent",
+    "percent": "percent",
+    "personen": "count",
+    "kassenstellen": "count",
+    "stellen": "count",
+    "tage": "days",
+    "tag": "days",
+    "days": "days",
+}
+_GEOGRAPHIES = {
+    "at": "AT",
+    "aut": "AT",
+    "österreich": "AT",
+    "oesterreich": "AT",
+    "austria": "AT",
+}
+
 
 class ResolveMeasureIdentity:
     """Normalise measure, unit, period and geography into one identity."""
 
     def resolve(self, measure: str, unit: str, period: str, geography: str) -> MeasureReference:
-        raise NotImplementedError("implemented by issue #177")
+        normal_measure = " ".join(measure.split()).casefold()
+        normal_unit = _UNITS.get(" ".join(unit.split()).casefold(), unit.strip())
+        normal_period = " ".join(period.split()).casefold()
+        normal_geo = _GEOGRAPHIES.get(
+            " ".join(geography.split()).casefold(), geography.strip().upper()
+        )
+        return MeasureReference(normal_measure, normal_unit, normal_period, normal_geo)
 
 
 class FigureComparison:
