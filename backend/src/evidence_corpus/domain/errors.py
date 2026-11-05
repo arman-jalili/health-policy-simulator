@@ -85,6 +85,13 @@ class RunAlreadyClosed(ConflictError):
         super().__init__(f"ingestion run {run_id} is already closed")
 
 
+class RunNotFound(NotFoundError):
+    code = "RUN_NOT_FOUND"
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(f"ingestion run {run_id} not found")
+
+
 class DocumentNotFound(NotFoundError):
     code = "DOCUMENT_NOT_FOUND"
 

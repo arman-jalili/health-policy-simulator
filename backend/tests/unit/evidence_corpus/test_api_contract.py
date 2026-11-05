@@ -8,6 +8,7 @@ of the contract (a freeze must not pretend to work).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -122,15 +123,30 @@ class TestPayloadContracts:
 
 
 class TestErrorEnvelope:
-    async def test_unwired_endpoint_answers_501_with_the_envelope(
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/api/v1/corpus/ingestion-runs/run_missing",
+            "/api/v1/documents/doc_missing",
+            "/api/v1/passages/psg_missing",
+            "/api/v1/corpus/snapshots/snp_missing",
+        ],
+    )
+    async def test_read_endpoints_are_wired(self, client: httpx.AsyncClient, path: str) -> None:
+        """No documented read route may still answer 501 after the API contract issue."""
+        response = await client.get(path)
+
+        assert response.status_code != 501
+        assert "code" in response.json()
+
+    async def test_error_envelope_carries_the_request_trace_id(
         self, client: httpx.AsyncClient
     ) -> None:
-        response = await client.get("/api/v1/corpus/authority-rules")
+        response = await client.get("/api/v1/passages/psg_missing")
 
-        assert response.status_code == 501
+        assert response.status_code == 404
         body = response.json()
         assert set(body) == {"code", "message", "details", "trace_id"}
-        assert body["code"] == "ENDPOINT_NOT_IMPLEMENTED"
         assert body["trace_id"] == response.headers[REQUEST_ID_HEADER]
 
     async def test_unknown_document_returns_the_same_envelope_shape(
@@ -182,3 +198,127 @@ def _response_schema(
 def _request_schema(openapi: dict[str, Any], path: str, method: str) -> dict[str, Any]:
     operation = _operation(openapi, path, method)
     return _resolve(openapi, operation["requestBody"]["content"]["application/json"]["schema"])
+
+
+class TestWiredEndpoints:
+    """End-to-end behaviour of the corpus API after wiring (AC 12)."""
+
+    async def test_ingest_reports_quality_and_citability(
+        self, client: httpx.AsyncClient, tmp_path: Path
+    ) -> None:
+        import pymupdf
+
+        path = tmp_path / "press.pdf"
+        document = pymupdf.open()  # type: ignore[no-untyped-call]
+        page = document.new_page()
+        page.insert_textbox(
+            pymupdf.Rect(72, 72, 540, 760),  # type: ignore[no-untyped-call]
+            "Die Kassenstellen werden aufgestockt. " * 40,
+            fontsize=9,
+        )
+        document.save(path)  # type: ignore[no-untyped-call]
+        document.close()  # type: ignore[no-untyped-call]
+
+        response = await client.post(
+            "/api/v1/corpus/documents",
+            json={
+                "source_uri": str(path),
+                "publication": {
+                    "outlet": "Der Standard",
+                    "published_on": "2026-10-01",
+                    "medium": "print",
+                },
+                "source_type": "press_report",
+            },
+        )
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["document_id"].startswith("doc_")
+        assert body["quality"]["method"] == "native"
+        assert body["citable"] is True
+
+    async def test_ingestion_run_round_trip(self, client: httpx.AsyncClient) -> None:
+        created = await client.post(
+            "/api/v1/corpus/ingestion-runs",
+            json={"shard_label": "shard-1", "paths": ["/corpus/a.pdf"]},
+        )
+
+        assert created.status_code == 202
+        run_id = created.json()["run_id"]
+
+        read = await client.get(f"/api/v1/corpus/ingestion-runs/{run_id}")
+
+        assert read.status_code == 200
+        assert read.json()["status"] == "running"
+        assert read.json()["attempted"] == 0
+
+    async def test_unknown_ingestion_run_uses_the_error_envelope(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        response = await client.get("/api/v1/corpus/ingestion-runs/run_missing")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "RUN_NOT_FOUND"
+
+    async def test_authority_rules_are_claim_type_relative(self, client: httpx.AsyncClient) -> None:
+        response = await client.get("/api/v1/corpus/authority-rules")
+
+        assert response.status_code == 200
+        rules = response.json()
+        assert {rule["claim_type"] for rule in rules} == {
+            "quantitative",
+            "legal",
+            "causal",
+            "qualitative",
+        }
+        legal = next(rule for rule in rules if rule["claim_type"] == "legal")
+        assert legal["ordered_tiers"].index("legislation") < legal["ordered_tiers"].index(
+            "press_report"
+        )
+
+    async def test_single_claim_type_filter(self, client: httpx.AsyncClient) -> None:
+        response = await client.get(
+            "/api/v1/corpus/authority-rules", params={"claim_type": "quantitative"}
+        )
+
+        assert response.status_code == 200
+        assert [rule["claim_type"] for rule in response.json()] == ["quantitative"]
+
+    async def test_document_endpoint_returns_the_ingested_document(
+        self, client: httpx.AsyncClient, tmp_path: Path
+    ) -> None:
+        import pymupdf
+
+        path = tmp_path / "legal.pdf"
+        document = pymupdf.open()  # type: ignore[no-untyped-call]
+        page = document.new_page()
+        page.insert_textbox(
+            pymupdf.Rect(72, 72, 540, 760),  # type: ignore[no-untyped-call]
+            "§ 1 Kassenstellen werden aufgestockt. " * 40,
+            fontsize=9,
+        )
+        document.save(path)  # type: ignore[no-untyped-call]
+        document.close()  # type: ignore[no-untyped-call]
+
+        ingested = await client.post(
+            "/api/v1/corpus/documents",
+            json={
+                "source_uri": str(path),
+                "publication": {
+                    "outlet": "BGBl",
+                    "published_on": "2026-10-01",
+                    "medium": "print",
+                },
+                "source_type": "legislation",
+            },
+        )
+        document_id = ingested.json()["document_id"]
+
+        read = await client.get(f"/api/v1/documents/{document_id}")
+
+        assert read.status_code == 200
+        body = read.json()
+        assert body["document_id"] == document_id
+        assert body["source_type"] == "legislation"
+        assert body["citable"] is True

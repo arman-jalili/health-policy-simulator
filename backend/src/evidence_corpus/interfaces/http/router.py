@@ -19,8 +19,13 @@ from fastapi import APIRouter, Depends, Path, Query, status
 from evidence_corpus.application.commands import (
     GetCorpusSnapshotRequest,
     GetDocumentRequest,
+    GetIngestionRunRequest,
+    IngestDocumentRequest,
+    ListAuthorityRulesRequest,
     PinCorpusSnapshotRequest,
+    PublicationInput,
     ResolvePassageRequest,
+    StartIngestionRunRequest,
 )
 from evidence_corpus.composition import CorpusContainer
 from evidence_corpus.domain.values import ClaimType
@@ -61,9 +66,23 @@ def _not_implemented(operation: str) -> EndpointNotImplementedError:
     openapi_extra={"x-required-scope": "corpus:write"},
     responses=WRITE_ERRORS,
 )
-async def ingest_document(body: IngestDocumentBody) -> DocumentIngestionBody:
+async def ingest_document(
+    body: IngestDocumentBody,
+    container: Annotated[CorpusContainer, Depends(get_container)],
+) -> DocumentIngestionBody:
     """Ingest a source file; the response reports measured quality and citability."""
-    raise _not_implemented("POST /api/v1/corpus/documents")
+    result = await container.ingest_document.execute(
+        IngestDocumentRequest(
+            source_uri=body.source_uri,
+            publication=PublicationInput(
+                outlet=body.publication.outlet,
+                published_on=body.publication.published_on,
+                medium=body.publication.medium,
+            ),
+            source_type=body.source_type,
+        )
+    )
+    return DocumentIngestionBody.model_validate(result, from_attributes=True)
 
 
 @router.post(
@@ -74,9 +93,15 @@ async def ingest_document(body: IngestDocumentBody) -> DocumentIngestionBody:
     openapi_extra={"x-required-scope": "corpus:write"},
     responses=WRITE_ERRORS,
 )
-async def start_ingestion_run(body: StartIngestionRunBody) -> StartIngestionRunResponse:
+async def start_ingestion_run(
+    body: StartIngestionRunBody,
+    container: Annotated[CorpusContainer, Depends(get_container)],
+) -> StartIngestionRunResponse:
     """Open a batch run over a shard of source paths; work proceeds on a worker."""
-    raise _not_implemented("POST /api/v1/corpus/ingestion-runs")
+    view = await container.start_ingestion_run.execute(
+        StartIngestionRunRequest(shard_label=body.shard_label, paths=body.paths)
+    )
+    return StartIngestionRunResponse(run_id=view.run_id, status=view.status)
 
 
 @router.get(
@@ -88,9 +113,11 @@ async def start_ingestion_run(body: StartIngestionRunBody) -> StartIngestionRunR
 )
 async def get_ingestion_run(
     run_id: Annotated[str, Path(description="Prefixed ULID of the ingestion run")],
+    container: Annotated[CorpusContainer, Depends(get_container)],
 ) -> IngestionRunResponse:
     """Return attempted/accepted/quarantined/failed counts and the run status."""
-    raise _not_implemented("GET /api/v1/corpus/ingestion-runs/{run_id}")
+    view = await container.get_ingestion_run.execute(GetIngestionRunRequest(run_id=run_id))
+    return IngestionRunResponse.model_validate(view, from_attributes=True)
 
 
 @router.get(
@@ -170,10 +197,14 @@ async def get_snapshot(
     responses=READ_ERRORS,
 )
 async def list_authority_rules(
+    container: Annotated[CorpusContainer, Depends(get_container)],
     claim_type: Annotated[
         ClaimType | None,
         Query(description="Restrict to one claim type; omitted returns every rule"),
     ] = None,
 ) -> list[AuthorityRuleResponse]:
     """Return the frozen tier ordering; authority is claim-type relative, never global."""
-    raise _not_implemented("GET /api/v1/corpus/authority-rules")
+    views = await container.list_authority_rules.execute(
+        ListAuthorityRulesRequest(claim_type=claim_type)
+    )
+    return [AuthorityRuleResponse.model_validate(view, from_attributes=True) for view in views]
