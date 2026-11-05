@@ -246,6 +246,10 @@ run_stage "14" "claim_validation_proofing" \
     "${SCRIPTS_DIR}/stage_claim-validation_proofing.sh" \
     "always"
 
+run_stage "15" "simulation_orchestration_proofing" \
+    "${SCRIPTS_DIR}/stage_simulation-orchestration_proofing.sh" \
+    "always"
+
 # ── Summary ──
 
 echo ""
