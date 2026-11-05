@@ -9,12 +9,16 @@ from __future__ import annotations
 import inspect
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 
-from evidence_corpus.application.commands import PinCorpusSnapshotRequest
+from evidence_corpus.application.commands import (
+    GetCorpusSnapshotRequest,
+    PinCorpusSnapshotRequest,
+)
 from evidence_corpus.application.dto import IndexManifestView, SnapshotView
 from evidence_corpus.application.services import PinCorpusSnapshot
-from evidence_corpus.domain.entities import CorpusSnapshot, IndexManifest
+from evidence_corpus.domain.entities import CorpusSnapshot, Document, IndexManifest
 from evidence_corpus.domain.events import IndexManifestPublished
 from evidence_corpus.domain.repositories import CorpusSnapshotRepository
 
@@ -97,3 +101,148 @@ class TestSnapshotRepository:
 @pytest.mark.parametrize("field", ["snapshot_id", "manifest_hash", "index"])
 def test_snapshot_contract_fields_are_present(field: str) -> None:
     assert field in field_names(SnapshotView)
+
+
+class TestPinCorpusSnapshotHandler:
+    def _document(self, suffix: str) -> Document:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+            SourceType,
+        )
+
+        document = Document.register(
+            source_uri=f"s3://corpus/{suffix}.pdf",
+            content_hash=f"sha256:{suffix}",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction(
+            "Die Kassenstellen werden aufgestockt.",
+            ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0),
+        )
+        document.drain_events()
+        return document
+
+    async def test_reingestion_does_not_change_the_pinned_snapshot(self) -> None:
+        from evidence_corpus.application.snapshot_handlers import PinCorpusSnapshotHandler
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryCorpusSnapshotRepository,
+            InMemoryDocumentRepository,
+        )
+        from shared.clock import FixedClock
+
+        documents = InMemoryDocumentRepository()
+        first = self._document("a")
+        await documents.save(first)
+        snapshots = InMemoryCorpusSnapshotRepository()
+        clock = FixedClock(datetime(2026, 11, 5, 9, 0, tzinfo=UTC))
+        publisher = RecordingEventPublisher()
+        handler = PinCorpusSnapshotHandler(documents, snapshots, publisher, clock=clock)
+
+        pinned = await handler.execute(PinCorpusSnapshotRequest(label="baseline"))
+
+        second = self._document("b")
+        await documents.save(second)
+        reread = await snapshots.get(pinned.snapshot_id)
+
+        assert reread is not None
+        assert reread.document_ids == [first.id]
+        assert pinned.manifest_hash == reread.manifest_hash
+
+    async def test_explicit_document_set_must_exist(self) -> None:
+        from evidence_corpus.application.snapshot_handlers import PinCorpusSnapshotHandler
+        from evidence_corpus.domain.errors import DocumentNotFound
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryCorpusSnapshotRepository,
+            InMemoryDocumentRepository,
+        )
+
+        handler = PinCorpusSnapshotHandler(
+            InMemoryDocumentRepository(),
+            InMemoryCorpusSnapshotRepository(),
+            RecordingEventPublisher(),
+        )
+
+        with pytest.raises(DocumentNotFound):
+            await handler.execute(
+                PinCorpusSnapshotRequest(label="broken", document_ids=["doc_missing"])
+            )
+
+    async def test_manifest_hash_covers_documents_and_index_version(self) -> None:
+        from evidence_corpus.application.snapshot_handlers import PinCorpusSnapshotHandler
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryCorpusSnapshotRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        await documents.save(self._document("a"))
+        handler = PinCorpusSnapshotHandler(
+            documents, InMemoryCorpusSnapshotRepository(), RecordingEventPublisher()
+        )
+
+        first = await handler.execute(PinCorpusSnapshotRequest(label="one"))
+
+        assert len(first.manifest_hash) == 64
+        assert first.index.index_version == "idx-0"
+
+    async def test_index_manifest_publication_is_emitted(self) -> None:
+        from evidence_corpus.application.snapshot_handlers import PinCorpusSnapshotHandler
+        from evidence_corpus.domain.events import IndexManifestPublished
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryCorpusSnapshotRepository,
+            InMemoryDocumentRepository,
+        )
+
+        publisher = RecordingEventPublisher()
+        handler = PinCorpusSnapshotHandler(
+            InMemoryDocumentRepository(), InMemoryCorpusSnapshotRepository(), publisher
+        )
+
+        await handler.execute(PinCorpusSnapshotRequest(label="empty"))
+
+        assert isinstance(publisher.events[0], IndexManifestPublished)
+
+    async def test_unknown_snapshot_is_not_found(self) -> None:
+        from evidence_corpus.application.snapshot_handlers import GetCorpusSnapshotHandler
+        from evidence_corpus.domain.errors import SnapshotNotFound
+        from evidence_corpus.infrastructure.memory import InMemoryCorpusSnapshotRepository
+
+        handler = GetCorpusSnapshotHandler(InMemoryCorpusSnapshotRepository())
+
+        with pytest.raises(SnapshotNotFound):
+            await handler.execute(GetCorpusSnapshotRequest(snapshot_id="snp_missing"))
+
+
+class TestSnapshotEndpoints:
+    async def test_pin_then_read_snapshot(self, client: httpx.AsyncClient) -> None:
+        response = await client.post("/api/v1/corpus/snapshots", json={"label": "baseline"})
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["snapshot_id"].startswith("snp_")
+        assert len(body["manifest_hash"]) == 64
+
+        read = await client.get(f"/api/v1/corpus/snapshots/{body['snapshot_id']}")
+
+        assert read.status_code == 200
+        assert read.json()["label"] == "baseline"
+        assert read.json()["index"]["index_version"] == "idx-0"
+
+    async def test_unknown_snapshot_uses_the_error_envelope(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        response = await client.get("/api/v1/corpus/snapshots/snp_missing")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "SNAPSHOT_NOT_FOUND"

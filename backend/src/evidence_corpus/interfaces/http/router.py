@@ -16,7 +16,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, status
 
-from evidence_corpus.application.commands import GetDocumentRequest, ResolvePassageRequest
+from evidence_corpus.application.commands import (
+    GetCorpusSnapshotRequest,
+    GetDocumentRequest,
+    PinCorpusSnapshotRequest,
+    ResolvePassageRequest,
+)
 from evidence_corpus.composition import CorpusContainer
 from evidence_corpus.domain.values import ClaimType
 from evidence_corpus.interfaces.http.deps import get_container
@@ -128,9 +133,15 @@ async def get_passage(
     openapi_extra={"x-required-scope": "corpus:write"},
     responses=WRITE_ERRORS,
 )
-async def pin_corpus_snapshot(body: PinSnapshotBody) -> PinSnapshotResponse:
+async def pin_corpus_snapshot(
+    body: PinSnapshotBody,
+    container: Annotated[CorpusContainer, Depends(get_container)],
+) -> PinSnapshotResponse:
     """Freeze the document set and index version a later run may search."""
-    raise _not_implemented("POST /api/v1/corpus/snapshots")
+    view = await container.pin_corpus_snapshot.execute(
+        PinCorpusSnapshotRequest(label=body.label, document_ids=body.document_ids)
+    )
+    return PinSnapshotResponse(snapshot_id=view.snapshot_id, manifest_hash=view.manifest_hash)
 
 
 @router.get(
@@ -142,9 +153,13 @@ async def pin_corpus_snapshot(body: PinSnapshotBody) -> PinSnapshotResponse:
 )
 async def get_snapshot(
     snapshot_id: Annotated[str, Path(description="Prefixed ULID of the snapshot")],
+    container: Annotated[CorpusContainer, Depends(get_container)],
 ) -> SnapshotResponse:
     """Return the pinned document set plus the index manifest consumers must quote."""
-    raise _not_implemented("GET /api/v1/corpus/snapshots/{snapshot_id}")
+    view = await container.get_corpus_snapshot.execute(
+        GetCorpusSnapshotRequest(snapshot_id=snapshot_id)
+    )
+    return SnapshotResponse.model_validate(view, from_attributes=True)
 
 
 @router.get(

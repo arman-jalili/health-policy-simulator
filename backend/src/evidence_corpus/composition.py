@@ -15,6 +15,10 @@ from evidence_corpus.application.canonical_handler import LinkCanonicalArticleHa
 from evidence_corpus.application.extraction_handler import ExtractDocumentTextHandler
 from evidence_corpus.application.read_handlers import GetDocumentHandler, ResolvePassageHandler
 from evidence_corpus.application.segmentation_handler import SegmentArticleHandler
+from evidence_corpus.application.snapshot_handlers import (
+    GetCorpusSnapshotHandler,
+    PinCorpusSnapshotHandler,
+)
 from evidence_corpus.infrastructure.extraction.ocr import TesseractOcrExtractor
 from evidence_corpus.infrastructure.extraction.pymupdf import PyMuPdfExtractor
 from evidence_corpus.infrastructure.logging_events import LoggingEventPublisher
@@ -43,6 +47,8 @@ class CorpusContainer:
     extract_document_text: ExtractDocumentTextHandler
     classify_source_authority: ClassifySourceAuthorityHandler
     link_canonical_article: LinkCanonicalArticleHandler
+    pin_corpus_snapshot: PinCorpusSnapshotHandler
+    get_corpus_snapshot: GetCorpusSnapshotHandler
     segment_article: SegmentArticleHandler
     resolve_passage: ResolvePassageHandler
     get_document: GetDocumentHandler
@@ -72,6 +78,8 @@ def build_container(actor: str = "system") -> CorpusContainer:
             documents, articles, events, actor=actor
         ),
         link_canonical_article=LinkCanonicalArticleHandler(articles, events, actor=actor),
+        pin_corpus_snapshot=PinCorpusSnapshotHandler(documents, snapshots, events),
+        get_corpus_snapshot=GetCorpusSnapshotHandler(snapshots),
         segment_article=SegmentArticleHandler(documents, events, actor=actor),
         resolve_passage=ResolvePassageHandler(passages),
         get_document=GetDocumentHandler(documents),
