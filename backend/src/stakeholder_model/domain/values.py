@@ -169,6 +169,11 @@ class MandateScope:
             raise ValueError("MandateScope.topics must contain at least one topic")
         _require_text(self.description, "MandateScope.description")
 
+    def covers(self, topic: str) -> bool:
+        """Return whether ``topic`` lies inside the declared mandate scope."""
+        normalised = topic.strip().casefold()
+        return normalised in {declared.strip().casefold() for declared in self.topics}
+
 
 @dataclass(frozen=True, slots=True)
 class Interest:
@@ -209,6 +214,12 @@ class BudgetLimit:
         if self.amount_eur < 0:
             raise ValueError("BudgetLimit.amount_eur must be non-negative")
         _require_unit_interval(self.tolerance, "BudgetLimit.tolerance")
+
+    def allows(self, amount_eur: Decimal) -> bool:
+        """Return whether an amount fits the envelope including its declared tolerance."""
+        if amount_eur < 0:
+            raise ValueError("amount_eur must be non-negative")
+        return amount_eur <= self.amount_eur * (Decimal("1") + Decimal(str(self.tolerance)))
 
 
 @dataclass(frozen=True, slots=True)
