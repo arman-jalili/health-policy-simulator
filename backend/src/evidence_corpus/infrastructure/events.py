@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import asdict
 
 from evidence_corpus.domain.events import DomainEvent
+from shared.attribution import current_actor
 from shared.db import UnitOfWork
 from shared.outbox import OutboxWriter
 
@@ -33,6 +34,9 @@ class OutboxEventPublisher:
     ) -> None:
         if not events:
             return
+        effective_actor = current_actor() or actor
+        if not effective_actor.strip():
+            raise ValueError("actor must not be empty")
         async with self._uow.session() as session:
             for event in events:
                 await self._writer.write(
@@ -41,7 +45,7 @@ class OutboxEventPublisher:
                     aggregate_type="EvidenceCorpus",
                     aggregate_id=self._aggregate_id(event),
                     payload=asdict(event),
-                    actor=actor,
+                    actor=effective_actor,
                     trace_id=trace_id,
                 )
 
@@ -68,5 +72,6 @@ class RecordingEventPublisher:
         actor: str,
         trace_id: str | None = None,
     ) -> None:
+        effective_actor = current_actor() or actor
         self.events.extend(events)
-        self.actors.extend([actor] * len(events))
+        self.actors.extend([effective_actor] * len(events))

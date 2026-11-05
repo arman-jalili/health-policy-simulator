@@ -45,6 +45,8 @@ class OutboxEvent:
     def __post_init__(self) -> None:
         if not self.event_name:
             raise ValueError("event_name must not be empty")
+        if not self.actor.strip():
+            raise ValueError("actor must not be empty")
         if self.occurred_at.tzinfo is None:
             raise ValueError("occurred_at must be timezone-aware")
         try:
