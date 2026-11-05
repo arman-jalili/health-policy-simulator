@@ -51,6 +51,38 @@ async def test_registry_selection_and_binding_run_through_the_public_api() -> No
         assert history.status_code == 200, history.text
         assert history.json()["positions"] == []
 
+        recorded = await client.post(
+            f"/api/v1/stakeholders/{stakeholder_ids[0]}/history",
+            json={
+                "stance": "mentions a waiting-time target",
+                "attribution": "mention",
+                "stated_on": "2026-01-01",
+                "passage_id": "psg_1",
+            },
+        )
+        assert recorded.status_code == 201, recorded.text
+        assert recorded.json()["positions"][0]["usable"] is False
+
+        history = await client.get(
+            f"/api/v1/stakeholders/{stakeholder_ids[0]}/history",
+            params={"usable_only": "true"},
+        )
+        assert history.status_code == 200, history.text
+        assert history.json()["positions"] == []
+
+        refused = await client.post(
+            f"/api/v1/stakeholders/{stakeholder_ids[0]}/powers",
+            json={
+                "power_type": "veto",
+                "citation": "unstated",
+                "kind": "unspecified",
+                "as_of": "2026-01-01",
+            },
+        )
+        assert refused.status_code == 200, refused.text
+        assert refused.json()["accepted"] is False
+        assert refused.json()["reason"]
+
 
 async def test_container_publishes_the_allowlist_to_the_guard() -> None:
     app = create_app(_settings())

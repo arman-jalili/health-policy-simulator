@@ -56,6 +56,7 @@ Routers are concrete (no separate handler interface); the container shape is `in
 | ADR-003 Cross-Context Communication | Publishes `StakeholderProfileView`; no events consumed from negotiation |
 | ADR-007 Compliance Engine | Institutional allowlist originates here — the guard's source of truth |
 | ADR-008 Proportional Modeling Depth | Tactical: powers and attribution are invariants, not fields |
+| ADR-011 StakeholderModel Runtime Integration | Boot-time persona validation, mounted router, published allowlist |
 
 ## Diagrams
 

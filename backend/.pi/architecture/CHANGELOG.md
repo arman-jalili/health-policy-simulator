@@ -48,6 +48,34 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - StakeholderModel runtime integration (issue #118)
+
+### Changed
+- Module: stakeholder-model
+  - `shared.app` builds the stakeholder container and mounts the eight-route router.
+  - Boot loads and validates all nine persona cards; invalid configuration aborts construction.
+  - The institutional allowlist is published to the GovernanceCompliance guard adapter.
+  - The HTTP path now exercises selection, binding, history recording and authority refusal.
+  - ADR-011 records the runtime integration decision.
+
+### Impact Analysis
+- Files affected:
+  - `src/shared/app.py`
+  - `src/stakeholder_model/composition.py`
+  - `src/stakeholder_model/interfaces/http/**`
+  - `tests/integration/test_stakeholder_wiring.py`
+- Canonical refs: `.pi/architecture/modules/stakeholder-model.md`, ADR-011
+- Validators: architecture, canonical, ci, tests, runtime-wiring
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+- [x] Canonical refs updated
+- [x] Validators run
+
+---
+
 ## [2026-11-06] - StakeholderModel contract freeze (issue #102)
 
 ### Changed

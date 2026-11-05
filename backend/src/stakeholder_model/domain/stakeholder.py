@@ -76,9 +76,10 @@ class StakeholderProfile:
         """Declare a hard constraint on the profile."""
         self.constraints.append(constraint)
 
-    def assert_within_mandate(self, proposed_value: str) -> None:
+    def assert_within_mandate(self, topic: str) -> None:
         """Refuse a concession outside the declared mandate scope (invariant 3)."""
-        raise NotImplementedError("assert_within_mandate is implemented by issue #103")
+        if not self.mandate_scope.covers(topic):
+            raise ValueError(f"topic {topic!r} lies outside the declared mandate scope")
 
 
 @dataclass(slots=True)
