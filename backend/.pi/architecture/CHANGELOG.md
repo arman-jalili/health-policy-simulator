@@ -48,6 +48,54 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Phase 2 acceptance recorded (issue #141)
+
+### Changed
+- Roadmap: Phase 2 ACs 1–7 now checked with executable test references.
+- Roadmap: EvidenceRetrieval deliverables corrected to prefix-aware `tsvector`/`ts_rank` lexical +
+  feature-hashing dense; no BM25 or pgvector claim.
+- Roadmap/module docs: `0201` recorded as the single `evidence_retrieval_pack` JSONB table;
+  `0202_stakeholder_model` recorded as deferred D-001 rather than delivered.
+
+### Impact Analysis
+- Files affected: `.pi/architecture/implementation-roadmap.md`,
+  `.pi/architecture/modules/{evidence-retrieval,stakeholder-model}.md`
+- Canonical refs: Phase 2, D-001, ADR-010, ADR-011
+- Validators: architecture, canonical, readiness
+
+### Status
+- [x] Phase 2 ACs recorded
+- [x] Migration claims match the tree
+- [x] Deliverable wording matches the module doc
+- [x] Stale module-doc persistence entries corrected
+
+---
+
+## [2026-11-06] - Postgres compound lexical search (issue #140)
+
+### Changed
+- Module: evidence-retrieval
+  - Lexical adapter: replaced `plainto_tsquery` with an explicit prefix `to_tsquery` built from the
+    rewritten `OR` terms; filter and `ts_rank` now share one expression.
+  - Memory adapter: prefix-token matching aligned with Postgres, replacing substring matching.
+  - New shared parser `evidence_corpus/infrastructure/indexing/lexical.py` so adapters cannot drift.
+
+### Impact Analysis
+- Files affected:
+  - `src/evidence_corpus/infrastructure/indexing/{postgres,memory,lexical}.py`
+  - `tests/integration/test_index_writer.py`
+  - `tests/integration/test_evidence_retrieval_hybrid_search.py`
+- Canonical refs: module doc Invariant 9; Phase 2 AC 1
+- Validators: integration (real PostgreSQL), ci, tests, architecture
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Real-Postgres regression tests added
+- [x] Adapter parity and monotone-recall tests added
+
+---
+
 ## [2026-11-06] - StakeholderModel architecture readiness (issue #120)
 
 ### Changed

@@ -18,7 +18,7 @@ the corpus itself.
 
 | Capability | Runs today | Not yet active |
 |---|---|---|
-| lexical retrieval | `tsvector`/in-memory term search | — |
+| lexical retrieval | prefix-aware `tsvector`/in-memory term search; OR-expanded German compounds | — |
 | dense retrieval | `hashing-char3gram-v1` over pinned snapshot passages | pgvector HNSW column/index |
 | fusion | `ReciprocalRankFusion` over lexical + dense rankings | — |
 | reranking | `overlap-reranker-v1` | trained cross-encoder |
@@ -272,6 +272,7 @@ class EvidencePack:
 | 6 | Authority weight is looked up from the corpus rubric, never invented here | Two subsystems disagreeing about trust |
 | 7 | Recency weighting excludes non-perishable sources (legislation, foundational studies, reference figures) | A 1995 statute outranked by a recent press mention |
 | 8 | Absence must be truthful: it names the queries and snapshot searched | Padding with tangential material to appear balanced |
+| 9 | The rewritten OR query is prefix-aware, and Postgres/in-memory adapters return the same passage ids for the same query; rank and filter use the same tsquery | A compound claim silently returning zero lexical hits while memory-backed tests stay green |
 
 **Domain-owned repository interface:**
 
@@ -403,7 +404,7 @@ application, query rewriting — these fail all three triage questions and remai
 | Router | `app.include_router(evidence_retrieval_router)` in `src/shared/app.py` | boot test asserting registration |
 | Composition | `build_container(settings)` wires real `pgvector`/`tsvector` adapters, embedding client and reranker from settings | integration test: pack assembled against a real snapshot |
 | Upstream port | `PassageSearchPort` adapter bound to EvidenceCorpus' published language; **no direct read of `evidence_corpus_*` tables** | architecture test forbidding cross-context repository imports |
-| Persistence | Migration `0201` (pack, candidate, retrieval_trace, passage_embedding) is applied before the router is exposed | `alembic upgrade head` + pack persists across restart |
+| Persistence | Migration `0201` creates `evidence_retrieval_pack` (frozen pack JSONB; candidates and trace embedded) before the router is exposed | `alembic upgrade head` + pack persists across restart |
 | Events | Packs and absences published through the outbox | `EvidencePackAssembled` row in `shared_event_outbox` |
 | Degraded mode | If the embedding provider is unreachable the module must fail loudly (readiness red), never silently return lexical-only results labelled as hybrid | `/readyz` reflects embedding/reranker reachability |
 
@@ -412,7 +413,7 @@ application, query rewriting — these fail all three triage questions and remai
 | # | Component | Criterion | Verify In |
 |---|---|---|---|
 | 1 | `EvidencePack.add_candidate` after freeze | Raises `PackFrozen`; the persisted pack is unchanged | unit |
-| 2 | Absence recording | A claim with no contradicting hit produces `absence != None` and a `200`, not an error or empty list | unit + API |
+| 2 | Absence recording | A claim with no contradicting hit produces `absence != None` and a `2xx` (`201 Created` for pack creation), not an error or empty list | unit + API |
 | 3 | Absence with contradictory hit present | `record_absence` raises `AbsenceWithContradiction` | unit |
 | 4 | Provenance assertion | A candidate without provenance blocks `freeze()` | unit |
 | 5 | Score breakdown | `authority + lexical + semantic + recency + directness` are all present and `final` is reproducible from them | unit |

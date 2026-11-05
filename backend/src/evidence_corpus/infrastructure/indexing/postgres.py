@@ -13,12 +13,13 @@ import hashlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from evidence_corpus.application.dto import IndexManifestView
 from evidence_corpus.domain.published import PassageView
+from evidence_corpus.infrastructure.indexing.lexical import is_disjunctive, query_terms
 from evidence_corpus.infrastructure.indexing.models import IndexedPassage, IndexManifestRow
 from shared.text_embedding import MODEL_ID
 
@@ -26,6 +27,21 @@ from shared.text_embedding import MODEL_ID
 def _version(indexed_ids: list[str]) -> str:
     digest = hashlib.sha256("|".join(indexed_ids).encode("utf-8")).hexdigest()[:12]
     return f"idx-{digest}"
+
+
+def _tsquery(query: str) -> str | None:
+    """Build an explicit prefix tsquery from the rewrite string.
+
+    ``plainto_tsquery`` ANDs every word and drops operators, which destroys the rewrite's OR. The
+    filter and ``ts_rank`` both consume this single value, so ranking can never disagree with the
+    hit set. Terms are stripped to word characters before interpolation; no raw claim syntax reaches
+    ``to_tsquery``.
+    """
+    terms = query_terms(query)
+    if not terms:
+        return None
+    joiner = " | " if is_disjunctive(query) else " & "
+    return joiner.join(f"{term}:*" for term in terms)
 
 
 class PostgresIndexWriter:
@@ -99,17 +115,15 @@ class PostgresIndexWriter:
             )
 
     async def search(self, query: str, limit: int = 20) -> list[str]:
-        """Lexical search using the generated `tsvector`; returns passage ids in rank order."""
+        """Prefix search over the generated `tsvector`; returns passage ids in rank order."""
+        tsquery = _tsquery(query)
+        if tsquery is None:
+            return []
+        expression = func.to_tsquery("german", tsquery)
         statement = (
             select(IndexedPassage.passage_id)
-            .where(
-                IndexedPassage.tsv.op("@@")(
-                    text("plainto_tsquery('german', :query)").bindparams(query=query)
-                )
-            )
-            .order_by(
-                text("ts_rank(tsv, plainto_tsquery('german', :query)) desc").bindparams(query=query)
-            )
+            .where(IndexedPassage.tsv.op("@@")(expression))
+            .order_by(func.ts_rank(IndexedPassage.tsv, expression).desc())
             .limit(limit)
         )
         async with self._session_factory() as session:
