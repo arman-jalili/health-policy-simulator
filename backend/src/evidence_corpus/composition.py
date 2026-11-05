@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from evidence_corpus.application.authority_handler import ClassifySourceAuthorityHandler
 from evidence_corpus.application.extraction_handler import ExtractDocumentTextHandler
 from evidence_corpus.application.read_handlers import GetDocumentHandler, ResolvePassageHandler
 from evidence_corpus.application.segmentation_handler import SegmentArticleHandler
@@ -39,6 +40,7 @@ class CorpusContainer:
     events: LoggingEventPublisher
 
     extract_document_text: ExtractDocumentTextHandler
+    classify_source_authority: ClassifySourceAuthorityHandler
     segment_article: SegmentArticleHandler
     resolve_passage: ResolvePassageHandler
     get_document: GetDocumentHandler
@@ -63,6 +65,9 @@ def build_container(actor: str = "system") -> CorpusContainer:
         events=events,
         extract_document_text=ExtractDocumentTextHandler(
             documents, PyMuPdfExtractor(), TesseractOcrExtractor(), events, actor=actor
+        ),
+        classify_source_authority=ClassifySourceAuthorityHandler(
+            documents, articles, events, actor=actor
         ),
         segment_article=SegmentArticleHandler(documents, events, actor=actor),
         resolve_passage=ResolvePassageHandler(passages),

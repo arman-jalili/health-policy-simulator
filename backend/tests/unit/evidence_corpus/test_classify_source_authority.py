@@ -14,6 +14,7 @@ import pytest
 from evidence_corpus.application.commands import ClassifySourceAuthorityRequest
 from evidence_corpus.application.dto import ClassifyAuthorityResult
 from evidence_corpus.application.services import ClassifySourceAuthority
+from evidence_corpus.domain.entities import Document
 from evidence_corpus.domain.events import AuthorityTierAssigned, DuplicateArticleLinked
 from evidence_corpus.domain.repositories import AuthorityRuleRepository
 from evidence_corpus.domain.values import (
@@ -128,3 +129,127 @@ class TestAuthorityRuleRepository:
 
     def test_authority_tier_is_a_value_not_an_entity(self) -> None:
         assert AuthorityTier.LEGISLATION.value == "legislation"
+
+
+class TestClassifySourceAuthorityHandler:
+    def _document(self, source_type: SourceType) -> Document:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+        )
+
+        document = Document.register(
+            source_uri="s3://corpus/legal.pdf",
+            content_hash="sha256:legal",
+            publication=Publication("BGBl", date(2026, 10, 1), "print"),
+            source_type=source_type,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction(
+            "§ 1 Kassenstellen.", ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0)
+        )
+        document.drain_events()
+        return document
+
+    async def test_declared_source_type_selects_the_tier(self) -> None:
+        from evidence_corpus.application.authority_handler import (
+            ClassifySourceAuthorityHandler,
+        )
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryArticleRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        document = self._document(SourceType.LEGISLATION)
+        await documents.save(document)
+        publisher = RecordingEventPublisher()
+
+        result = await ClassifySourceAuthorityHandler(
+            documents, InMemoryArticleRepository(documents), publisher
+        ).execute(ClassifySourceAuthorityRequest(document_id=document.id))
+
+        assert result.tier is AuthorityTier.LEGISLATION
+        assert document.tier is AuthorityTier.LEGISLATION
+        from evidence_corpus.domain.events import AuthorityTierAssigned
+
+        assert isinstance(publisher.events[0], AuthorityTierAssigned)
+
+    async def test_unknown_source_type_is_refused(self) -> None:
+        from evidence_corpus.application.authority_handler import (
+            ClassifySourceAuthorityHandler,
+        )
+        from evidence_corpus.domain.errors import SourceTypeUnknown
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryArticleRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        document = self._document(SourceType.UNKNOWN)
+        await documents.save(document)
+
+        handler = ClassifySourceAuthorityHandler(
+            documents, InMemoryArticleRepository(documents), RecordingEventPublisher()
+        )
+        with pytest.raises(SourceTypeUnknown):
+            await handler.execute(ClassifySourceAuthorityRequest(document_id=document.id))
+        assert document.tier is None
+
+    async def test_syndicated_articles_are_reported_as_duplicates(self) -> None:
+        from datetime import date
+
+        from evidence_corpus.application.authority_handler import (
+            ClassifySourceAuthorityHandler,
+        )
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+        )
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import (
+            InMemoryArticleRepository,
+            InMemoryDocumentRepository,
+        )
+
+        documents = InMemoryDocumentRepository()
+        original = self._document(SourceType.PRESS_REPORT)
+        original.add_article("Kassenstellen", "Die Kassenstellen werden aufgestockt.", 1, 1)
+        original.drain_events()
+        await documents.save(original)
+
+        syndicated = Document.register(
+            source_uri="s3://corpus/kurier.pdf",
+            content_hash="sha256:kurier",
+            publication=Publication("Kurier", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        syndicated.record_extraction(
+            "Die Kassenstellen werden aufgestockt.",
+            ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0),
+        )
+        syndicated.add_article("Kassenstellen", "Die Kassenstellen werden aufgestockt.", 1, 1)
+        syndicated.drain_events()
+        await documents.save(syndicated)
+
+        result = await ClassifySourceAuthorityHandler(
+            documents, InMemoryArticleRepository(documents), RecordingEventPublisher()
+        ).execute(ClassifySourceAuthorityRequest(document_id=syndicated.id))
+
+        assert result.duplicate_article_ids == [original.articles[0].id]
+
+    async def test_press_never_outranks_legislation_for_legal_claims(self) -> None:
+        from evidence_corpus.domain.values import AUTHORITY_RULES
+
+        order = AUTHORITY_RULES[ClaimType.LEGAL]
+
+        assert order.index(SourceType.LEGISLATION) < order.index(SourceType.PRESS_REPORT)
