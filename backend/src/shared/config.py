@@ -15,7 +15,7 @@ from typing import Annotated, Any
 from pydantic import Field, PostgresDsn, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from shared.enums import AuthMode, Environment, LogFormat
+from shared.enums import AuthMode, Environment, LogFormat, Persistence
 
 
 class ConfigError(RuntimeError):
@@ -43,6 +43,8 @@ class Settings(BaseSettings):
 
     env: Environment = Environment.LOCAL
     auth_mode: AuthMode = AuthMode.DEMO
+    # PostgreSQL is the safe default: memory must be chosen explicitly (ADR-002, issue #26).
+    persistence: Persistence = Persistence.POSTGRES
 
     database_url: Annotated[PostgresDsn, Field(repr=False)]
     db_echo: bool = False
@@ -63,6 +65,15 @@ class Settings(BaseSettings):
     def _reject_demo_in_production(self) -> Settings:
         if self.env is Environment.PRODUCTION and self.auth_mode is AuthMode.DEMO:
             raise ValueError("AUTH_MODE=demo is refused when ENV=production; set AUTH_MODE=strict")
+        return self
+
+    @model_validator(mode="after")
+    def _reject_memory_persistence_outside_local(self) -> Settings:
+        if self.env is not Environment.LOCAL and self.persistence is Persistence.MEMORY:
+            raise ValueError(
+                "PERSISTENCE=memory is refused outside ENV=local; "
+                "in-memory state is lost on restart and must never serve staging or production"
+            )
         return self
 
 

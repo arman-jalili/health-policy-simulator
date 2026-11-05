@@ -97,7 +97,7 @@ presenting numbers that cannot be traced to a page.
 |---|---|---|
 | Process image | redeploy previous version | stateless; no data migration involved |
 | Schema | `uv run alembic downgrade -1` | only when the revision is reversible and unused; otherwise restore from backup |
-| Configuration | revert the env change and restart | `AUTH_MODE`, `DATABASE_URL` and pool sizes take effect at boot |
+| Configuration | revert the env change and restart | `AUTH_MODE`, `PERSISTENCE`, `DATABASE_URL` and pool sizes take effect at boot |
 
 Never roll back a published brief: briefs are attributed artefacts. Withdraw with a new version.
 
@@ -110,8 +110,15 @@ Never roll back a published brief: briefs are attributed artefacts. Withdraw wit
 ## Evidence corpus operations
 
 The corpus context exposes eight endpoints under `/api/v1` (documents, ingestion runs, passages,
-snapshots, authority rules). Persistence is in-memory in the current prototype; the search index
-(`evidence_corpus_indexed_passage`) is the only PostgreSQL-backed corpus table.
+snapshots, authority rules). With `PERSISTENCE=postgres` (the default) documents, publications,
+articles, passages, snapshots and ingestion runs live in `evidence_corpus_*` tables; the search index
+adds `evidence_corpus_indexed_passage` and `evidence_corpus_index_manifest`. `PERSISTENCE=memory`
+exists only for tests and a local demo without a database.
+
+Domain events are written to `shared_event_outbox` in the same transaction as the aggregate. The
+in-process relay drains that table every five seconds and marks rows `dispatched`; a rising backlog
+of `status = 'pending'` means the relay is not running. Subscribers receive `event_id` and must be
+idempotent because delivery is at-least-once.
 
 | Symptom | Meaning | Action |
 |---|---|---|

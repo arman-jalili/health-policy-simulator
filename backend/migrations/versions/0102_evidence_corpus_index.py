@@ -2,8 +2,8 @@
 
 Searchable passage rows (generated German `tsvector` + GIN) and the published index manifest.
 
-Document/article persistence (roadmap 0101) is still served by the in-memory adapters, so this
-revision only owns what the index actually needs.
+This revision only owns the search index. Document/article persistence lives in ``0101`` and
+``0103``; the versions are chained in application order, not by identifier.
 
 Revision ID: 0102_evidence_corpus_index
 Revises: 0000_bootstrap

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from shared.config import ConfigError, Settings, load_settings
-from shared.enums import AuthMode, Environment
+from shared.enums import AuthMode, Environment, Persistence
 
 DATABASE_URL = "postgresql+asyncpg://hps:hps@localhost:5433/health_policy"
 
@@ -54,3 +54,30 @@ def test_secrets_are_not_rendered() -> None:
     settings = Settings(_env_file=None, database_url=DATABASE_URL)
 
     assert "hps:hps" not in repr(settings)
+
+
+class TestPersistenceConfiguration:
+    def test_postgres_is_the_default(self) -> None:
+        settings = Settings(_env_file=None, database_url=DATABASE_URL)
+
+        assert settings.persistence is Persistence.POSTGRES
+
+    def test_memory_is_available_for_a_database_less_demo(self) -> None:
+        settings = load_settings(
+            _env_file=None,
+            database_url=DATABASE_URL,
+            persistence="memory",
+        )
+
+        assert settings.persistence is Persistence.MEMORY
+
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    def test_memory_is_refused_outside_local(self, environment: str) -> None:
+        with pytest.raises(ConfigError, match="PERSISTENCE=memory"):
+            load_settings(
+                _env_file=None,
+                database_url=DATABASE_URL,
+                env=environment,
+                auth_mode="strict",
+                persistence="memory",
+            )

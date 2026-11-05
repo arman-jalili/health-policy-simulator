@@ -467,13 +467,13 @@ class IngestionRun:
 ## Wiring Contract
 
 A module is not done when its tests pass — it is done when it is reachable from the running app.
-Baseline for all other contexts (tracked in issue #26).
+Baseline for all other contexts (wired in issue #26).
 
 | Wiring point | Requirement | Proof |
 |---|---|---|
-| Router | `app.include_router(evidence_corpus_router)` in `shared/app.py` | boot test asserting the route exists in `app.routes` |
+| Router | `app.include_router(evidence_corpus_router)` in `shared/app.py` | boot test asserting every documented path exists in the generated OpenAPI document |
 | Composition | `build_container(settings)` selects adapters by config (`PERSISTENCE=postgres\|memory`); memory is never the silent default outside tests | integration test asserting `SqlAlchemy*Repository` when configured |
-| Persistence | Migrations `0101` (document/publication/article/passage/snapshot/ingestion_run) and `0103` (manifests) own every table the repositories query | `alembic upgrade head` on empty DB then ingest + restart round-trip |
+| Persistence | Migrations `0101` (document/publication/article/passage) and `0103` (snapshot/snapshot_document/ingestion_run) own every table the repositories query; `0102` keeps the index tables | `alembic upgrade head` on empty DB then ingest + restart round-trip |
 | Events | `OutboxEventPublisher` writes drained events in the same transaction as the aggregate | row present in `shared_event_outbox` on ingest |
 | Published language | `PassageView`/`ProvenanceView` exposed to EvidenceRetrieval through a port, not tables | architecture test: no cross-context table access |
 | Residue | no `_not_implemented` stub, no stale "handlers not wired" docstring | grep in CI |

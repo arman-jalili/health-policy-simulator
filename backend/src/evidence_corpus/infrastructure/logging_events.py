@@ -1,9 +1,9 @@
-"""In-process event publisher used until the outbox relay is wired into the composition root.
+"""In-process event publisher selected by ``PERSISTENCE=memory``.
 
 Canonical: .pi/architecture/decisions/ADR-003-cross-context-communication.md
 
-Events are emitted as structured log lines with their payload, so a run is observable today and the
-outbox adapter (`infrastructure/events.py`) can replace this publisher without touching a use case.
+Events are emitted as structured log lines and retained for inspection in tests. PostgreSQL mode
+uses the outbox adapter (`infrastructure/events.py`) instead; no use case changes.
 """
 
 from __future__ import annotations

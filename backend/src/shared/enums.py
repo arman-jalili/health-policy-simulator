@@ -50,3 +50,10 @@ class AuditOutcome(StrEnum):
     SUCCESS = "success"
     REFUSED = "refused"
     FAILED = "failed"
+
+
+class Persistence(StrEnum):
+    """Persistence adapter selected by configuration at the composition root (ADR-002)."""
+
+    POSTGRES = "postgres"
+    MEMORY = "memory"

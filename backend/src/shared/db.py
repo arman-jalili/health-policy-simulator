@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 
 from sqlalchemy import MetaData, text
 from sqlalchemy.ext.asyncio import (
@@ -35,6 +36,61 @@ class Base(DeclarativeBase):
     """Declarative base for every table owned by any context."""
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+class UnitOfWork:
+    """One logical transaction per request (or per explicit script scope).
+
+    Repositories and the outbox publisher share the ambient session so an aggregate write and the
+    events it drained commit together. Outside an explicit ``transaction()`` scope each operation
+    runs in its own short-lived transaction — that keeps background workers usable without
+    pretending they are atomic with the caller.
+    """
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
+        self._current: ContextVar[AsyncSession | None] = ContextVar(
+            f"unit_of_work:{id(self)}", default=None
+        )
+
+    @property
+    def has_active_transaction(self) -> bool:
+        return self._current.get() is not None
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[AsyncSession]:
+        """Join the ambient transaction or open one; commit on success, roll back on failure."""
+        ambient = self._current.get()
+        if ambient is not None:
+            yield ambient
+            return
+
+        async with self._session_factory() as session:
+            token = self._current.set(session)
+            try:
+                yield session
+                await session.commit()
+            except BaseException:
+                await session.rollback()
+                raise
+            finally:
+                self._current.reset(token)
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        """Session to use right now: the ambient one, or a self-committing scope."""
+        ambient = self._current.get()
+        if ambient is not None:
+            yield ambient
+            return
+
+        async with self._session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except BaseException:
+                await session.rollback()
+                raise
 
 
 class Database:
