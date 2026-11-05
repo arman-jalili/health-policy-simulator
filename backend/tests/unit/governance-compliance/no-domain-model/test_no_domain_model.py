@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-MODULE = Path(__file__).resolve().parents[3] / "src" / "governance_compliance"
+MODULE = Path(__file__).resolve().parents[4] / "src" / "governance_compliance"
 
 
 def test_domain_contains_only_the_empty_marker() -> None:
