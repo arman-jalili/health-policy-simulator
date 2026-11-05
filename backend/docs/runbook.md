@@ -149,3 +149,5 @@ Recovery of the search index:
 Contract regressions are caught mechanically: `python3 .pi/scripts/ci/check_evidence_corpus_contract.py`
 verifies the route inventory, enum vocabulary, authority rubric, event payloads, error codes, port
 implementations and the absence of contract stubs in the domain/application layers.
+
+- GovernanceCompliance: `docs/runbook-governance-compliance.md`

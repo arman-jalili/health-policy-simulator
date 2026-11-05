@@ -1,9 +1,9 @@
 ---
 guardian_issue:
   id: "ISSUE-CONTRACT-FREEZE"
-  epic: "evidence-corpus"
+  epic: "governance-compliance"
   component: "Contract Freeze"
-  module: "evidence-corpus"
+  module: "governance-compliance"
   status: planned
   priority: critical
   dependencies: []
@@ -29,7 +29,7 @@ guardian_issue:
       - REST/event contracts
 
   canonical_references:
-    - module: ".pi/architecture/modules/evidence-corpus.md"
+    - module: ".pi/architecture/modules/governance-compliance.md"
 
   acceptance_criteria:
     - "All component interfaces defined as stubs (TODO bodies)"
@@ -47,37 +47,33 @@ guardian_issue:
     interfaces, types, DTOs, event schemas, API paths, error formats.
 
   file_changes:
-    - "create: src/evidence-corpus/domain/"
-    - "create: src/evidence-corpus/application/"
-    - "create: src/evidence-corpus/infrastructure/"
-    - "create: src/evidence-corpus/interfaces/"
+    - "create: src/governance-compliance/domain/"
+    - "create: src/governance-compliance/application/"
+    - "create: src/governance-compliance/infrastructure/"
+    - "create: src/governance-compliance/interfaces/"
 ---
 
-# Contract Freeze: evidence-corpus
+# Contract Freeze: governance-compliance
 
 ## Intent
 
-Define and freeze all public interfaces, contracts, and schemas for the evidence-corpus
+Define and freeze all public interfaces, contracts, and schemas for the governance-compliance
 epic before any implementation begins. This prevents architecture drift — implementation
 must satisfy contracts, not the other way around.
 
 ## Included Components
 
-- Entities
-- Value Objects (entity-vs-VO justification)
-- Service classification
-- `Document.record_extraction`
-- Extraction quality gate
-- `Passage.offsets`
-- `SpeakerKind` classification
-- `ExtractDocumentText`
-- `SegmentArticle`
-- Provenance resolution
-- `ClassifySourceAuthority`
-- `LinkCanonicalArticle`
-- `PinCorpusSnapshot`
-- `IndexIngestedPassages`
-- API contract
+- `GC-001`
+- `GC-002`
+- `GC-003`
+- `GC-004`
+- Determinism
+- Violation persistence
+- Provenance completeness
+- Adversarial suite
+- Port contract
+- No domain model
+- Wiring
 
 ## What Must Be Frozen
 
@@ -113,32 +109,28 @@ must satisfy contracts, not the other way around.
 
 | # | Component | Criterion | Verify In |
 |---|-----------|-----------|-----------|
-| 1 | `Document.record_extraction` | A second call on the same Document raises `AlreadyExtracted`; tier and quality are unchanged after reclassification attempt | `tests/domain/test_document.py` |
-| 2 | Extraction quality gate | A document with confidence below threshold yields `DocumentQuarantined` and `publishable_passages()` returns `[]` | unit |
-| 3 | `Passage.offsets` | Constructing offsets outside the parent article bounds raises; over-investigation guard: overlapping siblings rejected | unit |
-| 4 | `SpeakerKind` classification | A person-attributed quotation produces `PersonalQuotationExcluded` and never reaches `publishable_passages()`; an institution-attributed statement remains citable | unit + integration |
-| 5 | `ExtractDocumentText` | A scanned PDF without text layer routes to OCR and yields non-empty text with `quality.method == "ocr"` | integration |
-| 6 | `SegmentArticle` | A 3-clipping digest yields exactly 3 articles with distinct headlines and page ranges | integration |
-| 7 | Provenance resolution | `GET /api/v1/passages/{id}` returns outlet, date, page and offsets that reproduce the exact text slice from the source file | integration |
-| 8 | `ClassifySourceAuthority` | Unknown source type is refused (`SourceTypeUnknown`); a press report never outranks a statute for a legal claim type | unit |
-| 9 | `LinkCanonicalArticle` | Two identical texts link to one canonical article; citation counts do not double | integration |
-| 10 | `PinCorpusSnapshot` | Snapshot pins documents + index version; re-running ingestion afterwards does not change passages visible through the old snapshot | integration |
-| 11 | `IndexIngestedPassages` | Passages are searchable via `tsvector` within the same application run; re-indexing is idempotent | integration |
-| 12 | API contract | All endpoints appear in generated OpenAPI and return the documented envelope; error paths use `{code,message,details,trace_id}` | contract test |
+| 1 | `GC-001` | "Dr. Müller sagte…" yields verdict `rewrite` or `reject`, never `accept` | unit |
+| 2 | `GC-002` | A passage with `speaker_kind == person` inside quotation marks yields `reject` | unit |
+| 3 | `GC-003` | "the minister's ministry" resolves to the canonical institution name or rejects | unit |
+| 4 | `GC-004` | An uncited claim presented as fact is rewritten to `unsupported`, not accepted | unit |
+| 5 | Determinism | Same input + same rule version yields the identical verdict (no model call in path) | unit |
+| 6 | Violation persistence | Every non-accept verdict writes exactly one violation row, no duplicates on retry | integration |
+| 7 | Provenance completeness | `DisclosePositionProvenance` fails if arguments, evidence or invocation are missing | integration |
+| 8 | Adversarial suite | ≥30 adversarial strings all classified correctly; suite runs in CI | CI |
+| 9 | Port contract | NegotiationSession cannot persist an argument without a guard verdict | integration |
+| 10 | No domain model | Module contains no aggregates/VOs per ADR-008; validator passes | architecture |
+| 11 | Wiring | Renamed guard is a blocking dependency of the negotiation write path; empty allowlist aborts boot; guard works with the LLM client patched to raise | integration |
 
 ## Full Implementation Sequence (for reference)
 
-- 1. `Passage`, `Offsets`, `Provenance`, `AuthorityTier`, `SpeakerKind`, `LanguageTag` value objects + tests
-- 2. `ExtractionQuality` gate + `Document.record_extraction` invariant tests
-- 3. `Document` aggregate with article segmentation and citability spec
-- 4. `ExtractionPort` with native extractor (PyMuPDF) → integration test on 5 real PDFs
-- 5. OCR fallback adapter + quality comparison metric
-- 6. `ArticleBoundaryStrategy` variants (single article, clipping digest)
-- 7. `Passage` chunking with offsets + speaker classification (person vs institution)
-- 8. `ClassifySourceAuthority` + canonical-article linking (content hash + similarity)
-- 9. `IndexIngestedPassages`: `tsvector` writer + `passage_embedding` upserts
-- 10. `PinCorpusSnapshot` manifest + `IndexManifest` publication
-- 11. REST routers + OpenAPI contract tests
+- 1. Allowlist table + loader from StakeholderModel personas
+- 2. `GC-001` rule + tests with a corpus of adversarial strings
+- 3. `GC-002` quotation rule using `speaker_kind`
+- 4. Rewrite path + `ViolationRecord` persistence
+- 5. `EnforceInstitutionOnlyOutput` port for NegotiationSession (contract test)
+- 6. `DisclosePositionProvenance` assembler
+- 7. REST endpoints + read models
+- 8. Adversarial regression suite (≥30 cases) run in CI
 
 
 

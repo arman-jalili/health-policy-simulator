@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
 from governance_compliance.application.rules import (
     GuardRuleChain,
     PersonalQuotationRule,
+    RuleResult,
     context_for,
 )
 from governance_compliance.application.values import (
@@ -18,7 +20,7 @@ from governance_compliance.application.values import (
 ALLOWLIST = InstitutionalAllowlist()
 
 
-def _run(text: str, speaker_kind: SpeakerKind):
+def _run(text: str, speaker_kind: SpeakerKind) -> Sequence[RuleResult]:
     return asyncio.run(
         GuardRuleChain([PersonalQuotationRule()]).evaluate(
             context_for(
@@ -36,6 +38,7 @@ def test_person_quotation_is_rejected() -> None:
     results = _run('Der Minister sagte: "Die Reform ist beschlossen."', SpeakerKind.PERSON)
 
     assert results[-1].decision is GuardDecision.REJECT
+    assert results[-1].violation_class is not None
     assert results[-1].violation_class.value == "personal_quotation"
 
 

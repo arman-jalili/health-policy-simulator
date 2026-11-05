@@ -48,6 +48,23 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - GovernanceCompliance delivered (issues #249-#262)
+
+### Changed
+- GC-001 person reference, GC-002 personal quotation, GC-003 institution alias, GC-004 unsupported
+  fact and GC-005 contradicted figure rules; deterministic chain and guard service.
+- Append-only violation/provenance persistence, migration `0305_governance_compliance`, allowlist
+  adapter, five HTTP routes wired into `shared/app.py`, ADR-014 Accepted.
+- 30-string adversarial suite, 78-check contract proofing stage and coverage gate.
+- Runbook, DR plan, `/readyz` governance checks and metrics.
+
+### Status
+- [x] All 11 module acceptance criteria implemented
+- [x] Runtime wiring and public E2E proof
+- [x] Proofing and readiness gates green
+
+---
+
 ## [2026-11-06] - GovernanceCompliance contract freeze (issue #248)
 
 ### Changed

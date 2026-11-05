@@ -79,3 +79,5 @@ index consistency checks, reweighted pack lineage).
 Single operator (hackathon prototype): record the incident in the project workpad with timeline,
 cause, achieved RTO/RPO and follow-up. Notify the jury-facing owner before a demo if the data
 restore lost runs.
+
+- GovernanceCompliance: `docs/dr-plan-governance-compliance.md`

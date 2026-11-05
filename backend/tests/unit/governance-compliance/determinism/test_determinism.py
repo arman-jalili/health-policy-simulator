@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
 from governance_compliance.application.rules import (
     ContradictedFigureRule,
@@ -10,6 +11,7 @@ from governance_compliance.application.rules import (
     InstitutionAliasRule,
     PersonalQuotationRule,
     PersonReferenceRule,
+    RuleResult,
     UnsupportedFactRule,
     context_for,
 )
@@ -47,7 +49,7 @@ def _chain() -> GuardRuleChain:
     )
 
 
-def _evaluate(text: str):
+def _evaluate(text: str) -> Sequence[RuleResult]:
     return asyncio.run(
         _chain().evaluate(
             context_for(

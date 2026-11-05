@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import pytest
@@ -38,7 +39,9 @@ def migrated() -> None:
 
 
 @pytest.fixture
-async def session_factory(migrated: None):
+async def session_factory(
+    migrated: None,
+) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(DATABASE_URL or "")
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)

@@ -86,8 +86,8 @@ tests/
 
 Bounded contexts live under `src/<context>/{domain,application,infrastructure,interfaces}/`.
 Implemented: `evidence_corpus`, `evidence_retrieval`, `identity_access`, `stakeholder_model`,
-`claim_validation`, `simulation_orchestration`. Contract frozen, implementation in progress:
-`governance_compliance` (`docs/contracts-governance-compliance.md`).
+`claim_validation`, `simulation_orchestration`, `governance_compliance`. Contract and API:
+`docs/contracts-governance-compliance.md`; operations: `docs/runbook-governance-compliance.md`.
 `shared/` is the only exempt directory; every other top-level package must be a context.
 
 ## Configuration
