@@ -11,6 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from stakeholder_model.domain.errors import (
+    IncompleteProfile,
+    PersonRepresentationForbidden,
+    UnsourcedAuthority,
+)
 from stakeholder_model.domain.events import (
     AuthorityClaimRejected,
     DomainEvent,
@@ -31,6 +36,7 @@ from stakeholder_model.domain.values import (
     MandateSource,
     NegotiatingPower,
     PassageId,
+    PowerSourceKind,
     ProfileVersion,
     StakeholderId,
     VetoRight,
@@ -51,15 +57,24 @@ class StakeholderProfile:
 
     def is_complete(self) -> bool:
         """Return whether the profile has at least one interest and one constraint."""
-        raise NotImplementedError("StakeholderProfile.is_complete is implemented by issue #107")
+        return bool(self.interests) and bool(self.constraints)
+
+    def missing(self) -> tuple[str, ...]:
+        """Return the required profile parts that are still absent."""
+        missing: list[str] = []
+        if not self.interests:
+            missing.append("interests")
+        if not self.constraints:
+            missing.append("constraints")
+        return tuple(missing)
 
     def add_interest(self, interest: Interest) -> None:
-        """Add an interest; implemented by issue #103."""
-        raise NotImplementedError("StakeholderProfile.add_interest is implemented by issue #103")
+        """Add an interest to the profile."""
+        self.interests.append(interest)
 
     def declare_constraint(self, constraint: Constraint) -> None:
-        """Declare a hard constraint; implemented by issue #103."""
-        raise NotImplementedError("StakeholderProfile.declare_constraint is implemented by #103")
+        """Declare a hard constraint on the profile."""
+        self.constraints.append(constraint)
 
     def assert_within_mandate(self, proposed_value: str) -> None:
         """Refuse a concession outside the declared mandate scope (invariant 3)."""
@@ -79,28 +94,36 @@ class Stakeholder:
     events: list[DomainEvent] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        """Guard institutions-only; implemented by issue #106."""
-        return None
+        """Refuse any institution represented by a natural person (invariant 1)."""
+        if self.identity.is_person:
+            raise PersonRepresentationForbidden(self.identity.name)
 
     def register_interest(self, interest: Interest) -> None:
-        """Register a goal; implemented by issue #103."""
-        raise NotImplementedError("Stakeholder.register_interest is implemented by issue #103")
+        """Register a weighted goal on the profile."""
+        self.profile.add_interest(interest)
 
     def declare_constraint(self, constraint: Constraint) -> None:
-        """Declare a hard limit; implemented by issue #103."""
-        raise NotImplementedError("Stakeholder.declare_constraint is implemented by issue #103")
+        """Declare a hard limit on the profile."""
+        self.profile.declare_constraint(constraint)
 
     def activate(self) -> None:
-        """Activate the stakeholder once the profile is complete; implemented by issue #107."""
-        raise NotImplementedError("Stakeholder.activate is implemented by issue #107")
+        """Activate the stakeholder once the profile is complete (invariant 2)."""
+        missing = self.profile.missing()
+        if missing:
+            raise IncompleteProfile(self.id, missing)
 
     def cite_power_source(
         self,
         power: VetoRight | MandateScope | BudgetLimit,
-        source: MandateSource,
+        source: MandateSource | None,
     ) -> None:
-        """Ground a power claim in a citable instrument; implemented by issue #108."""
-        raise NotImplementedError("cite_power_source is implemented by issue #108")
+        """Ground a power claim in a citable instrument (invariant 8)."""
+        power_type = type(power).__name__
+        if source is None or source.kind is PowerSourceKind.UNSPECIFIED:
+            reason = "authority claim cites no admissible MandateSource"
+            self.events.append(AuthorityClaimRejected(self.id, power_type, reason))
+            raise UnsourcedAuthority(self.id, power_type)
+        self.events.append(MandateSourceCited(self.id, power_type, source.citation))
 
     def record_historical_position(
         self,
@@ -117,8 +140,10 @@ class Stakeholder:
         raise NotImplementedError("negotiating_power is implemented by issue #109")
 
     def drain_events(self) -> list[DomainEvent]:
-        """Return and clear pending domain events for the outbox; implemented by wiring."""
-        raise NotImplementedError("drain_events is implemented by the wiring issue")
+        """Return and clear pending domain events for the outbox."""
+        drained = list(self.events)
+        self.events.clear()
+        return drained
 
 
 __all__ = [
