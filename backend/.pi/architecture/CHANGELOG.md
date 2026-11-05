@@ -48,6 +48,27 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ClaimValidation contract freeze (issue #164)
+
+### Changed
+- Module: claim-validation
+  - Added the frozen domain/application/infrastructure/interfaces skeleton: values, entities,
+    `Claim`, events, errors, repository ports, domain services, DTOs, published view and 7 routes.
+  - Added structural contract tests for every included component.
+
+### Impact Analysis
+- Files affected: `src/claim_validation/**`, `tests/unit/claim-validation/**`
+- Canonical refs: module doc, ADR-004, ADR-008
+- Validators: architecture, CI, tests
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Contract tests added
+- [x] Stubs name their implementing issue
+
+---
+
 ## [2026-11-06] - Phase 2 acceptance recorded (issue #141)
 
 ### Changed
