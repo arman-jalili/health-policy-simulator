@@ -36,6 +36,9 @@ from claim_validation.infrastructure.repository.sqlalchemy import (
 from shared.config import Settings
 from shared.db import Database
 from shared.enums import Persistence
+from shared.log_setup import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +82,11 @@ def build_container(
         contradictions = InMemoryContradictionRepository()
     parser = GermanNumberParser()
     evidence = EmptyEvidence()
+    logger.info(
+        "claim_validation_wired",
+        persistence=settings.persistence.value,
+        detail="reference figures are registered through the API; empty table yields ambiguous",
+    )
     return ClaimValidationContainer(
         claims=claims,
         references=references,
