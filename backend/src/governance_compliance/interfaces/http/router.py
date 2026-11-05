@@ -1,8 +1,4 @@
-"""GovernanceCompliance HTTP router — frozen API surface (ADR-004, issue #248).
-
-The router is concrete by design: there is no separate HTTP interface. It is mounted by the
-runtime-integration issue; until then every handler raises the implementing issue's marker.
-"""
+"""GovernanceCompliance HTTP router — wired API surface (ADR-004, issue #259)."""
 
 from __future__ import annotations
 
@@ -17,6 +13,7 @@ from governance_compliance.application.commands import (
     ListAllowlistRequest,
     ListViolationsRequest,
 )
+from governance_compliance.application.dto import ViolationRecord
 from governance_compliance.application.values import (
     InvocationId,
     PositionId,
@@ -26,11 +23,13 @@ from governance_compliance.application.values import (
 )
 from governance_compliance.interfaces.http.deps import GovernanceContainer, get_container
 from governance_compliance.interfaces.http.schemas import (
+    AllowlistItem,
     AllowlistResponse,
     DiscloseProvenanceBody,
     GuardCheckBody,
     GuardCheckResponse,
     ProvenanceResponse,
+    ViolationItem,
     ViolationListResponse,
 )
 from identity_access.interfaces.http.dependencies import require_declared_scope
@@ -46,6 +45,18 @@ READ_ERRORS = error_responses(401, 403, 404, 503)
 WRITE_ERRORS = error_responses(401, 403, 404, 409, 422, 503)
 
 
+def _violation_item(item: ViolationRecord) -> ViolationItem:
+    return ViolationItem(
+        violation_id=str(item.violation_id),
+        violation_class=item.violation_class.value,
+        offending_span=item.offending_span,
+        rewritten_span=item.rewritten_span,
+        rule_id=item.rule_id.value,
+        rule_version=item.rule_version,
+        detected_at=item.detected_at,
+    )
+
+
 @router.post(
     "/governance/check",
     response_model=GuardCheckResponse,
@@ -58,7 +69,7 @@ async def enforce_institution_only_output(
     body: GuardCheckBody,
     container: Annotated[GovernanceContainer, Depends(get_container)],
 ) -> GuardCheckResponse:
-    await container.enforce_institution_only_output.execute(
+    result = await container.enforce_institution_only_output.execute(
         EnforceInstitutionOnlyOutputRequest(
             text=body.text,
             speaker_kind=SpeakerKind(body.speaker_kind),
@@ -69,8 +80,11 @@ async def enforce_institution_only_output(
             reference_figure_ids=tuple(body.reference_figure_ids),
         )
     )
-    raise NotImplementedError(
-        "governance-compliance router is wired by the runtime-integration issue"
+    return GuardCheckResponse(
+        decision=result.decision.value,
+        violations=[_violation_item(item) for item in result.violations],
+        rewritten_text=result.rewritten_text,
+        rule_version=result.rule_version,
     )
 
 
@@ -88,7 +102,7 @@ async def list_violations(
     violation_class: str | None = Query(default=None, alias="class"),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> ViolationListResponse:
-    await container.list_violations.execute(
+    result = await container.list_violations.execute(
         ListViolationsRequest(
             run_id=RunId(run_id) if run_id is not None else None,
             violation_class=ViolationClass(violation_class)
@@ -97,9 +111,7 @@ async def list_violations(
             limit=limit,
         )
     )
-    raise NotImplementedError(
-        "governance-compliance router is wired by the runtime-integration issue"
-    )
+    return ViolationListResponse(items=[_violation_item(item) for item in result.items])
 
 
 @router.get(
@@ -115,11 +127,19 @@ async def get_position_provenance(
     container: Annotated[GovernanceContainer, Depends(get_container)],
     version: int | None = Query(default=None, ge=1),
 ) -> ProvenanceResponse:
-    await container.get_position_provenance.execute(
+    result = await container.get_position_provenance.execute(
         GetPositionProvenanceRequest(position_id=PositionId(position_id), version=version)
     )
-    raise NotImplementedError(
-        "governance-compliance router is wired by the runtime-integration issue"
+    record = result.record
+    return ProvenanceResponse(
+        position_id=str(record.position_id),
+        evidence_ids=list(record.evidence_ids),
+        argument_ids=list(record.argument_ids),
+        invocation_id=record.invocation_id,
+        prompt_version=record.prompt_version,
+        model=record.model,
+        disclosed_at=record.disclosed_at,
+        version=record.version,
     )
 
 
@@ -136,15 +156,23 @@ async def disclose_position_provenance(
     body: DiscloseProvenanceBody,
     container: Annotated[GovernanceContainer, Depends(get_container)],
 ) -> ProvenanceResponse:
-    await container.disclose_position_provenance.execute(
+    result = await container.disclose_position_provenance.execute(
         DisclosePositionProvenanceRequest(
             position_id=PositionId(position_id),
             version=body.version,
             requested_by=body.requested_by,
         )
     )
-    raise NotImplementedError(
-        "governance-compliance router is wired by the runtime-integration issue"
+    record = result.record
+    return ProvenanceResponse(
+        position_id=str(record.position_id),
+        evidence_ids=list(record.evidence_ids),
+        argument_ids=list(record.argument_ids),
+        invocation_id=record.invocation_id,
+        prompt_version=record.prompt_version,
+        model=record.model,
+        disclosed_at=record.disclosed_at,
+        version=record.version,
     )
 
 
@@ -159,7 +187,17 @@ async def disclose_position_provenance(
 async def list_allowlist(
     container: Annotated[GovernanceContainer, Depends(get_container)],
 ) -> AllowlistResponse:
-    await container.list_allowlist.execute(ListAllowlistRequest())
-    raise NotImplementedError(
-        "governance-compliance router is wired by the runtime-integration issue"
+    result = await container.list_allowlist.execute(ListAllowlistRequest())
+    return AllowlistResponse(
+        institutions=[
+            AllowlistItem(
+                code=item.code,
+                canonical_name=item.canonical_name,
+                short_name=item.short_name,
+                category=item.category,
+                aliases=list(item.aliases),
+            )
+            for item in result.institutions
+        ],
+        version=result.version,
     )
