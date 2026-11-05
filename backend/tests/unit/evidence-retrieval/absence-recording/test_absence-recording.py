@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from tests.unit.evidence_retrieval_contract_helpers import field_names, parameter_names
 
@@ -17,9 +18,17 @@ from evidence_retrieval.application.dto import (
     EvidencePackResult,
     TraceResult,
 )
+from evidence_retrieval.domain.entities import RetrievalTrace
+from evidence_retrieval.domain.errors import PackFrozen
 from evidence_retrieval.domain.events import EvidenceAbsenceRecorded
 from evidence_retrieval.domain.evidence_pack import EvidencePack
-from evidence_retrieval.domain.values import AbsenceFinding
+from evidence_retrieval.domain.values import (
+    AbsenceFinding,
+    ClaimText,
+    PackId,
+    QueryRewrite,
+    SnapshotId,
+)
 from evidence_retrieval.interfaces.http.router import router
 from shared.config import Settings
 from shared.enums import AuthMode, Persistence
@@ -117,3 +126,24 @@ async def test_absence_returns_200_and_a_non_empty_absence_body() -> None:
     assert body["absence"] is not None
     assert body["absence"]["queries"] == ["Kassenstellen"]
     assert body["absence"]["reason"].startswith("no contradicting")
+
+
+def test_record_absence_after_freeze_is_refused_without_mutation() -> None:
+    pack = EvidencePack(
+        id=PackId("evp_1"),
+        claim=ClaimText("Kassenstellen"),
+        snapshot_id=SnapshotId("snap_1"),
+        index_version="idx-1",
+        trace=RetrievalTrace(
+            embedding_model="text-embedding-3-large",
+            reranker_model="cross-encoder",
+            query_rewrite=QueryRewrite("Kassenstellen", "Kassenstellen"),
+            stance_counts={},
+        ),
+    )
+    pack.freeze()
+
+    with pytest.raises(PackFrozen):
+        pack.record_absence(["Kassenstellen"], "late")
+
+    assert pack.absence is None
