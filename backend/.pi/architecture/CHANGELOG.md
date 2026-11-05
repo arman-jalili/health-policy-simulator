@@ -1,0 +1,134 @@
+# Architecture Change Log
+
+<!--
+Canonical Reference: .pi/architecture/CHANGELOG.md
+Blueprint Source: Guardian Framework v1.2
+DO NOT EDIT GENERATED FILES - Modify this source only
+-->
+
+This document tracks all architecture changes requiring implementation updates.
+
+---
+
+## Change Log Format
+
+Each entry follows this structure:
+
+```markdown
+## [YYYY-MM-DD] - [Change Title]
+
+### Changed
+- Module: [module-name]
+  - [Component]: [what changed]
+  - [Component]: [what changed]
+
+### Impact Analysis
+- Files affected:
+  - src/[path1]
+  - src/[path2]
+- Canonical refs to update:
+  - .pi/architecture/modules/[module].md#[section]
+- Validators required:
+  - [validator-name]
+
+### Migration Steps
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+### Status
+- [ ] Architecture doc updated
+- [ ] CHANGELOG entry added
+- [ ] Implementation updated
+- [ ] Canonical refs updated
+- [ ] Validators run
+```
+
+---
+
+## Entries
+
+## [2026-11-05] - Complete Architecture Package (ADR-001…ADR-008)
+
+### Changed
+- ADR-001: reviewed and accepted; explicit layer-isolation, layer-direction and transaction-ownership rules added; alternatives table expanded
+- ADR-002…ADR-008: created (data storage, cross-context communication, API design, auth, cost metering, compliance engine, proportional modeling depth)
+- Module: evidence-corpus — `Document` + `IngestionRun` aggregates (behavior methods, 7 invariants, Python repository protocol); Python stubs replace Rust/SQLx stubs; 12 triaged domain events with payloads; 8 endpoints; 17 glossary terms; 12 acceptance criteria
+- Module: evidence-retrieval — `EvidencePack` aggregate with freeze/absence semantics; `RetrievalQuery` demoted to value object; 8 invariants; 3 triaged events; 5 endpoints; absence-finding contract; 11 acceptance criteria
+- Module: stakeholder-model — `Stakeholder` + `AgentBinding` aggregates; `MandateSource` grounding and `AttributionStrength`; 10 invariants; 11 triaged events; 8 endpoints; 11 acceptance criteria
+- Module: negotiation-session — `SimulationRun` aggregate with 15 owned concepts; `RoundLearning`/`LearningApplication` (negotiation-learning requirement); 14 invariants; 15 triaged events; 12 endpoints; replay-equivalence criterion
+- Module: consensus-analysis — `ConsensusRecord`/`CompromisePackage`/`Scenario` aggregates; veto precedence over threshold; `EstimateBasis` provenance; 11 invariants; 9 triaged events; 7 endpoints
+- Module: decision-brief — `DecisionBrief` as projection-with-identity; publication gate; `CitedStatement` and rejected-proposal disclosure; 8 invariants; 5 triaged events; 5 endpoints
+- Module: claim-validation — `Claim` aggregate with claim-type verification paths; tolerance bands; `ReferenceFigure` grounding; 10 invariants; 10 triaged events; 7 endpoints
+- Module: governance-compliance (service depth) — two-stage guard, 5 rules `GC-001…GC-005`, persistence contract, 5 endpoints; no aggregates introduced
+- Module: simulation-orchestration (service depth) — job/invocation/progress persistence contract, budget guard, SSE replay, graph-purity rule; no aggregates introduced
+- Module: identity-access (adapter depth) — `PrincipalPort` ACL, key+scope table, demo-mode guard; no aggregates introduced
+- Diagrams: `system-context.md` rebuilt (actors, contexts, context map, integrations); `event-flow.md` created (event classes, delivery guarantees, explicit non-events)
+- Roadmap: six phases (Bootstrap + 5), 10 modules, migrations `0000`–`0502`, effort estimates, milestones, documented orchestration/negotiation cycle
+
+### Impact Analysis
+- Files affected:
+  - `.pi/architecture/decisions/ADR-001…ADR-008` (8 files)
+  - `.pi/architecture/diagrams/system-context.md`, `.pi/architecture/diagrams/event-flow.md`
+  - `.pi/architecture/modules/*.md` (10 module docs)
+  - `.pi/architecture/implementation-roadmap.md`
+  - `.pi/architecture/CHANGELOG.md`
+  - (implementation, not yet created) `src/<context>/domain|application|infrastructure|interfaces/`
+- Canonical refs to update:
+  - `.pi/architecture/modules/[module].md` — all sections regenerated
+  - `.pi/domain/ubiquitous-language.md` — unchanged; module UL sections are subsets of the 80 canonical terms
+- Validators required:
+  - architecture (layer isolation, depth per ADR-008)
+  - canonical (doc ↔ code sync once implementation starts)
+  - ci
+
+### Migration Steps
+1. Review ADR-002's explicit language deviation (SQLx → SQLAlchemy/asyncpg) and confirm the Python baseline
+2. Confirm the documented `SimulationOrchestration ↔ NegotiationSession` cycle resolution before Phase 3 starts
+3. Seed palette: 9 persona YAMLs (Phase 2) and ~10 authoritative `ReferenceFigure` rows (Phase 3)
+4. Begin Phase 0 bootstrap; do not create context folders before their build phase
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated (no code in this package by design)
+- [ ] Canonical refs updated (pending first implementation)
+- [ ] Validators run
+
+<!-- Add new entries above this line -->
+
+---
+
+## Template Usage
+
+When making architecture changes:
+
+1. **Before change**: Review existing architecture docs
+2. **During change**: Update `.pi/architecture/modules/[module].md`
+3. **After change**: Add entry to this CHANGELOG
+4. **Implementation**: Follow migration steps, update canonical refs
+5. **Validation**: Run `validate-canonical.sh` to verify sync
+
+---
+
+## Architecture Sync Status
+
+Track which changes have been synced to implementation:
+
+| Date | Change | Module | Sync Status | Validator Status |
+|------|--------|--------|-------------|------------------|
+| 2026-11-05 | Complete architecture package | evidence-corpus | pending | not run |
+| 2026-11-05 | Complete architecture package | evidence-retrieval | pending | not run |
+| 2026-11-05 | Complete architecture package | stakeholder-model | pending | not run |
+| 2026-11-05 | Complete architecture package | negotiation-session | pending | not run |
+| 2026-11-05 | Complete architecture package | consensus-analysis | pending | not run |
+| 2026-11-05 | Complete architecture package | decision-brief | pending | not run |
+| 2026-11-05 | Complete architecture package | claim-validation | pending | not run |
+| 2026-11-05 | Complete architecture package | governance-compliance | pending | not run |
+| 2026-11-05 | Complete architecture package | simulation-orchestration | pending | not run |
+| 2026-11-05 | Complete architecture package | identity-access | pending | not run |
+
+---
+
+*Last updated: 2026-11-05*
+*Framework version: 1.2.0*

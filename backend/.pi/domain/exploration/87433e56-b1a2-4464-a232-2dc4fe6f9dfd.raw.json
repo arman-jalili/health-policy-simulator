@@ -1,0 +1,4302 @@
+{
+  "sessionId": "87433e56-b1a2-4464-a232-2dc4fe6f9dfd",
+  "businessContext": "read all in @.pi/domain/material/ and explore the full domain for backend only, for winning hackathhon",
+  "originalPrompt": "read all in @.pi/domain/material/ and explore the full domain for backend only, for winning hackathhon",
+  "status": "draft",
+  "createdAt": "2026-11-05T13:03:30.263Z",
+  "actors": [
+    {
+      "name": "Policy Analyst (End User)",
+      "description": "Human researcher/decision-maker who poses a policy question and inspects the full reasoning trail.",
+      "interactions": "Creates simulations, configures scenario constraints, starts/pauses runs, streams progress, reads decision brief."
+    },
+    {
+      "name": "Stakeholder Agent",
+      "description": "Autonomous institutional representative (social insurance, ministry, chamber, patient rep, etc.) with own interests, budget constraints, priorities and historical positions.",
+      "interactions": "Forms positions, submits arguments, responds to counterarguments, requests evidence, revises positions, forms coalitions."
+    },
+    {
+      "name": "Moderator Agent",
+      "description": "Neutral process steward with no position of its own; translates question into a mandate, selects actors, sets rules, detects contradictions, ends negotiation.",
+      "interactions": "Opens/closes rounds, calls for justification, records consensus/conflict, decides stopping conditions."
+    },
+    {
+      "name": "Evidence Curator / Ingestion Operator",
+      "description": "Backend role (human or automated) responsible for corpus ingestion quality and source authority classification.",
+      "interactions": "Triggers ingestion, reviews extraction quality, tunes retrieval, curates authoritative reference data."
+    },
+    {
+      "name": "LLM Provider",
+      "description": "External probabilistic reasoning provider used by agents and moderator.",
+      "interactions": "Receives prompts with evidence bundles, returns structured argument/position proposals; never authoritative."
+    },
+    {
+      "name": "Scheduler / Background Worker",
+      "description": "Executes long-running ingestion and simulation jobs asynchronously.",
+      "interactions": "Consumes queued jobs, emits progress events, retries on failure."
+    }
+  ],
+  "assumptions": [
+    {
+      "assumption": "The ~3GB 2020 press corpus is German-language, PDF/HTML mixed, with usable publication metadata.",
+      "impactIfWrong": "Extraction and provenance model must change; citation quality drops.",
+      "mitigation": "Profile corpus first; build adapter per source format; degrade gracefully to document-level provenance."
+    },
+    {
+      "assumption": "Press reports reliably reveal institutional positions but are not ground truth on facts.",
+      "impactIfWrong": "Agents would over-claim factual accuracy.",
+      "mitigation": "Model source authority tiering; require authoritative sources for quantitative claims."
+    },
+    {
+      "assumption": "Hackathon scope: one policy question per simulation, deterministic negotiation rules, LLM for content only.",
+      "impactIfWrong": "Scope creep into multi-question/multi-run comparison.",
+      "mitigation": "Freeze MVP scope; design extension points explicitly."
+    },
+    {
+      "assumption": "LLM outputs are nondeterministic, so reproducibility is bounded by recorded prompt/model/seed metadata.",
+      "impactIfWrong": "Claims of deterministic outcomes would be false.",
+      "mitigation": "Persist full event log + prompt/model versions; document reproducibility limits."
+    },
+    {
+      "assumption": "PostgreSQL + Qdrant are sufficient; no message broker beyond a single worker queue is needed.",
+      "impactIfWrong": "Scaling issues on large corpus ingestion.",
+      "mitigation": "Keep ingestion idempotent and parallelizable by document."
+    }
+  ],
+  "boundedContexts": [
+    {
+      "name": "EvidenceCorpus",
+      "description": "Owns the authoritative document corpus: ingestion, extraction, article segmentation, passage chunking and citation-grade provenance. Publishes passages as an open host for retrieval.",
+      "entities": [
+        "Document",
+        "Publication",
+        "Article",
+        "Passage",
+        "CorpusCollection"
+      ],
+      "subdomainType": "core",
+      "subdomainRationale": "Traceable evidence is the differentiator that makes the simulation credible rather than a chatbot.",
+      "invariants": [
+        {
+          "rule": "A Passage can never exist without a resolvable parent Article and Document with a source URI.",
+          "illegalStatePrevented": "Orphan citation that cannot be traced to a physical page."
+        },
+        {
+          "rule": "A Document's authority tier and extraction quality are assigned at ingestion and immutable thereafter.",
+          "illegalStatePrevented": "Retroactive authority inflation of weak sources."
+        },
+        {
+          "rule": "Passage offsets must lie within the parent Article text bounds and must not overlap sibling passages.",
+          "illegalStatePrevented": "A citation pointing at the wrong sentence."
+        },
+        {
+          "rule": "A Document below the extraction quality threshold cannot produce citable Passages.",
+          "illegalStatePrevented": "Citing garbled OCR output as evidence."
+        },
+        {
+          "rule": "A QuotationBlock attributed to a natural person must never enter an EvidencePack; a quotation attributed to an institution is retained as an attributed institutional statement and stays citable with its attribution.",
+          "illegalStatePrevented": "Quoting real persons, or losing legitimate institutional statements to an over-broad filter."
+        },
+        {
+          "rule": "Authority is evaluated per claim type: legislation outranks all for legal questions, official statistics for quantitative ones, studies for causal ones. No single universal ranking may be applied.",
+          "illegalStatePrevented": "A press statement outranking a statute because it scored higher on one global scale."
+        },
+        {
+          "rule": "A Document must record its source type explicitly enough to be placed in a claim-type-specific authority rule; unknown source types cannot be promoted to authoritative.",
+          "illegalStatePrevented": "Unclassified material quietly becoming authoritative."
+        }
+      ]
+    },
+    {
+      "name": "EvidenceRetrieval",
+      "description": "Turns a claim into a balanced, scored, inspectable evidence pack. Owns hybrid search, reranking, stance classification and recency weighting. Never owns the corpus itself.",
+      "entities": [
+        "RetrievalQuery",
+        "EvidenceCandidate",
+        "EvidencePack",
+        "AuthorityWeight"
+      ],
+      "subdomainType": "core",
+      "subdomainRationale": "Balanced supporting/contradicting evidence retrieval prevents one-sided argumentation.",
+      "invariants": [
+        {
+          "rule": "An EvidencePack must record its search coverage: queries run, stances found and, for any stance with no result, a recorded AbsenceFinding. A pack is never blocked for lacking contradicting evidence.",
+          "illegalStatePrevented": "One-sided packs built by seeking only agreement, or packs rejected because no contradiction happens to exist."
+        },
+        {
+          "rule": "Every EvidenceCandidate must carry a resolvable Provenance from EvidenceCorpus.",
+          "illegalStatePrevented": "Unsourced evidence inside an argument."
+        },
+        {
+          "rule": "A weight breakdown (authority, relevance, recency, directness) must be present for every candidate.",
+          "illegalStatePrevented": "Opaque single-number scoring."
+        },
+        {
+          "rule": "A frozen EvidencePack is immutable; later retrieval produces a new pack version.",
+          "illegalStatePrevented": "Silent mutation of evidence after it justified an argument."
+        },
+        {
+          "rule": "An EvidencePack must reference the IndexManifest version and reranker model that produced it.",
+          "illegalStatePrevented": "Irreproducible evidence after re-indexing."
+        },
+        {
+          "rule": "Authority weight must be looked up from the corpus-owned rubric, never invented by retrieval.",
+          "illegalStatePrevented": "Two subsystems disagreeing about trust."
+        },
+        {
+          "rule": "Recency weighting applies only to perishable material; legislation, foundational studies, reference figures and institutional statutes are exempt and keep full weight regardless of age.",
+          "illegalStatePrevented": "A 1995 statute or foundational study outranked by a recent press mention."
+        },
+        {
+          "rule": "Balance is satisfied by truthful coverage, not fabricated doubt: an AbsenceFinding must state which queries and which corpus snapshot were searched and found nothing.",
+          "illegalStatePrevented": "Padding a pack with tangential material to appear balanced."
+        }
+      ]
+    },
+    {
+      "name": "StakeholderModel",
+      "description": "Owns institutional identity: who the stakeholder is, what it wants, what limits it, and how that becomes a negotiating agent persona. Guarantees institutions only, never persons.",
+      "entities": [
+        "Stakeholder",
+        "StakeholderProfile",
+        "Interest",
+        "Constraint",
+        "HistoricalPosition",
+        "AgentBinding"
+      ],
+      "subdomainType": "core",
+      "subdomainRationale": "Distinct, defensible institutional identity is the core of the simulation's realism.",
+      "invariants": [
+        {
+          "rule": "A Stakeholder is always an institution; no Stakeholder may represent or be named after a natural person.",
+          "illegalStatePrevented": "Simulating individual politicians or officials."
+        },
+        {
+          "rule": "A StakeholderProfile must declare at least one interest and one constraint before activation.",
+          "illegalStatePrevented": "A positionless generic chatbot in the negotiation."
+        },
+        {
+          "rule": "Budget constraints and decision priorities must sit within the declared mandate scope.",
+          "illegalStatePrevented": "An agent conceding authority the institution does not have."
+        },
+        {
+          "rule": "An AgentBinding is immutable for the duration of a run.",
+          "illegalStatePrevented": "An agent silently changing identity mid-negotiation."
+        },
+        {
+          "rule": "NegotiatingPower must be derived from declared mandate scope, budget authority and veto rights; an agent may never assign it.",
+          "illegalStatePrevented": "Agents inventing leverage to win an argument."
+        },
+        {
+          "rule": "A Dependency is directional and may only link two stakeholders registered in the same run.",
+          "illegalStatePrevented": "Coalition analysis over institutions not negotiating."
+        },
+        {
+          "rule": "A VetoRight applies to a proposal class, never to a specific proposal.",
+          "illegalStatePrevented": "Ad-hoc blocking that makes outcomes arbitrary."
+        },
+        {
+          "rule": "Every VetoRight, MandateScope and BudgetLimit must cite a MandateSource of type legislation, statutory instrument or budget decision; unsourced authority is inadmissible.",
+          "illegalStatePrevented": "Agents inventing legal competences, veto powers or budget ceilings that no real instrument grants."
+        },
+        {
+          "rule": "A HistoricalPosition requires explicit attribution to the institution in its source; a document that merely mentions the institution does not establish a position.",
+          "illegalStatePrevented": "Inferring a stance from a passing newspaper reference and treating it as institutional history."
+        },
+        {
+          "rule": "Where the only available attribution is weak or indirect, the HistoricalPosition must be recorded as such and cannot be used to override a current explicit statement.",
+          "illegalStatePrevented": "Old, weakly attributed history outweighing the institution's present position."
+        }
+      ]
+    },
+    {
+      "name": "NegotiationSession",
+      "description": "The heart of the domain: a policy question becomes a mandate, stakeholders take turns, argue with evidence, revise positions, form coalitions and the run closes under an explicit stopping condition.",
+      "entities": [
+        "SimulationRun",
+        "NegotiationMandate",
+        "NegotiationRound",
+        "Argument",
+        "Position",
+        "Coalition",
+        "ConflictTopic"
+      ],
+      "subdomainType": "core",
+      "subdomainRationale": "The negotiation state machine and its invariants are the heart of the domain.",
+      "invariants": [
+        {
+          "rule": "A round cannot close until every bound stakeholder has taken a turn or been recorded as abstaining.",
+          "illegalStatePrevented": "Silent skipping of a stakeholder to manufacture consensus."
+        },
+        {
+          "rule": "A position cannot be revised without a revision reason citing at least one Argument or EvidencePack id.",
+          "illegalStatePrevented": "Arbitrary opinion flips with no explainable cause."
+        },
+        {
+          "rule": "An Argument must cite at least one EvidencePack or be explicitly marked unsupported and flagged.",
+          "illegalStatePrevented": "Evidence-free assertions presented as justified negotiation input."
+        },
+        {
+          "rule": "Only one open Position per (stakeholder, conflict topic); revision supersedes the previous one.",
+          "illegalStatePrevented": "Contradictory simultaneous stances by the same institution."
+        },
+        {
+          "rule": "A closed SimulationRun is immutable; further analysis yields a projection or a new run.",
+          "illegalStatePrevented": "Post-hoc editing of a published negotiation outcome."
+        },
+        {
+          "rule": "A Coalition may only contain stakeholders and must publish one explicit shared proposal.",
+          "illegalStatePrevented": "Vague bloc voting that hides what was actually agreed."
+        },
+        {
+          "rule": "Round count may not exceed the mandate round cap; exceeding it forces terminal evaluation.",
+          "illegalStatePrevented": "Endless negotiation that never terminates."
+        },
+        {
+          "rule": "A turn is assigned to exactly one bound stakeholder per round; no out-of-turn or duplicate turns on the same topic.",
+          "illegalStatePrevented": "Turn-order manipulation that lets a dominant agent drown out others."
+        },
+        {
+          "rule": "Phase transitions are monotonic; a run never returns to an earlier phase.",
+          "illegalStatePrevented": "Looping back to erase inconvenient commitments."
+        },
+        {
+          "rule": "A Proposal component must be quantified or declared unquantified; unquantified components cannot contribute to an ImpactAssessment.",
+          "illegalStatePrevented": "Impact figures built on measures nobody costed."
+        },
+        {
+          "rule": "Coalition membership requires an accepted CoalitionOffer; membership cannot be inferred after the fact.",
+          "illegalStatePrevented": "Retroactive claim of support for a deal the institution never joined."
+        },
+        {
+          "rule": "Every round must persist a RoundLearning record before the next round may open.",
+          "illegalStatePrevented": "Agents repeating the same failed argument because nothing was carried forward."
+        },
+        {
+          "rule": "A LearningApplication must cite the RoundLearning it derives from; no agent may invoke 'experience' without a persisted record.",
+          "illegalStatePrevented": "Invented lessons that retroactively justify a position change."
+        },
+        {
+          "rule": "RoundLearning is derived from that run's own arguments and must not import outcomes from other runs.",
+          "illegalStatePrevented": "Cross-run contamination passing as adaptation."
+        }
+      ]
+    },
+    {
+      "name": "ConsensusAnalysis",
+      "description": "Derives the negotiation result from the recorded history: consensus, majority and minority positions, unresolved conflicts, compromise packages and impact assessments. Never invents agreement.",
+      "entities": [
+        "ConsensusRecord",
+        "MajorityPosition",
+        "MinorityPosition",
+        "CompromisePackage",
+        "ImpactAssessment"
+      ],
+      "subdomainType": "core",
+      "subdomainRationale": "A negotiation result (not a single answer) is the required output product.",
+      "invariants": [
+        {
+          "rule": "ConsensusRecord, CompromisePackage and ImpactAssessment are derived artefacts: they hold no input state, and recalculation from run history must reproduce them. Only derivation metadata is authoritative.",
+          "illegalStatePrevented": "Derived views becoming competing sources of truth that drift from the negotiation record."
+        },
+        {
+          "rule": "A ConsensusRecord may only cite stances present in the closed run's history.",
+          "illegalStatePrevented": "Manufactured agreement."
+        },
+        {
+          "rule": "Consensus requires the mandate support threshold; below it the outcome is partial or unresolved.",
+          "illegalStatePrevented": "Forced consensus hiding real conflict."
+        },
+        {
+          "rule": "A MinorityPosition must list its holding stakeholders and their arguments.",
+          "illegalStatePrevented": "Dissenting institutions vanishing from the result."
+        },
+        {
+          "rule": "A CompromisePackage may only combine individually accepted, mutually compatible components.",
+          "illegalStatePrevented": "Unimplementable bundles of contradictory measures."
+        },
+        {
+          "rule": "Every ImpactAssessment figure must declare an EstimateBasis; assumed figures must be labelled and never presented as computed.",
+          "illegalStatePrevented": "LLM guesses published as calculations."
+        },
+        {
+          "rule": "A figure marked measured or derived must enumerate its inputs; without inputs the basis must be assumed.",
+          "illegalStatePrevented": "An unbacked number labelled 'derived'."
+        },
+        {
+          "rule": "The system must never present an illustrative value from its own documentation as a run outcome.",
+          "illegalStatePrevented": "A demo figure such as 22% reappearing as a computed result."
+        },
+        {
+          "rule": "An ImpactAssessment must reference exactly one Scenario and one CompromisePackage.",
+          "illegalStatePrevented": "Orphaned headline numbers the brief cannot trace."
+        },
+        {
+          "rule": "A Scenario marked feasible must name the consenting institutions required and confirm none vetoes it.",
+          "illegalStatePrevented": "Feasibility asserted while a blocking institution opposes."
+        },
+        {
+          "rule": "Consensus may not be declared for a proposal class covered by a bound stakeholder's VetoRight.",
+          "illegalStatePrevented": "Majority rule masquerading as consensus."
+        }
+      ]
+    },
+    {
+      "name": "DecisionBrief",
+      "description": "Projects a closed run into the publishable, jury-facing artefact with all eight required components and resolvable citations. Read-model of the negotiation, never a source of truth.",
+      "entities": [
+        "DecisionBrief",
+        "BriefSection",
+        "CitationReference"
+      ],
+      "subdomainType": "core",
+      "subdomainRationale": "The jury-facing deliverable and the artefact that proves transparency.",
+      "invariants": [
+        {
+          "rule": "A DecisionBrief cannot be published unless all eight required sections exist.",
+          "illegalStatePrevented": "Incomplete artefact missing conflict or impact analysis."
+        },
+        {
+          "rule": "Every CitationReference must resolve to an existing Passage provenance at publication time.",
+          "illegalStatePrevented": "Broken citations in the deliverable the jury inspects."
+        },
+        {
+          "rule": "A published DecisionBrief is immutable; revisions create a new version referencing the prior one.",
+          "illegalStatePrevented": "Silent post-publication edits of an outcome."
+        },
+        {
+          "rule": "The brief must state the probabilistic nature of the simulation.",
+          "illegalStatePrevented": "Simulated reasoning presented as deterministic fact."
+        },
+        {
+          "rule": "Every CitedStatement must carry at least one CitationReference or be explicitly marked narrative or unsupported.",
+          "illegalStatePrevented": "Bare assertions that look evidenced but are not."
+        },
+        {
+          "rule": "A DecisionBrief must disclose every rejected proposal recorded in the run.",
+          "illegalStatePrevented": "A tidy result hiding refused options."
+        },
+        {
+          "rule": "The brief is a projection: it may hold no state that is not derived from the closed run, and regeneration from run history must reproduce it field for field apart from narrative wording.",
+          "illegalStatePrevented": "The brief becoming a second, competing source of truth about what happened."
+        },
+        {
+          "rule": "Where a run outcome is ambiguous or veto-blocked, the brief must say so; it may not smooth the result into a recommendation.",
+          "illegalStatePrevented": "An honest 'blocked' being rewritten as a consensus recommendation."
+        }
+      ]
+    },
+    {
+      "name": "SimulationOrchestration",
+      "description": "Agent workflow graph execution (LangGraph), progress streaming, job lifecycle, pause/resume; orchestrates but does not own state.",
+      "entities": [
+        "SimulationJob",
+        "WorkflowGraph",
+        "ProgressEvent",
+        "AgentInvocation"
+      ],
+      "subdomainType": "supporting",
+      "subdomainRationale": "Necessary plumbing; correctness deferred to NegotiationSession aggregates."
+    },
+    {
+      "name": "ClaimValidation",
+      "description": "Keeps figures honest: extracts claims from arguments, verifies them against authoritative sources, detects contradictions between agents and flags unsupported assertions.",
+      "entities": [
+        "Claim",
+        "ClaimVerification",
+        "ContradictionFinding"
+      ],
+      "subdomainType": "core",
+      "subdomainRationale": "Requirement that figures must not contradict each other and must be substantiated.",
+      "invariants": [
+        {
+          "rule": "A quantitative claim cannot be marked verified without at least one authoritative-tier source.",
+          "illegalStatePrevented": "Press-only figures presented as verified facts."
+        },
+        {
+          "rule": "Two verified claims asserting incompatible values for the same measure and period cannot both remain verified.",
+          "illegalStatePrevented": "Contradictory numbers circulating in one negotiation."
+        },
+        {
+          "rule": "A claim with no evidence above threshold must be marked unsupported, never silently dropped.",
+          "illegalStatePrevented": "Unsupported assertions passing as facts."
+        },
+        {
+          "rule": "Verdicts record the source set and the comparison method used.",
+          "illegalStatePrevented": "Opaque, unauditable verdicts."
+        },
+        {
+          "rule": "A claim is contradictable only when the difference exceeds the tolerance band of its measure.",
+          "illegalStatePrevented": "Calling rounding a contradiction."
+        },
+        {
+          "rule": "A ReferenceFigure must name its authoritative source tier; press figures may never serve as reference values.",
+          "illegalStatePrevented": "The baseline drifting to whatever the newspapers printed."
+        },
+        {
+          "rule": "An escalated claim stays unverified until an ExpertReview verdict is recorded.",
+          "illegalStatePrevented": "Ambiguity treated as settled because someone asked a question."
+        },
+        {
+          "rule": "The verification path is selected by claim type: quantitative claims compare against ReferenceFigures, legal claims against provisions, causal claims against studies, and qualitative claims are not verifiable at all.",
+          "illegalStatePrevented": "Running a causal or qualitative claim through a number check and stamping it verified."
+        },
+        {
+          "rule": "Causal and qualitative claims may be recorded as supported, contested or unverifiable, but never as verified fact.",
+          "illegalStatePrevented": "A study that suggests a link being published as proven causation."
+        },
+        {
+          "rule": "Where a claim type cannot be verified by any available path, the verdict must be explicitly ambiguous rather than omitting the claim.",
+          "illegalStatePrevented": "Unverifiable claims disappearing from the audit trail."
+        }
+      ]
+    },
+    {
+      "name": "GovernanceCompliance",
+      "description": "Rules that institutions only are represented (never real persons), no quoting of real individuals, and transparency of position derivation.",
+      "entities": [
+        "InstitutionOnlyRule",
+        "ProhibitedPersonReference",
+        "ProvenanceDisclosure"
+      ],
+      "subdomainType": "supporting",
+      "subdomainRationale": "Hard regulatory requirement from the challenge; enforcement must be explicit."
+    },
+    {
+      "name": "IdentityAccess",
+      "description": "Authentication, workspace access, roles (analyst, operator, admin).",
+      "entities": [
+        "User",
+        "Workspace",
+        "Role"
+      ],
+      "subdomainType": "generic",
+      "subdomainRationale": "Commodity capability, not a differentiator."
+    }
+  ],
+  "contextMap": [
+    {
+      "from": "EvidenceCorpus",
+      "to": "EvidenceRetrieval",
+      "relationship": "open-host",
+      "note": "Corpus publishes indexed passages with provenance; retrieval consumes as published language."
+    },
+    {
+      "from": "EvidenceRetrieval",
+      "to": "NegotiationSession",
+      "relationship": "anticorruption-layer",
+      "note": "Retrieval returns EvidencePacks; negotiation maps them to ClaimEvidence refs, never raw vector hits."
+    },
+    {
+      "from": "StakeholderModel",
+      "to": "NegotiationSession",
+      "relationship": "partnership",
+      "note": "Positions must reference stakeholder interests/constraints; both evolve together."
+    },
+    {
+      "from": "NegotiationSession",
+      "to": "ConsensusAnalysis",
+      "relationship": "open-host",
+      "note": "Session emits domain events consumed to derive consensus/conflict records."
+    },
+    {
+      "from": "ConsensusAnalysis",
+      "to": "DecisionBrief",
+      "relationship": "conformist",
+      "note": "Brief projects consensus records plus history into the deliverable."
+    },
+    {
+      "from": "ClaimValidation",
+      "to": "NegotiationSession",
+      "relationship": "partnership",
+      "note": "Arguments with claims are gated on verification status before being accepted."
+    },
+    {
+      "from": "GovernanceCompliance",
+      "to": "NegotiationSession",
+      "relationship": "anticorruption-layer",
+      "note": "Guards agent output; rejects person-level references before persistence."
+    },
+    {
+      "from": "SimulationOrchestration",
+      "to": "NegotiationSession",
+      "relationship": "anticorruption-layer",
+      "note": "LangGraph invokes domain commands; domain state is never read from graph state."
+    }
+  ],
+  "openQuestions": "RESOLVED this revision: negotiation learning (RoundLearning + LearningApplication, persisted per round, applied with an explicit citation); impact provenance (EstimateBasis: measured|derived|modelled|assumed, with enumerated DerivationInput); stakeholder authority grounding (MandateSource cites legislation/statute/budget decision; unsourced powers inadmissible); evidence balance relaxed to recorded search coverage + AbsenceFinding; claim-type verification paths (quantitative/legal/causal/qualitative, with causal and qualitative never 'verified'); authority made claim-type-relative (AuthorityRule) instead of one global scale; historical positions gated on AttributionStrength (mention is not a position); recency exemptions for non-perishable sources; quotations split by SpeakerKind so institutional statements survive while personal quotes are excluded; derived artefacts declared projections, not competing sources of truth; RetrievalQuery demoted from aggregate root; CorpusCollection and IndexManifest reduced to manifests rather than corpus-wide transactional aggregates; 8 implementation-detail events removed from the catalogue. OPEN: (1) corpus profiling — actual formats, OCR share, metadata quality, German text quality — must precede any throughput or latency target; (2) RAG ingestion contracts (segmentation of multi-clipping digests, duplicate vs syndication vs same-event clustering, BM25/dense fusion weights, reranking model, evidence classification relative to a claim) belong to the architecture pass, not this exploration; (3) database schema, index structure and embedding strategy for German; (4) API contracts and SSE event shapes; (5) worker and failure-recovery design; (6) evaluation harness for evidence quality and negotiation behaviour; (7) which stakeholder set is authoritative and who curates MandateSource citations; (8) reproducibility policy: what is replayed vs regenerated when a run is resumed. DEFERRED as post-hackathon: multi-question comparison runs, cross-run learning, multi-language UI, real-time collaboration.",
+  "functionalRequirements": [
+    {
+      "id": "FR-001",
+      "requirement": "The system shall ingest the full Austrian press corpus with document-level and article-level provenance (publication, date, page, source URI).",
+      "priority": "critical",
+      "boundedContext": "EvidenceCorpus"
+    },
+    {
+      "id": "FR-002",
+      "requirement": "The system shall extract text from PDF/HTML/scanned documents using an OCR fallback and record an extraction quality indicator per document.",
+      "priority": "critical",
+      "boundedContext": "EvidenceCorpus"
+    },
+    {
+      "id": "FR-003",
+      "requirement": "The system shall segment documents into articles and articles into citable passages with exact character offsets.",
+      "priority": "high",
+      "boundedContext": "EvidenceCorpus"
+    },
+    {
+      "id": "FR-004",
+      "requirement": "The system shall classify each source into an authority tier (press report, institutional statement, legal text, scientific study, official statistics).",
+      "priority": "critical",
+      "boundedContext": "EvidenceCorpus"
+    },
+    {
+      "id": "FR-005",
+      "requirement": "The system shall detect duplicate and syndicated articles and link them to a single canonical article.",
+      "priority": "medium",
+      "boundedContext": "EvidenceCorpus"
+    },
+    {
+      "id": "FR-006",
+      "requirement": "The system shall retrieve hybrid (BM25 + dense) candidate passages for a claim and rerank them before use.",
+      "priority": "critical",
+      "boundedContext": "EvidenceRetrieval"
+    },
+    {
+      "id": "FR-007",
+      "requirement": "The system shall assemble an EvidencePack containing supporting, contradicting and contextual evidence for a claim, never only supporting evidence.",
+      "priority": "critical",
+      "boundedContext": "EvidenceRetrieval"
+    },
+    {
+      "id": "FR-008",
+      "requirement": "The system shall score evidence by authority tier, relevance, recency and directness, with every score component individually inspectable.",
+      "priority": "high",
+      "boundedContext": "EvidenceRetrieval"
+    },
+    {
+      "id": "FR-009",
+      "requirement": "The system shall weight recent publications more strongly than historical ones via a configurable recency policy.",
+      "priority": "high",
+      "boundedContext": "EvidenceRetrieval"
+    },
+    {
+      "id": "FR-010",
+      "requirement": "The system shall maintain a registry of institutional stakeholders with mandate, interests, constraints, budget limits and decision priorities.",
+      "priority": "critical",
+      "boundedContext": "StakeholderModel"
+    },
+    {
+      "id": "FR-011",
+      "requirement": "The system shall bind each activated stakeholder to an agent persona derived from its institutional profile and historical positions.",
+      "priority": "critical",
+      "boundedContext": "StakeholderModel"
+    },
+    {
+      "id": "FR-012",
+      "requirement": "The system shall create a simulation run from a policy question and a negotiation mandate selecting the relevant stakeholders.",
+      "priority": "critical",
+      "boundedContext": "NegotiationSession"
+    },
+    {
+      "id": "FR-013",
+      "requirement": "The system shall run negotiation rounds in which each stakeholder submits an evidenced initial position before debate begins.",
+      "priority": "critical",
+      "boundedContext": "NegotiationSession"
+    },
+    {
+      "id": "FR-014",
+      "requirement": "The system shall record every argument with speaker, target, stance (support/oppose/qualify), claims and cited evidence references.",
+      "priority": "critical",
+      "boundedContext": "NegotiationSession"
+    },
+    {
+      "id": "FR-015",
+      "requirement": "The system shall allow a stakeholder to revise its position only by recording the reason and referencing the arguments or evidence that caused the change.",
+      "priority": "critical",
+      "boundedContext": "NegotiationSession"
+    },
+    {
+      "id": "FR-016",
+      "requirement": "The system shall record conflict topics with per-stakeholder stance and track their resolution status across rounds.",
+      "priority": "high",
+      "boundedContext": "NegotiationSession"
+    },
+    {
+      "id": "FR-017",
+      "requirement": "The system shall allow stakeholders to form a coalition on a conflict topic with an explicit shared proposal.",
+      "priority": "medium",
+      "boundedContext": "NegotiationSession"
+    },
+    {
+      "id": "FR-018",
+      "requirement": "The system shall terminate a negotiation when a stopping condition fires (consensus threshold, round cap, deadlock) and record which condition fired.",
+      "priority": "critical",
+      "boundedContext": "NegotiationSession"
+    },
+    {
+      "id": "FR-019",
+      "requirement": "The system shall derive consensus, majority and minority positions plus unresolved conflicts from the recorded negotiation history.",
+      "priority": "critical",
+      "boundedContext": "ConsensusAnalysis"
+    },
+    {
+      "id": "FR-020",
+      "requirement": "The system shall derive compromise packages from accepted cross-stakeholder proposal components.",
+      "priority": "high",
+      "boundedContext": "ConsensusAnalysis"
+    },
+    {
+      "id": "FR-021",
+      "requirement": "The system shall present impact assessments per scenario with explicit assumptions and uncertainty labels.",
+      "priority": "high",
+      "boundedContext": "ConsensusAnalysis"
+    },
+    {
+      "id": "FR-022",
+      "requirement": "The system shall generate a DecisionBrief containing all eight required components (question, actors, history, conflicts, compromises, consensus, open disputes, impact) with resolvable citations.",
+      "priority": "critical",
+      "boundedContext": "DecisionBrief"
+    },
+    {
+      "id": "FR-023",
+      "requirement": "The system shall verify quantitative and legal claims against authoritative sources and reject arguments whose claims contradict verified figures.",
+      "priority": "critical",
+      "boundedContext": "ClaimValidation"
+    },
+    {
+      "id": "FR-024",
+      "requirement": "The system shall flag arguments containing unsupported assertions and surface them as low-confidence in the brief.",
+      "priority": "high",
+      "boundedContext": "ClaimValidation"
+    },
+    {
+      "id": "FR-025",
+      "requirement": "The system shall reject any agent output that attributes positions to named real persons or quotes individuals.",
+      "priority": "critical",
+      "boundedContext": "GovernanceCompliance"
+    },
+    {
+      "id": "FR-026",
+      "requirement": "The system shall disclose, for every position, how it was derived (sources, arguments, model invocation reference).",
+      "priority": "critical",
+      "boundedContext": "GovernanceCompliance"
+    },
+    {
+      "id": "FR-027",
+      "requirement": "The system shall execute simulations asynchronously and stream progress events to the client.",
+      "priority": "critical",
+      "boundedContext": "SimulationOrchestration"
+    },
+    {
+      "id": "FR-028",
+      "requirement": "The system shall support pausing and resuming a running simulation without losing negotiation state.",
+      "priority": "medium",
+      "boundedContext": "SimulationOrchestration"
+    },
+    {
+      "id": "FR-029",
+      "requirement": "The system shall persist prompt template version, model identifier and parameters for every agent invocation.",
+      "priority": "high",
+      "boundedContext": "SimulationOrchestration"
+    },
+    {
+      "id": "FR-030",
+      "requirement": "The system shall allow reconstruction of a completed simulation's full event history and re-rendering of its brief.",
+      "priority": "high",
+      "boundedContext": "NegotiationSession"
+    }
+  ],
+  "nonFunctionalRequirements": [
+    {
+      "id": "NFR-001",
+      "requirement": "The system shall provide citation-grade provenance for every evidence reference down to article and passage.",
+      "category": "maintainability",
+      "target": "100% of cited evidence resolvable to document + passage offset; 0 orphan citations in validation"
+    },
+    {
+      "id": "NFR-002",
+      "requirement": "The system shall keep domain state authoritative and independent of workflow-engine state.",
+      "category": "maintainability",
+      "target": "0 domain invariants enforced inside LangGraph nodes; all state mutation via domain commands"
+    },
+    {
+      "id": "NFR-003",
+      "requirement": "The system shall stream negotiation progress to clients with low latency.",
+      "category": "performance",
+      "target": "first progress event < 2s after run start; event emitted within 1s of each domain event commit"
+    },
+    {
+      "id": "NFR-004",
+      "requirement": "The system shall retrieve and rerank evidence within an interactive budget.",
+      "category": "performance",
+      "target": "PROVISIONAL — no target until corpus profiling and a representative run. Record p50/p95 on demo hardware first, then set the budget from measurement."
+    },
+    {
+      "id": "NFR-005",
+      "requirement": "The system shall ingest the full corpus without manual per-document intervention.",
+      "category": "scalability",
+      "target": "PROVISIONAL — throughput target set after profiling file types and OCR share. Requirement: ingestion is parallelisable by document and idempotent on re-run."
+    },
+    {
+      "id": "NFR-006",
+      "requirement": "The system shall protect against prompt injection and data exfiltration via retrieved documents.",
+      "category": "security",
+      "target": "all retrieved content treated as untrusted data; zero tool invocations initiated from document text"
+    },
+    {
+      "id": "NFR-007",
+      "requirement": "The system shall enforce the institution-only representation rule at output boundaries.",
+      "category": "security",
+      "target": "100% of person-level or person-quoting outputs rejected pre-persistence; 0 such statements in generated briefs"
+    },
+    {
+      "id": "NFR-008",
+      "requirement": "The system shall recover from worker or agent failures without corrupting negotiation state.",
+      "category": "availability",
+      "target": "run resumable after crash; no partial argument persisted; at-least-once delivery with idempotent domain commands"
+    },
+    {
+      "id": "NFR-009",
+      "requirement": "The system shall document the reproducibility limits of probabilistic agent output.",
+      "category": "maintainability",
+      "target": "every run records model + prompt versions and seed; brief explicitly states non-determinism"
+    },
+    {
+      "id": "NFR-010",
+      "requirement": "The system shall bound LLM cost and latency per simulation.",
+      "category": "performance",
+      "target": "PROVISIONAL — a hard cost ceiling per run is required; the concrete number is set after one measured 9-stakeholder run."
+    },
+    {
+      "id": "NFR-011",
+      "requirement": "The system shall make every generated argument reproducible to its inputs.",
+      "category": "maintainability",
+      "target": "each argument stores prompt version, model, evidence pack id and round; 100% traceable"
+    },
+    {
+      "id": "NFR-012",
+      "requirement": "The system shall enforce institutional-only agent identities.",
+      "category": "security",
+      "target": "agent identity bound to an institutional Stakeholder id; 0 agents addressable by personal name"
+    },
+    {
+      "id": "NFR-013",
+      "requirement": "The system shall isolate concurrent simulation runs.",
+      "category": "scalability",
+      "target": "Isolation is mandatory (no cross-run state). Concurrency count is PROVISIONAL until measured; demo must support at least two concurrent runs."
+    },
+    {
+      "id": "NFR-014",
+      "requirement": "The system shall keep agent latency acceptable during streaming rounds.",
+      "category": "performance",
+      "target": "p95 single agent turn < 20s with streaming partial argument tokens"
+    },
+    {
+      "id": "NFR-015",
+      "requirement": "The system shall degrade gracefully when the LLM provider fails.",
+      "category": "availability",
+      "target": "bounded retries with exponential backoff; run marked paused with diagnosable failure, never partially committed argument"
+    },
+    {
+      "id": "NFR-016",
+      "requirement": "The system shall protect the security of stored simulation and corpus data.",
+      "category": "security",
+      "target": "secrets never persisted in domain events; least-privilege DB roles; encrypted transport for all provider calls"
+    },
+    {
+      "id": "NFR-017",
+      "requirement": "The system shall keep the API contract stable for the frontend during the hackathon.",
+      "category": "maintainability",
+      "target": "OpenAPI schema published and versioned; contract tests green on every build"
+    },
+    {
+      "id": "NFR-018",
+      "requirement": "The system shall test domain invariants with automated coverage.",
+      "category": "maintainability",
+      "target": ">= 80% line coverage on domain layer; every aggregate invariant has at least one rejecting test"
+    },
+    {
+      "id": "NFR-019",
+      "requirement": "The system shall evaluate retrieval quality measurably.",
+      "category": "performance",
+      "target": "A manually labelled evaluation set of claims with known supporting and contradicting passages is required before any recall figure is set. No arbitrary recall threshold shall be specified in advance."
+    },
+    {
+      "id": "NFR-020",
+      "requirement": "The system shall keep a full audit trail of state changes.",
+      "category": "maintainability",
+      "target": "every aggregate transition emits a persisted domain event; history reconstructable to any round"
+    },
+    {
+      "id": "NFR-021",
+      "requirement": "The system shall bound and document ingestion failure rates.",
+      "category": "availability",
+      "target": "Every failed document is persisted with a reason and is retryable. The admissible failure rate is set after corpus profiling, not assumed."
+    },
+    {
+      "id": "NFR-022",
+      "requirement": "The system shall keep the corpus index fresh relative to ingestion.",
+      "category": "performance",
+      "target": "PROVISIONAL — a newly ingested document becomes searchable once its IndexManifest version is published; the latency bound is set after measuring index build cost."
+    },
+    {
+      "id": "NFR-023",
+      "requirement": "The system shall operate within hackathon cost constraints.",
+      "category": "scalability",
+      "target": "full demo simulation (9 agents, 6 rounds) within a configured per-run token budget"
+    },
+    {
+      "id": "NFR-024",
+      "requirement": "The system shall authenticate and authorise API access.",
+      "category": "security",
+      "target": "all mutating endpoints require an authenticated principal; role checks enforced per route; 0 unauthenticated state changes"
+    },
+    {
+      "id": "NFR-025",
+      "requirement": "The system shall expose API contracts covering all documented use cases.",
+      "category": "maintainability",
+      "target": ">= 95% endpoint coverage of the FR catalogue; every endpoint has request/response schema and contract test"
+    }
+  ],
+  "applicationServices": [
+    {
+      "name": "IngestDocument",
+      "context": "EvidenceCorpus",
+      "useCase": "Register a source file, extract text (native or OCR), persist extraction quality and provenance.",
+      "commands": [
+        "register source file",
+        "detect format",
+        "extract text",
+        "record extraction quality"
+      ],
+      "aggregates": [
+        "Document"
+      ],
+      "mapsToFr": "FR-001"
+    },
+    {
+      "name": "SegmentArticle",
+      "context": "EvidenceCorpus",
+      "useCase": "Detect article boundaries within a publication, assign publication metadata and split into citable passages with offsets.",
+      "commands": [
+        "detect article boundaries",
+        "attach publication metadata",
+        "split into passages",
+        "compute offsets"
+      ],
+      "aggregates": [
+        "Article",
+        "Publication",
+        "Passage"
+      ],
+      "mapsToFr": "FR-003"
+    },
+    {
+      "name": "ClassifySourceAuthority",
+      "context": "EvidenceCorpus",
+      "useCase": "Assign an authority tier and derive duplicate/syndication links for an article.",
+      "commands": [
+        "classify authority tier",
+        "detect duplicates",
+        "link canonical article"
+      ],
+      "aggregates": [
+        "Article",
+        "CorpusCollection"
+      ],
+      "mapsToFr": "FR-004"
+    },
+    {
+      "name": "SearchEvidenceCandidates",
+      "context": "EvidenceRetrieval",
+      "useCase": "Execute hybrid BM25 + dense search for a claim and rerank candidates.",
+      "commands": [
+        "build query from claim",
+        "run lexical search",
+        "run vector search",
+        "fuse and rerank"
+      ],
+      "aggregates": [
+        "RetrievalQuery",
+        "EvidenceCandidate"
+      ],
+      "mapsToFr": "FR-006"
+    },
+    {
+      "name": "AssembleEvidencePack",
+      "context": "EvidenceRetrieval",
+      "useCase": "Balance supporting, contradicting and contextual evidence for a claim and score each on authority, relevance, recency, directness.",
+      "commands": [
+        "classify stance of candidates",
+        "enforce contradiction quota",
+        "score components",
+        "freeze pack"
+      ],
+      "aggregates": [
+        "EvidencePack"
+      ],
+      "mapsToFr": "FR-007"
+    },
+    {
+      "name": "ApplyRecencyPolicy",
+      "context": "EvidenceRetrieval",
+      "useCase": "Weight candidate evidence by publication recency under a configurable policy.",
+      "commands": [
+        "load recency policy",
+        "compute decay weight",
+        "rerank by weighted score"
+      ],
+      "aggregates": [
+        "EvidencePack",
+        "AuthorityTier"
+      ],
+      "mapsToFr": "FR-009"
+    },
+    {
+      "name": "RegisterStakeholder",
+      "context": "StakeholderModel",
+      "useCase": "Create or update an institutional stakeholder with mandate, interests, constraints and decision priorities.",
+      "commands": [
+        "register institution",
+        "declare interests",
+        "declare constraints",
+        "set budget limits",
+        "set decision priorities"
+      ],
+      "aggregates": [
+        "Stakeholder",
+        "StakeholderProfile"
+      ],
+      "mapsToFr": "FR-010"
+    },
+    {
+      "name": "BindAgentPersona",
+      "context": "StakeholderModel",
+      "useCase": "Produce the agent binding for an activated stakeholder, assembling historical positions and persona rules.",
+      "commands": [
+        "select stakeholder profile",
+        "load historical positions",
+        "validate institution-only identity",
+        "emit AgentBinding"
+      ],
+      "aggregates": [
+        "AgentBinding",
+        "HistoricalPosition"
+      ],
+      "mapsToFr": "FR-011"
+    },
+    {
+      "name": "OpenSimulationRun",
+      "context": "NegotiationSession",
+      "useCase": "Turn a policy question into a negotiation mandate, select stakeholders and open a run in PositionFormation phase.",
+      "commands": [
+        "parse policy question",
+        "select relevant stakeholders",
+        "declare negotiation rules",
+        "open run"
+      ],
+      "aggregates": [
+        "SimulationRun",
+        "NegotiationMandate"
+      ],
+      "mapsToFr": "FR-012"
+    },
+    {
+      "name": "SubmitInitialPosition",
+      "context": "NegotiationSession",
+      "useCase": "Record a stakeholder's opening position with claims and cited evidence before debate opens.",
+      "commands": [
+        "gather evidence pack",
+        "formulate position",
+        "attach claims",
+        "attach citations",
+        "open position"
+      ],
+      "aggregates": [
+        "Position",
+        "NegotiationRound"
+      ],
+      "mapsToFr": "FR-013"
+    },
+    {
+      "name": "TakeNegotiationTurn",
+      "context": "NegotiationSession",
+      "useCase": "Let a stakeholder respond within a round: submit an argument against a target position or argument, with stance and evidence.",
+      "commands": [
+        "select target",
+        "determine stance",
+        "assemble argument",
+        "attach evidence refs",
+        "close round when all turns complete"
+      ],
+      "aggregates": [
+        "Argument",
+        "NegotiationRound",
+        "SimulationRun"
+      ],
+      "mapsToFr": "FR-014"
+    },
+    {
+      "name": "RevisePosition",
+      "context": "NegotiationSession",
+      "useCase": "Change a position only with a recorded reason citing the arguments or evidence that caused the shift.",
+      "commands": [
+        "assert reason present",
+        "assert causal references exist",
+        "supersede previous position",
+        "emit PositionRevised"
+      ],
+      "aggregates": [
+        "Position",
+        "Argument"
+      ],
+      "mapsToFr": "FR-015"
+    },
+    {
+      "name": "TrackConflictTopic",
+      "context": "NegotiationSession",
+      "useCase": "Open, update and resolve conflict topics with per-stakeholder stance across rounds.",
+      "commands": [
+        "detect divergence",
+        "open conflict topic",
+        "record stances",
+        "mark resolved/unresolved"
+      ],
+      "aggregates": [
+        "ConflictTopic"
+      ],
+      "mapsToFr": "FR-016"
+    },
+    {
+      "name": "FormCoalition",
+      "context": "NegotiationSession",
+      "useCase": "Join stakeholders on a conflict topic behind an explicit shared proposal.",
+      "commands": [
+        "assert shared proposal",
+        "add members",
+        "record coalition position"
+      ],
+      "aggregates": [
+        "Coalition",
+        "ConflictTopic"
+      ],
+      "mapsToFr": "FR-017"
+    },
+    {
+      "name": "EvaluateStoppingCondition",
+      "context": "NegotiationSession",
+      "useCase": "Decide whether the negotiation closes: consensus threshold, round cap or deadlock; record the fired condition.",
+      "commands": [
+        "compute consensus level",
+        "check round cap",
+        "detect deadlock",
+        "close run"
+      ],
+      "aggregates": [
+        "SimulationRun"
+      ],
+      "mapsToFr": "FR-018"
+    },
+    {
+      "name": "ReplaySimulationHistory",
+      "context": "NegotiationSession",
+      "useCase": "Reconstruct a run to any round from persisted domain events for audit and re-render.",
+      "commands": [
+        "load event stream",
+        "fold events",
+        "rebuild projections"
+      ],
+      "aggregates": [
+        "SimulationRun",
+        "NegotiationRound"
+      ],
+      "mapsToFr": "FR-030"
+    },
+    {
+      "name": "DeriveConsensus",
+      "context": "ConsensusAnalysis",
+      "useCase": "Compute consensus, majority and minority positions and unresolved conflicts from the negotiation record.",
+      "commands": [
+        "classify stances per topic",
+        "compute support levels",
+        "separate majority/minority",
+        "list open conflicts"
+      ],
+      "aggregates": [
+        "ConsensusRecord",
+        "MajorityPosition",
+        "MinorityPosition"
+      ],
+      "mapsToFr": "FR-019"
+    },
+    {
+      "name": "ComposeCompromisePackage",
+      "context": "ConsensusAnalysis",
+      "useCase": "Assemble accepted proposal components into a compromise package with provenance.",
+      "commands": [
+        "collect accepted components",
+        "merge compatible proposals",
+        "attach provenance",
+        "record rejected proposals"
+      ],
+      "aggregates": [
+        "CompromisePackage"
+      ],
+      "mapsToFr": "FR-020"
+    },
+    {
+      "name": "AssessImpact",
+      "context": "ConsensusAnalysis",
+      "useCase": "Attach scenario impact estimates with assumptions and uncertainty to each package.",
+      "commands": [
+        "state assumptions",
+        "estimate scenario effect",
+        "label uncertainty"
+      ],
+      "aggregates": [
+        "ImpactAssessment",
+        "CompromisePackage"
+      ],
+      "mapsToFr": "FR-021"
+    },
+    {
+      "name": "PublishDecisionBrief",
+      "context": "DecisionBrief",
+      "useCase": "Project the completed run into the eight-section brief with resolvable citations.",
+      "commands": [
+        "collect sections",
+        "resolve citations",
+        "assert all sections present",
+        "publish brief"
+      ],
+      "aggregates": [
+        "DecisionBrief",
+        "BriefSection",
+        "CitationReference"
+      ],
+      "mapsToFr": "FR-022"
+    },
+    {
+      "name": "VerifyClaim",
+      "context": "ClaimValidation",
+      "useCase": "Check a quantitative or legal claim against authoritative sources and reject contradictions.",
+      "commands": [
+        "extract claim",
+        "retrieve authoritative evidence",
+        "compare figures",
+        "record verdict"
+      ],
+      "aggregates": [
+        "Claim",
+        "ClaimVerification"
+      ],
+      "mapsToFr": "FR-023"
+    },
+    {
+      "name": "FlagUnsupportedAssertion",
+      "context": "ClaimValidation",
+      "useCase": "Detect claims without evidence and mark them low-confidence.",
+      "commands": [
+        "detect missing citations",
+        "record unsupported flag",
+        "propagate confidence"
+      ],
+      "aggregates": [
+        "Claim",
+        "ContradictionFinding"
+      ],
+      "mapsToFr": "FR-024"
+    },
+    {
+      "name": "EnforceInstitutionOnlyOutput",
+      "context": "GovernanceCompliance",
+      "useCase": "Reject agent output that names or quotes real persons before it reaches persistence.",
+      "commands": [
+        "scan for person references",
+        "scan for direct quotations",
+        "reject or rewrite",
+        "record violation"
+      ],
+      "aggregates": [
+        "InstitutionOnlyRule",
+        "ProhibitedPersonReference"
+      ],
+      "mapsToFr": "FR-025"
+    },
+    {
+      "name": "DisclosePositionProvenance",
+      "context": "GovernanceCompliance",
+      "useCase": "Produce the derivation record for each position: sources, arguments and model invocation reference.",
+      "commands": [
+        "collect derivation inputs",
+        "attach invocation metadata",
+        "emit ProvenanceDisclosure"
+      ],
+      "aggregates": [
+        "ProvenanceDisclosure"
+      ],
+      "mapsToFr": "FR-026"
+    },
+    {
+      "name": "RunSimulationJob",
+      "context": "SimulationOrchestration",
+      "useCase": "Execute the agent workflow graph as a background job, emitting progress events and supporting pause/resume.",
+      "commands": [
+        "enqueue job",
+        "advance graph node",
+        "emit progress event",
+        "pause/resume",
+        "record invocation metadata"
+      ],
+      "aggregates": [
+        "SimulationJob",
+        "AgentInvocation",
+        "ProgressEvent"
+      ],
+      "mapsToFr": "FR-027"
+    },
+    {
+      "name": "ExtractDocumentText",
+      "context": "EvidenceCorpus",
+      "useCase": "Extract text natively when a text layer exists, fall back to OCR for scanned pages, and store the resulting extraction quality and method.",
+      "commands": [
+        "probe text layer",
+        "select native or ocr path",
+        "run extraction",
+        "measure missing-glyph rate",
+        "accept or reject document"
+      ],
+      "aggregates": [
+        "Document"
+      ],
+      "mapsToFr": "FR-002"
+    },
+    {
+      "name": "LinkCanonicalArticle",
+      "context": "EvidenceCorpus",
+      "useCase": "Detect syndicated and duplicate articles by content similarity and attach them to one canonical article so citations and evidence counts collapse correctly.",
+      "commands": [
+        "compute content fingerprint",
+        "compare against existing articles",
+        "elect canonical article",
+        "link duplicates"
+      ],
+      "aggregates": [
+        "Article",
+        "CorpusCollection"
+      ],
+      "mapsToFr": "FR-005"
+    },
+    {
+      "name": "StreamSimulationProgress",
+      "context": "SimulationOrchestration",
+      "useCase": "Publish ordered progress events for a running simulation so clients observe rounds, turns and position changes as they commit.",
+      "commands": [
+        "subscribe to run event stream",
+        "order events by commit sequence",
+        "emit progress event",
+        "close stream on run end"
+      ],
+      "aggregates": [
+        "ProgressEvent",
+        "SimulationJob"
+      ],
+      "mapsToFr": "FR-027"
+    },
+    {
+      "name": "PauseOrResumeSimulation",
+      "context": "SimulationOrchestration",
+      "useCase": "Pause a running job at a safe boundary and resume it later from persisted negotiation state without losing rounds or arguments.",
+      "commands": [
+        "request pause",
+        "finish current turn boundary",
+        "persist checkpoint reference",
+        "resume from last committed round"
+      ],
+      "aggregates": [
+        "SimulationJob",
+        "ProgressEvent"
+      ],
+      "mapsToFr": "FR-028"
+    },
+    {
+      "name": "RecordAgentInvocation",
+      "context": "SimulationOrchestration",
+      "useCase": "Persist the traceability envelope of every agent call: model, prompt template version, parameters, evidence pack ids and token cost.",
+      "commands": [
+        "capture model and prompt version",
+        "attach evidence pack ids",
+        "record token and latency cost",
+        "link invocation to produced argument"
+      ],
+      "aggregates": [
+        "AgentInvocation",
+        "SimulationJob"
+      ],
+      "mapsToFr": "FR-029"
+    },
+    {
+      "name": "ScoreEvidenceCandidates",
+      "context": "EvidenceRetrieval",
+      "useCase": "Compute the inspectable weight breakdown for every candidate — authority weight, lexical score, semantic similarity, recency weight and directness — and rank them so the jury can see why evidence was used.",
+      "commands": [
+        "resolve authority weight from tier",
+        "attach lexical and semantic scores",
+        "compute directness against claim",
+        "apply recency weight",
+        "emit EvidenceScore and rank"
+      ],
+      "aggregates": [
+        "EvidenceCandidate",
+        "EvidenceScore",
+        "AuthorityTier"
+      ],
+      "mapsToFr": "FR-008"
+    },
+    {
+      "name": "TranslateQuestionToMandate",
+      "context": "NegotiationSession",
+      "useCase": "Moderator-specific framing: convert the free-text policy question into a testable mandate with objective, target metric, time horizon, budget constraint and negotiation rules before any run exists.",
+      "commands": [
+        "extract objective and target metric",
+        "extract time horizon",
+        "extract budget and feasibility constraints",
+        "declare negotiation rules",
+        "emit NegotiationMandate"
+      ],
+      "aggregates": [
+        "NegotiationMandate"
+      ],
+      "mapsToFr": "FR-012"
+    },
+    {
+      "name": "SelectRelevantStakeholders",
+      "context": "StakeholderModel",
+      "useCase": "Moderator-specific selection: determine which institutions are materially affected by the mandate and may therefore be bound into the run.",
+      "commands": [
+        "map mandate topics to stakeholder interests",
+        "score materiality",
+        "exclude irrelevant institutions",
+        "assert minimum viable set"
+      ],
+      "aggregates": [
+        "Stakeholder",
+        "StakeholderProfile"
+      ],
+      "mapsToFr": "FR-011"
+    },
+    {
+      "name": "DetectArgumentContradiction",
+      "context": "NegotiationSession",
+      "useCase": "Moderator-specific arbitration: detect when two stakeholders assert incompatible claims or refuse to justify a position, and force a justification turn.",
+      "commands": [
+        "compare claims across arguments",
+        "request justification",
+        "open or escalate conflict topic",
+        "record procedural note"
+      ],
+      "aggregates": [
+        "Argument",
+        "ConflictTopic",
+        "SimulationRun"
+      ],
+      "mapsToFr": "FR-016"
+    },
+    {
+      "name": "SummariseIntermediateResult",
+      "context": "NegotiationSession",
+      "useCase": "Moderator-specific interim documentation after each round: agreed points, open conflicts, emerged options and failed proposals, so convergence is observable mid-run.",
+      "commands": [
+        "collect round arguments",
+        "classify agreed vs contested",
+        "list emerged options",
+        "list failed proposals",
+        "emit interim summary"
+      ],
+      "aggregates": [
+        "NegotiationRound",
+        "ConflictTopic",
+        "SimulationRun"
+      ],
+      "mapsToFr": "FR-019"
+    },
+    {
+      "name": "PinCorpusSnapshot",
+      "context": "EvidenceCorpus",
+      "useCase": "Freeze the exact document set and index version a run may search, so the evidence base of a published brief is reproducible after re-ingestion.",
+      "commands": [
+        "select covered documents",
+        "compute snapshot manifest hash",
+        "pin index version",
+        "emit CorpusCollection"
+      ],
+      "aggregates": [
+        "CorpusCollection",
+        "Document"
+      ],
+      "mapsToFr": "FR-001"
+    },
+    {
+      "name": "IndexIngestedPassages",
+      "context": "EvidenceCorpus",
+      "useCase": "Publish extracted passages into the hybrid index (BM25 + vectors) with provenance payloads, keeping ingestion and searchability decoupled and idempotent.",
+      "commands": [
+        "collect accepted passages",
+        "build lexical index entries",
+        "compute embeddings",
+        "upsert vector payload with provenance",
+        "mark indexed"
+      ],
+      "aggregates": [
+        "Passage",
+        "CorpusCollection"
+      ],
+      "mapsToFr": "FR-002"
+    },
+    {
+      "name": "RecordGovernanceViolation",
+      "context": "GovernanceCompliance",
+      "useCase": "Persist a rejected agent output with its violation class, the offending span and the rewrite that replaced it, so the transparency rule is provably enforced.",
+      "commands": [
+        "classify violation",
+        "capture offending span",
+        "store rewritten output",
+        "link to agent invocation",
+        "emit violation record"
+      ],
+      "aggregates": [
+        "ProhibitedPersonReference",
+        "ProvenanceDisclosure"
+      ],
+      "mapsToFr": "FR-025"
+    },
+    {
+      "name": "VersionDecisionBrief",
+      "context": "DecisionBrief",
+      "useCase": "Republish a brief for the same run as an immutable successor version, preserving the prior version and the reason for regeneration.",
+      "commands": [
+        "assert prior brief published",
+        "capture regeneration reason",
+        "supersede old version",
+        "emit new BriefVersion"
+      ],
+      "aggregates": [
+        "DecisionBrief",
+        "BriefVersion"
+      ],
+      "mapsToFr": "FR-022"
+    },
+    {
+      "name": "CompareScenarios",
+      "context": "ConsensusAnalysis",
+      "useCase": "Evaluate alternative compromise packages side by side on cost, acceptance and feasibility so the brief can state why one package was recommended over another.",
+      "commands": [
+        "select packages to compare",
+        "score cost acceptance and feasibility",
+        "rank alternatives",
+        "record comparison basis"
+      ],
+      "aggregates": [
+        "CompromisePackage",
+        "ImpactAssessment"
+      ],
+      "mapsToFr": "FR-021"
+    },
+    {
+      "name": "RecordHistoricalPosition",
+      "context": "StakeholderModel",
+      "useCase": "Extract and store a provenance-backed past institutional stance from corpus evidence, weighted below current events, so personas argue from documented history rather than invention.",
+      "commands": [
+        "retrieve evidence about institution",
+        "extract stated stance",
+        "attach provenance and publication date",
+        "apply recency weight",
+        "emit HistoricalPosition"
+      ],
+      "aggregates": [
+        "HistoricalPosition",
+        "Stakeholder"
+      ],
+      "mapsToFr": "FR-011"
+    },
+    {
+      "name": "RecordAbstention",
+      "context": "NegotiationSession",
+      "useCase": "Close the gap in round-close invariant FR-014: a stakeholder that neither argues nor revises must be explicitly recorded as abstaining on a topic before the round can close.",
+      "commands": [
+        "detect missing turn",
+        "record abstention with topic",
+        "assert no open turn remains",
+        "permit round close"
+      ],
+      "aggregates": [
+        "NegotiationRound",
+        "Position"
+      ],
+      "mapsToFr": "FR-014"
+    },
+    {
+      "name": "ResolveMeasureIdentity",
+      "context": "ClaimValidation",
+      "useCase": "Normalise a claim's measure into a comparable identity (measure, unit, period, geography) so that figures from different agents and sources can be tested for contradiction.",
+      "commands": [
+        "extract measure name and unit",
+        "normalise reference period",
+        "normalise geography and population",
+        "reconcile with existing MeasureReference",
+        "emit ComparisonKey"
+      ],
+      "aggregates": [
+        "Claim",
+        "MeasureReference"
+      ],
+      "mapsToFr": "FR-023"
+    }
+  ],
+  "domainEvents": [
+    {
+      "name": "DocumentIngested",
+      "context": "EvidenceCorpus",
+      "description": "A source file was registered, extracted and quality-assessed.",
+      "triggeredBy": "IngestDocument",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "DocumentExtractionFailed",
+      "context": "EvidenceCorpus",
+      "description": "Extraction could not reach the acceptance threshold; document excluded from citation.",
+      "triggeredBy": "IngestDocument",
+      "triage": {
+        "domainExpertCares": false,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ArticleSegmented",
+      "context": "EvidenceCorpus",
+      "description": "Article boundaries and publication metadata were resolved for a document.",
+      "triggeredBy": "SegmentArticle",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": false
+      }
+    },
+    {
+      "name": "AuthorityTierAssigned",
+      "context": "EvidenceCorpus",
+      "description": "A source was classified into an authority tier used for evidence weighting.",
+      "triggeredBy": "ClassifySourceAuthority",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "DuplicateArticleLinked",
+      "context": "EvidenceCorpus",
+      "description": "A syndicated copy was linked to a canonical article so citations collapse correctly and duplicate reporting does not inflate evidence support.",
+      "triggeredBy": "ClassifySourceAuthority",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "EvidencePackAssembled",
+      "context": "EvidenceRetrieval",
+      "description": "A balanced, scored evidence pack was frozen for a claim.",
+      "triggeredBy": "AssembleEvidencePack",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ContradictingEvidenceSurfaced",
+      "context": "EvidenceRetrieval",
+      "description": "Evidence opposing the requesting stakeholder's position was found and included in the pack.",
+      "triggeredBy": "AssembleEvidencePack",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "StakeholderRegistered",
+      "context": "StakeholderModel",
+      "description": "A new institutional stakeholder entered the registry with mandate and profile.",
+      "triggeredBy": "RegisterStakeholder",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "StakeholderProfileUpdated",
+      "context": "StakeholderModel",
+      "description": "Interests, constraints or priorities changed; affects all future runs but not running ones.",
+      "triggeredBy": "RegisterStakeholder",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "AgentPersonaBound",
+      "context": "StakeholderModel",
+      "description": "A stakeholder was bound to an agent persona for a specific run.",
+      "triggeredBy": "BindAgentPersona",
+      "triage": {
+        "domainExpertCares": false,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "HistoricalPositionRecorded",
+      "context": "StakeholderModel",
+      "description": "A past institutional stance was extracted and stored with provenance.",
+      "triggeredBy": "BindAgentPersona",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": false,
+        "needsAudit": false
+      }
+    },
+    {
+      "name": "MandateViolationDetected",
+      "context": "StakeholderModel",
+      "description": "A proposed concession exceeded the stakeholder's declared constraints or budget limits.",
+      "triggeredBy": "BindAgentPersona",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "SimulationRunOpened",
+      "context": "NegotiationSession",
+      "description": "A run was created from a mandate with pinned corpus and stakeholders.",
+      "triggeredBy": "OpenSimulationRun",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "RoundOpened",
+      "context": "NegotiationSession",
+      "description": "A new negotiation round started with its turn order.",
+      "triggeredBy": "TakeNegotiationTurn",
+      "triage": {
+        "domainExpertCares": false,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "InitialPositionStated",
+      "context": "NegotiationSession",
+      "description": "A stakeholder opened its evidenced starting position.",
+      "triggeredBy": "SubmitInitialPosition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ArgumentSubmitted",
+      "context": "NegotiationSession",
+      "description": "A stakeholder contributed an argument with stance, claims and citations.",
+      "triggeredBy": "TakeNegotiationTurn",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "PositionRevised",
+      "context": "NegotiationSession",
+      "description": "A stakeholder changed its position with a recorded reason and evidence.",
+      "triggeredBy": "RevisePosition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "PositionRevisionRejected",
+      "context": "NegotiationSession",
+      "description": "A position change was refused because no causal reason or evidence reference was supplied.",
+      "triggeredBy": "RevisePosition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": false,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ConflictTopicOpened",
+      "context": "NegotiationSession",
+      "description": "Divergence between stakeholders was formalised as a tracked conflict.",
+      "triggeredBy": "TrackConflictTopic",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "CoalitionFormed",
+      "context": "NegotiationSession",
+      "description": "Several stakeholders aligned behind one shared proposal on a conflict topic.",
+      "triggeredBy": "FormCoalition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "RoundClosed",
+      "context": "NegotiationSession",
+      "description": "All turns for the round completed; convergence measured.",
+      "triggeredBy": "TakeNegotiationTurn",
+      "triage": {
+        "domainExpertCares": false,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "SimulationRunClosed",
+      "context": "NegotiationSession",
+      "description": "The run terminated because a stopping condition fired.",
+      "triggeredBy": "EvaluateStoppingCondition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ConsensusDetermined",
+      "context": "ConsensusAnalysis",
+      "description": "Consensus level for a conflict topic was derived from recorded stances.",
+      "triggeredBy": "DeriveConsensus",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "MinorityPositionRecorded",
+      "context": "ConsensusAnalysis",
+      "description": "A dissenting stance was recorded with holders and reasons.",
+      "triggeredBy": "DeriveConsensus",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "CompromisePackageComposed",
+      "context": "ConsensusAnalysis",
+      "description": "Accepted components were combined into a package with rejected proposals documented.",
+      "triggeredBy": "ComposeCompromisePackage",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ImpactAssessed",
+      "context": "ConsensusAnalysis",
+      "description": "Scenario impacts were estimated for a package with stated assumptions and uncertainty.",
+      "triggeredBy": "AssessImpact",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "UnresolvedConflictDeclared",
+      "context": "ConsensusAnalysis",
+      "description": "A conflict remained open at run close and was carried into the brief.",
+      "triggeredBy": "DeriveConsensus",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "DecisionBriefPublished",
+      "context": "DecisionBrief",
+      "description": "A complete, citation-resolved brief was published for a closed run.",
+      "triggeredBy": "PublishDecisionBrief",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "CitationResolutionFailed",
+      "context": "DecisionBrief",
+      "description": "A citation could not be resolved to a passage provenance; publication blocked.",
+      "triggeredBy": "PublishDecisionBrief",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": false,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "DecisionBriefVersioned",
+      "context": "DecisionBrief",
+      "description": "A new brief version was produced from the same run.",
+      "triggeredBy": "PublishDecisionBrief",
+      "triage": {
+        "domainExpertCares": false,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ClaimExtracted",
+      "context": "ClaimValidation",
+      "description": "A verifiable assertion was extracted from an argument.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": false,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ClaimVerified",
+      "context": "ClaimValidation",
+      "description": "A claim was confirmed against an authoritative source.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ClaimRejected",
+      "context": "ClaimValidation",
+      "description": "A claim was contradicted by authoritative evidence; the argument may not stand on it.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "UnsupportedAssertionFlagged",
+      "context": "ClaimValidation",
+      "description": "A claim had no adequate evidence and was flagged low-confidence.",
+      "triggeredBy": "FlagUnsupportedAssertion",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ContradictionDetected",
+      "context": "ClaimValidation",
+      "description": "Two claims or a claim and an authoritative figure were found incompatible.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "QuotationBlockDetected",
+      "context": "EvidenceCorpus",
+      "description": "A passage region was classified as quoted or reported speech of a person and flagged as non-promotable evidence.",
+      "triggeredBy": "SegmentArticle",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "DocumentQuarantined",
+      "context": "EvidenceCorpus",
+      "description": "A document failed the extraction quality gate and was excluded from the citable corpus while remaining retrievable for diagnostics.",
+      "triggeredBy": "ExtractDocumentText",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "IngestionRunCompleted",
+      "context": "EvidenceCorpus",
+      "description": "A batch ingestion finished with accepted, quarantined and failed counts recorded against the run.",
+      "triggeredBy": "IngestDocument",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "IndexManifestPublished",
+      "context": "EvidenceCorpus",
+      "description": "A new index version became searchable for a corpus snapshot, making previously ingested passages citable.",
+      "triggeredBy": "IndexIngestedPassages",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "PassageRevertedFromIndex",
+      "context": "EvidenceCorpus",
+      "description": "A passage was removed from the live index because its document was retracted or found unusable, so no future argument can cite it.",
+      "triggeredBy": "IndexIngestedPassages",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "NegotiatingPowerChanged",
+      "context": "StakeholderModel",
+      "description": "An institution's derived leverage changed because its mandate scope, budget authority or veto rights changed, altering which coalitions are viable.",
+      "triggeredBy": "RegisterStakeholder",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "VetoRightRegistered",
+      "context": "StakeholderModel",
+      "description": "An institution's power to block a class of proposals was declared, making majority-only consensus insufficient.",
+      "triggeredBy": "RegisterStakeholder",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "DependencyRecorded",
+      "context": "StakeholderModel",
+      "description": "A directional dependency between two institutions was registered, enabling coalition and blockade analysis.",
+      "triggeredBy": "RegisterStakeholder",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": false
+      }
+    },
+    {
+      "name": "NegotiationPhaseAdvanced",
+      "context": "NegotiationSession",
+      "description": "The run entered the next process phase, changing which commands are admissible and which UI stage is shown.",
+      "triggeredBy": "EvaluateStoppingCondition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "CoalitionOffered",
+      "context": "NegotiationSession",
+      "description": "A stakeholder invited another institution to join a shared proposal with stated conditions.",
+      "triggeredBy": "FormCoalition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "CoalitionOfferDeclined",
+      "context": "NegotiationSession",
+      "description": "An invited institution refused a coalition on a conflict topic, with its stated reason.",
+      "triggeredBy": "FormCoalition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ScenarioDefined",
+      "context": "ConsensusAnalysis",
+      "description": "A baseline-versus-package scenario was defined with horizon, population and assumptions before any impact figure was produced.",
+      "triggeredBy": "AssessImpact",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ConsensusBlockedByVeto",
+      "context": "ConsensusAnalysis",
+      "description": "A proposal reached the support threshold but cannot be recorded as consensus because an institution holds a blocking competence over its class.",
+      "triggeredBy": "DeriveConsensus",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "FeasibilityRated",
+      "context": "ConsensusAnalysis",
+      "description": "Political, legal and administrative feasibility of a package was rated with its stated basis.",
+      "triggeredBy": "AssessImpact",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "RejectedProposalDisclosed",
+      "context": "DecisionBrief",
+      "description": "A proposal that failed to gather support was disclosed in the brief with its blockers and reasons.",
+      "triggeredBy": "PublishDecisionBrief",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "BriefBlockedByMissingDisclosure",
+      "context": "DecisionBrief",
+      "description": "Publication was refused because a required disclosure (rejected proposal, unsupported statement or disclaimer) was absent.",
+      "triggeredBy": "PublishDecisionBrief",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": false,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ReferenceFigureRegistered",
+      "context": "ClaimValidation",
+      "description": "A canonical authoritative value was registered for a measure, establishing the comparison baseline for future claims.",
+      "triggeredBy": "ResolveMeasureIdentity",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ClaimEscalatedForReview",
+      "context": "ClaimValidation",
+      "description": "A claim the deterministic checks could not settle was escalated to expert review and left unverified meanwhile.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ExpertReviewResolved",
+      "context": "ClaimValidation",
+      "description": "An escalated claim received a verdict with its basis, settling or confirming its uncertainty.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "RoundLearningCaptured",
+      "context": "NegotiationSession",
+      "description": "The outcome of a round was distilled into a persisted learning record consumed by every bound stakeholder in the next round.",
+      "triggeredBy": "TakeNegotiationTurn",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "LearningApplied",
+      "context": "NegotiationSession",
+      "description": "A stakeholder explicitly applied a captured insight, adapting its argument or position because of what happened earlier in this negotiation.",
+      "triggeredBy": "RevisePosition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "MandateSourceCited",
+      "context": "StakeholderModel",
+      "description": "An authority claim was grounded in a citable instrument, making the stakeholder's power auditable rather than asserted.",
+      "triggeredBy": "RegisterStakeholder",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "AuthorityClaimRejected",
+      "context": "StakeholderModel",
+      "description": "A veto right, competence or budget limit was refused because no admissible mandate source backed it.",
+      "triggeredBy": "RegisterStakeholder",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "WeakAttributionFlagged",
+      "context": "StakeholderModel",
+      "description": "A historical position was stored with weak or indirect attribution and marked unusable for overriding current statements.",
+      "triggeredBy": "RecordHistoricalPosition",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": false,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "UnbackedEstimateBlocked",
+      "context": "ConsensusAnalysis",
+      "description": "An impact figure was refused because it declared a computed basis without enumerable inputs.",
+      "triggeredBy": "AssessImpact",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": false,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "EvidenceAbsenceRecorded",
+      "context": "EvidenceRetrieval",
+      "description": "A stance produced no qualifying evidence and the absence was recorded together with the searches that failed to find any.",
+      "triggeredBy": "AssembleEvidencePack",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "PersonalQuotationExcluded",
+      "context": "EvidenceCorpus",
+      "description": "A quotation attributed to a natural person was marked non-citable so it can never reach an agent's evidence pack.",
+      "triggeredBy": "SegmentArticle",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "InstitutionalStatementAttributed",
+      "context": "EvidenceCorpus",
+      "description": "A statement attributed to an institution (not a person) was retained as citable evidence of that institution's position.",
+      "triggeredBy": "SegmentArticle",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "ClaimMarkedUnverifiable",
+      "context": "ClaimValidation",
+      "description": "A claim could not be verified by any applicable path and was recorded as explicitly ambiguous instead of being dropped.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    },
+    {
+      "name": "CausalClaimAppraised",
+      "context": "ClaimValidation",
+      "description": "A causal claim was appraised against study evidence and recorded as supported, contested or unaddressed, never as verified fact.",
+      "triggeredBy": "VerifyClaim",
+      "triage": {
+        "domainExpertCares": true,
+        "crossesAggregateBoundary": true,
+        "needsAudit": true
+      }
+    }
+  ],
+  "ubiquitousLanguage": [
+    {
+      "term": "Document",
+      "definition": "A physical ingested source file before editorial segmentation.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "file",
+        "pdf",
+        "source file"
+      ],
+      "examples": "press_archive_2020_issue_142.pdf"
+    },
+    {
+      "term": "Article",
+      "definition": "One editorial unit segmented out of a Document, carrying headline, date and page.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "news item",
+        "story",
+        "post"
+      ],
+      "examples": "'Ärztekammer fordert mehr Kassenstellen' (2020-03-14, p. 7)"
+    },
+    {
+      "term": "Passage",
+      "definition": "The smallest citable text span; the unit that is indexed, retrieved and cited.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "chunk",
+        "snippet",
+        "fragment"
+      ],
+      "examples": "Passage #3 of Article 17, offsets 1420-1985"
+    },
+    {
+      "term": "Authority Tier",
+      "definition": "Ranked credibility rubric owned by the corpus, published to consumers; retrieval never defines trust itself.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "trust level",
+        "credibility",
+        "source rank"
+      ],
+      "examples": "legislation > official-statistics > scientific-study > institutional-statement > press-report"
+    },
+    {
+      "term": "Extraction Quality",
+      "definition": "Measured confidence that a Document's text faithfully represents the physical source.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "ocr confidence",
+        "parse quality"
+      ],
+      "examples": "ocr, 0.83, 1.2% missing glyphs, accepted"
+    },
+    {
+      "term": "Provenance",
+      "definition": "Immutable locator bundle that lets any citation be resolved to a page and offset.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "citation locator",
+        "source pointer"
+      ],
+      "examples": "doc:D-142/article:A-17/page:7/offsets:1420-1985"
+    },
+    {
+      "term": "Corpus Snapshot",
+      "definition": "The versioned document set a simulation run searched, frozen at run start.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "dataset version",
+        "index version"
+      ],
+      "examples": "corpus-2020-v3 pinned to run R-11"
+    },
+    {
+      "term": "Evidence Pack",
+      "definition": "Frozen, balanced and scored set of supporting, contradicting and contextual evidence for one claim.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "context bundle",
+        "rag result",
+        "hits"
+      ],
+      "examples": "EvidencePack EP-88 for claim 'specialist vacancies rose 12%'"
+    },
+    {
+      "term": "Stance Label",
+      "definition": "Whether a passage supports, contradicts, contextualises or is tangential to a claim.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "polarity",
+        "sentiment"
+      ],
+      "examples": "contradicting"
+    },
+    {
+      "term": "Recency Policy",
+      "definition": "Configured decay that weights newer publications above older ones.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "decay",
+        "freshness boost"
+      ],
+      "examples": "exp decay, half-life 18 months, reference 2020-12-31"
+    },
+    {
+      "term": "Evidence Score",
+      "definition": "Inspectable multi-component weighting including authority, relevance, recency and directness.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "confidence",
+        "relevance score"
+      ],
+      "examples": "authority 1.0, bm25 8.4, cosine 0.81, recency 0.62, direct 1.0"
+    },
+    {
+      "term": "Evidence Gap",
+      "definition": "State where a claim has no evidence above threshold, forcing an unsupported flag rather than an invented citation.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "no results",
+        "missing data"
+      ],
+      "examples": "gap on claim about 2035 spending projection"
+    },
+    {
+      "term": "Directness",
+      "definition": "Whether a passage explicitly states the claim versus merely talking about the same topic.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "specificity",
+        "explicitness"
+      ],
+      "examples": "direct: 'Die Wartezeiten stiegen um 22 Prozent'"
+    },
+    {
+      "term": "Stakeholder",
+      "definition": "An institution of the Austrian healthcare system represented in the negotiation. Never a natural person.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "actor",
+        "player",
+        "party",
+        "participant"
+      ],
+      "examples": "Dachverband der Sozialversicherungsträger"
+    },
+    {
+      "term": "Stakeholder Profile",
+      "definition": "Mandate, interests, constraints, budget limits and decision priorities of a Stakeholder.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "persona spec",
+        "agent config"
+      ],
+      "examples": "social insurance: cost containment weighted 0.4, legal competence limited to statutory benefits"
+    },
+    {
+      "term": "Interest",
+      "definition": "A weighted goal the stakeholder optimises for, scoped to policy topics.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "objective",
+        "preference"
+      ],
+      "examples": "reduce waiting times, weight 0.35"
+    },
+    {
+      "term": "Constraint",
+      "definition": "A hard limit the stakeholder cannot concede in negotiation.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "red line",
+        "limit",
+        "restriction"
+      ],
+      "examples": "no additional federal spending beyond 5%"
+    },
+    {
+      "term": "Budget Limit",
+      "definition": "Numeric spending envelope within which proposals are acceptable.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "budget cap",
+        "cost ceiling"
+      ],
+      "examples": "+5% vs 2020 baseline by 2025"
+    },
+    {
+      "term": "Historical Position",
+      "definition": "A provenance-backed past institutional stance, weighted lower than current events.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "past statement",
+        "legacy stance"
+      ],
+      "examples": "2020 statement opposing mandatory telemedicine"
+    },
+    {
+      "term": "Agent Binding",
+      "definition": "Immutable link of one Stakeholder Profile to the agent that negotiates on its behalf in a run.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "persona binding",
+        "agent assignment"
+      ],
+      "examples": "run R-11 / Stakeholder SV-01 / persona v2"
+    },
+    {
+      "term": "Simulation Run",
+      "definition": "One end-to-end negotiation over one policy question.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "session",
+        "job",
+        "simulation"
+      ],
+      "examples": "run R-11: waiting-time reduction question"
+    },
+    {
+      "term": "Negotiation Mandate",
+      "definition": "Moderator framing of the question: objective, constraints, actors, rules, stopping conditions.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "brief",
+        "task",
+        "setup"
+      ],
+      "examples": "reduce waiting times 20% in 5 years, budget +5% max"
+    },
+    {
+      "term": "Position",
+      "definition": "A stakeholder's current evidenced stance on a conflict topic, with revision lineage.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "opinion",
+        "view",
+        "stance"
+      ],
+      "examples": "Support telemedicine expansion for selected services"
+    },
+    {
+      "term": "Argument",
+      "definition": "One turn's reasoned contribution with stance, claims and citations.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "message",
+        "utterance",
+        "chat line"
+      ],
+      "examples": "SV: new posts create recurring cost; cites EP-88"
+    },
+    {
+      "term": "Conflict Topic",
+      "definition": "A formalised point of institutional disagreement tracked across rounds.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "issue",
+        "disagreement",
+        "gap"
+      ],
+      "examples": "Number of additional contract positions"
+    },
+    {
+      "term": "Coalition",
+      "definition": "Stakeholders aligned on one conflict topic behind an explicit shared proposal.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "alliance",
+        "bloc"
+      ],
+      "examples": "provinces + patient rep on rural mobile units"
+    },
+    {
+      "term": "Revision Reason",
+      "definition": "Structured justification citing the arguments and evidence that caused a position change.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "explanation",
+        "rationale"
+      ],
+      "examples": "moved after EP-88 contradicted cost assumption"
+    },
+    {
+      "term": "Stopping Condition",
+      "definition": "The named rule that terminated the run.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "exit criterion",
+        "termination rule"
+      ],
+      "examples": "round_cap_reached"
+    },
+    {
+      "term": "Consensus Record",
+      "definition": "Derived per-topic outcome statement of agreement level among stakeholders.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "agreement summary",
+        "result"
+      ],
+      "examples": "4 of 9 support telemedicine expansion, threshold met"
+    },
+    {
+      "term": "Majority Position",
+      "definition": "Stance carried by most weight-bearing stakeholders on a topic.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "winning view"
+      ],
+      "examples": "expansion of contract positions in shortage regions"
+    },
+    {
+      "term": "Minority Position",
+      "definition": "Dissenting stance with holders and reasons, preserved explicitly.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "dissent",
+        "objection"
+      ],
+      "examples": "Ministry of Finance opposes recurring cost commitment"
+    },
+    {
+      "term": "Compromise Package",
+      "definition": "Bundle of individually accepted, mutually compatible measures with provenance.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "deal",
+        "package",
+        "settlement"
+      ],
+      "examples": "telemedicine + contract posts + digital triage + dashboard"
+    },
+    {
+      "term": "Rejected Proposal",
+      "definition": "A measure that did not reach support and is documented as not carried.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "failed proposal",
+        "discarded option"
+      ],
+      "examples": "nationwide remuneration cuts"
+    },
+    {
+      "term": "Impact Assessment",
+      "definition": "Scenario effect estimate with explicit assumptions and uncertainty label.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "forecast",
+        "projection"
+      ],
+      "examples": "waiting time -22%, budget +4.3%, modelled, medium confidence"
+    },
+    {
+      "term": "Uncertainty Label",
+      "definition": "Stated basis of an estimate: evidenced, modelled or assumed.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "confidence",
+        "certainty"
+      ],
+      "examples": "modelled"
+    },
+    {
+      "term": "Decision Brief",
+      "definition": "The complete published negotiation result artefact with eight sections and resolvable citations.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "report",
+        "result page",
+        "answer"
+      ],
+      "examples": "DecisionBrief for run R-11, v1"
+    },
+    {
+      "term": "Brief Section",
+      "definition": "One of the eight mandated components of the brief.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "chapter",
+        "block"
+      ],
+      "examples": "Conflict Analysis"
+    },
+    {
+      "term": "Citation Reference",
+      "definition": "Resolvable pointer from a brief statement to an evidence passage with provenance.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "source note",
+        "footnote",
+        "link"
+      ],
+      "examples": "→ doc D-142, p.7, offsets 1420-1985"
+    },
+    {
+      "term": "Actor Summary",
+      "definition": "Institution, goals, constraints and adopted positions shown in the actors section.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "agent card",
+        "participant profile"
+      ],
+      "examples": "Social insurance: cost containment 0.4, telemedicine supporter"
+    },
+    {
+      "term": "Position Timeline",
+      "definition": "Stance trajectory per stakeholder across rounds for the change visualisation.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "evolution chart",
+        "stance history"
+      ],
+      "examples": "patient rep: oppose → qualify → support (R1-R5)"
+    },
+    {
+      "term": "Claim",
+      "definition": "A verifiable assertion from an argument, typed by what verification it requires.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "fact",
+        "statement",
+        "assertion"
+      ],
+      "examples": "waiting times rose 22% between 2015 and 2020"
+    },
+    {
+      "term": "Claim Verification",
+      "definition": "The audited verdict for a claim with its source set and comparison method.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "fact check",
+        "validation"
+      ],
+      "examples": "supported by Statistik Austria table, method: direct comparison"
+    },
+    {
+      "term": "Unsupported Assertion",
+      "definition": "A claim with no adequate evidence, surfaced as low-confidence rather than removed.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "unsourced claim",
+        "guess"
+      ],
+      "examples": "'telemedicine will cut costs by half' – no evidence"
+    },
+    {
+      "term": "Contradiction Finding",
+      "definition": "Detected incompatibility between two verified claims or a claim and an authoritative figure.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "conflict of figures",
+        "inconsistency"
+      ],
+      "examples": "cost figure 3.2bn vs 4.1bn for the same year"
+    },
+    {
+      "term": "Measure Reference",
+      "definition": "Normalised identity of a figure (measure, unit, period, geography) enabling comparison across agents.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "metric key",
+        "dimension"
+      ],
+      "examples": "waiting_time_days / AT / 2020"
+    },
+    {
+      "term": "Authoritative Source",
+      "definition": "A source tier admissible for verification, as opposed to press reporting.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "ground truth",
+        "official data"
+      ],
+      "examples": "SOZDOK legal text, Statistik Austria series"
+    },
+    {
+      "term": "Article Section",
+      "definition": "Typed region of an article (headline, standfirst, body, caption, quotation) used for directness scoring and quotation screening.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "zone",
+        "block type",
+        "layout part"
+      ],
+      "examples": "headline of A-17"
+    },
+    {
+      "term": "Quotation Block",
+      "definition": "Span of quoted or reported speech of a named person; retained structurally, never promoted as agent evidence.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "quote",
+        "citation of person",
+        "direct speech"
+      ],
+      "examples": "'...' sagte der Obmann (excluded from evidence packs)"
+    },
+    {
+      "term": "Canonical Article",
+      "definition": "The one article that owns citable passages when several syndicated copies exist.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "original article",
+        "master copy"
+      ],
+      "examples": "APA wire copy syndicated in 4 outlets → one canonical article"
+    },
+    {
+      "term": "Language Tag",
+      "definition": "German variant marker driving tokenisation and embedding choice.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "locale",
+        "lang code"
+      ],
+      "examples": "de-AT"
+    },
+    {
+      "term": "Quarantined Document",
+      "definition": "A document that failed the extraction quality gate and is excluded from citation but kept for diagnostics.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "rejected file",
+        "bad scan"
+      ],
+      "examples": "OCR confidence 0.41 on a skewed scan"
+    },
+    {
+      "term": "Ingestion Run",
+      "definition": "One auditable batch execution of corpus ingestion with accepted, quarantined and failed counts.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "import job",
+        "crawl",
+        "batch"
+      ],
+      "examples": "run IR-7: 1,204 attempted, 1,180 accepted, 14 quarantined, 10 failed"
+    },
+    {
+      "term": "Index Manifest",
+      "definition": "Published index version for a corpus snapshot, recording embedding model, indexed passages and searchable-since timestamp.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "index state",
+        "vector version"
+      ],
+      "examples": "manifest v12, model bge-m3, 480k passages, searchable since 2020-12-01T10:22Z"
+    },
+    {
+      "term": "Retracted Passage",
+      "definition": "An indexed passage withdrawn because its document was retracted or reclassified as unusable.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "removed chunk",
+        "deleted hit"
+      ],
+      "examples": "passage P-9912 withdrawn after rights clarification"
+    },
+    {
+      "term": "Authority Weight",
+      "definition": "Numeric trust weight derived from the corpus-owned source tier; the only way retrieval may express trust.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "trust score",
+        "credibility",
+        "AuthorityTier value"
+      ],
+      "examples": "legislation → 1.0, press-report → 0.4"
+    },
+    {
+      "term": "Retrieval Trace",
+      "definition": "Reproducibility record per pack: index manifest version, models used, rewrite applied, stance counts.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "provenance of retrieval",
+        "audit log"
+      ],
+      "examples": "manifest v12, embed bge-m3, rerank bge-reranker-v2"
+    },
+    {
+      "term": "Query Rewrite",
+      "definition": "Deterministic German-language expansion of a claim before search: compounds, umlauts, institutional synonyms.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "query expansion",
+        "normalisation"
+      ],
+      "examples": "'Kassenstellen' → 'Kassenvertragsstellen, Vertragsarztstellen'"
+    },
+    {
+      "term": "Negotiating Power",
+      "definition": "Derived institutional leverage from mandate scope, budget authority, veto rights and coalition centrality; never assigned by an agent.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "leverage",
+        "influence",
+        "weight"
+      ],
+      "examples": "Ministry of Finance: high budget authority, no clinical mandate"
+    },
+    {
+      "term": "Veto Right",
+      "definition": "Power to block a class of proposals outright, bounding what consensus is reachable.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "blocking power",
+        "reserved competence"
+      ],
+      "examples": "statutory benefit changes require insurer consent"
+    },
+    {
+      "term": "Dependency",
+      "definition": "Directional relation between institutions (funding, approval, staffing, data) with strength and affected proposal classes.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "link",
+        "reliance"
+      ],
+      "examples": "hospitals depend on provinces for investment funding"
+    },
+    {
+      "term": "Mandate Scope",
+      "definition": "Admissible range of agreement for an institution; bounds every concession its agent may make.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "competence",
+        "remit"
+      ],
+      "examples": "chamber may negotiate fees, not benefit baskets"
+    },
+    {
+      "term": "Turn Assignment",
+      "definition": "A stakeholder's allocated floor in a round, with order, topic and used/passed/abstained outcome.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "slot",
+        "speaking order"
+      ],
+      "examples": "R3 turn 4: hospitals on financing, passed"
+    },
+    {
+      "term": "Negotiation Phase",
+      "definition": "Monotonic process stage from position formation to closure that bounds legal commands.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "stage",
+        "step"
+      ],
+      "examples": "compromise"
+    },
+    {
+      "term": "Proposal",
+      "definition": "Structured substance of a position: measure, quantified effect, target population, cost, affected institutions.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "measure",
+        "plan",
+        "option"
+      ],
+      "examples": "+200 contract posts in shortage regions; EUR 84m/yr; 5-year horizon"
+    },
+    {
+      "term": "Proposal Component",
+      "definition": "One admissible part of a proposal with its own support record, assemblable into packages.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "building block",
+        "item"
+      ],
+      "examples": "digital specialist triage"
+    },
+    {
+      "term": "Coalition Offer",
+      "definition": "Recorded invitation to join a shared proposal, with conditions and accept/decline outcome.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "invitation",
+        "ask"
+      ],
+      "examples": "provinces invited patient reps to joint rural proposal; declined"
+    },
+    {
+      "term": "Scenario",
+      "definition": "A counterfactual assessed against a baseline: the measures of one package, a horizon, an affected population and stated assumptions.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "case",
+        "what-if",
+        "variant"
+      ],
+      "examples": "package P-2 vs 2020 baseline, 5-year horizon, Austria"
+    },
+    {
+      "term": "Feasibility Rating",
+      "definition": "Political, legal and administrative feasibility of a package with the basis for each rating.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "implementability",
+        "practicality"
+      ],
+      "examples": "legal: high (within insurer competence); political: medium (provinces split)"
+    },
+    {
+      "term": "Consensus Threshold",
+      "definition": "Support level the mandate requires for consensus, adjusted where veto rights apply.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "quorum",
+        "majority rule"
+      ],
+      "examples": "two thirds of weight-bearing stakeholders"
+    },
+    {
+      "term": "Veto-Blocked Outcome",
+      "definition": "A proposal that met the support threshold but is not consensus due to a blocking competence.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "blocked",
+        "vetoed"
+      ],
+      "examples": "7/9 support, blocked by insurer veto on benefit changes"
+    },
+    {
+      "term": "Cited Statement",
+      "definition": "One statement of the brief with its citations, source claim ids and evidence status; the granularity at which transparency is enforced.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "sentence",
+        "bullet",
+        "assertion"
+      ],
+      "examples": "'Waiting times fell 22% in the model' → EP-88, EP-91"
+    },
+    {
+      "term": "Rejected Proposal Record",
+      "definition": "A measure that failed to gather support, with blocking stakeholders and reasons.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "failed motion",
+        "discarded option",
+        "not implemented"
+      ],
+      "examples": "nationwide remuneration cuts — blocked by chamber + contract physicians"
+    },
+    {
+      "term": "Simulation Disclaimer",
+      "definition": "Statement that the result is probabilistic agent reasoning over a pinned corpus, not a deterministic forecast and free of real-person positions.",
+      "boundedContext": "DecisionBrief",
+      "aliases": [
+        "caveat",
+        "note"
+      ],
+      "examples": "'Runs are non-deterministic; model and prompt versions are recorded per run.'"
+    },
+    {
+      "term": "Reference Figure",
+      "definition": "Canonical authoritative value for one measure, with as-of date and source tier; the comparison baseline.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "ground truth value",
+        "official figure",
+        "baseline"
+      ],
+      "examples": "public_health_spend / AT / 2019 = EUR 42.1bn (Statistik Austria)"
+    },
+    {
+      "term": "Tolerance Band",
+      "definition": "Admissible deviation below which two figures for one measure are treated as equal.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "epsilon",
+        "rounding tolerance",
+        "spread"
+      ],
+      "examples": "±2% for survey-based measures"
+    },
+    {
+      "term": "Expert Review",
+      "definition": "Escalation of an unsettled claim to a review step that returns a verdict with its basis.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "manual check",
+        "second opinion",
+        "expert agent"
+      ],
+      "examples": "claimed 12% rise; two surveys disagree; escalated"
+    },
+    {
+      "term": "Round Learning",
+      "definition": "Persisted digest of a round's outcomes — which arguments held, which proposals moved, who coalesced — that agents must consume in the next round.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "reflection",
+        "memory",
+        "feedback state",
+        "lessons"
+      ],
+      "examples": "R2 learning: insurer's cost estimate was contradicted by EP-88"
+    },
+    {
+      "term": "Learning Application",
+      "definition": "Explicit reference from a later argument to the RoundLearning insight that caused it.",
+      "boundedContext": "NegotiationSession",
+      "aliases": [
+        "applied lesson",
+        "adaptation"
+      ],
+      "examples": "medical chamber drops post-count demand citing R2 learning"
+    },
+    {
+      "term": "Mandate Source",
+      "definition": "Citable legal or institutional instrument that grounds a veto right, competence or budget limit.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "legal basis",
+        "statute reference",
+        "authority ground"
+      ],
+      "examples": "ASVG provision on benefit changes requiring insurer consent"
+    },
+    {
+      "term": "Attribution Strength",
+      "definition": "Whether a source explicitly attributes a stance to the institution, reports it, or merely mentions the institution.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "confidence of attribution",
+        "how firmly stated"
+      ],
+      "examples": "explicit attributed statement vs passing mention"
+    },
+    {
+      "term": "Power Source Kind",
+      "definition": "Where an institution's authority derives from: legislation, statutory instrument, budget decision, institutional statute or agreement.",
+      "boundedContext": "StakeholderModel",
+      "aliases": [
+        "basis of power",
+        "authority type"
+      ],
+      "examples": "budget decision"
+    },
+    {
+      "term": "Estimate Basis",
+      "definition": "Provenance class of a figure: measured, derived, modelled, assumed or not estimated.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "confidence",
+        "source of number",
+        "how computed"
+      ],
+      "examples": "derived from two ReferenceFigures"
+    },
+    {
+      "term": "Derivation Input",
+      "definition": "Enumerated input behind a derived figure, cited so the calculation can be re-run or refuted.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "input",
+        "assumption source"
+      ],
+      "examples": "RF-14 public_health_spend/AT/2019 + RF-22 population 2020"
+    },
+    {
+      "term": "Assumed Estimate",
+      "definition": "A figure without enumerated inputs, publishable only with an explicit assumed label.",
+      "boundedContext": "ConsensusAnalysis",
+      "aliases": [
+        "guess",
+        "illustrative value"
+      ],
+      "examples": "budget impact assumed at +4% pending costing"
+    },
+    {
+      "term": "Absence Finding",
+      "definition": "Auditable record that a stance produced no qualifying evidence, naming the queries and snapshot searched.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "no results",
+        "negative result"
+      ],
+      "examples": "no contradicting evidence for a telemedicine cost claim; 6 queries over snapshot v12"
+    },
+    {
+      "term": "Recency Exemption",
+      "definition": "Designation of non-perishable source types (legislation, foundational studies, reference figures) that keep full weight regardless of age.",
+      "boundedContext": "EvidenceRetrieval",
+      "aliases": [
+        "no decay",
+        "timeless"
+      ],
+      "examples": "statutory provision from 1955 exempt"
+    },
+    {
+      "term": "Speaker Kind",
+      "definition": "Attribution class of a statement: institution, named person, anonymous or unattributed; decides citability.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "attributed to",
+        "source type"
+      ],
+      "examples": "institution: Dachverband der Sozialversicherungsträger"
+    },
+    {
+      "term": "Authority Rule",
+      "definition": "Claim-type-specific source ordering used instead of one global authority scale.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "ranking",
+        "precedence"
+      ],
+      "examples": "quantitative: statistics > study > institutional statement > press"
+    },
+    {
+      "term": "Institutional Statement",
+      "definition": "Retained, citable statement attributed to an institution rather than a person.",
+      "boundedContext": "EvidenceCorpus",
+      "aliases": [
+        "press release",
+        "official position"
+      ],
+      "examples": "chamber statement on contract posts, citable with attribution"
+    },
+    {
+      "term": "Verification Path",
+      "definition": "Type-specific route a claim takes: reference comparison, provision check, study appraisal, or no verification.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "check type",
+        "how verified"
+      ],
+      "examples": "causal → study appraisal"
+    },
+    {
+      "term": "Causal Support",
+      "definition": "Appraisal of study evidence behind a causal claim, recorded as supported, contested or unaddressed.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "evidence for causation",
+        "study backing"
+      ],
+      "examples": "observational study, contested effect direction"
+    },
+    {
+      "term": "Unverifiable Claim",
+      "definition": "A claim for which no applicable verification path exists, recorded as ambiguous rather than removed.",
+      "boundedContext": "ClaimValidation",
+      "aliases": [
+        "not checkable",
+        "out of scope"
+      ],
+      "examples": "'patients feel more secure' — qualitative, unverifiable"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Document",
+      "context": "EvidenceCorpus",
+      "type": "aggregate-root",
+      "description": "A physical source file (PDF, HTML, scanned page bundle) with source URI, publication, hash, extraction quality and authority tier.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Publication",
+      "context": "EvidenceCorpus",
+      "type": "entity",
+      "description": "The publishing outlet issue/edition: outlet name, issue date, medium type, authority tier default.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Article",
+      "context": "EvidenceCorpus",
+      "type": "entity",
+      "description": "A segmented editorial unit inside a Document: headline, dateline, full text, page range, canonical link for syndication.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Passage",
+      "context": "EvidenceCorpus",
+      "type": "entity",
+      "description": "A citable contiguous text span of an Article with exact character offsets, the unit indexed and retrieved.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "AuthorityTier",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Ranked credibility rubric owned by the corpus: official-statistics, legislation, scientific-study, institutional-statement, press-report, other. Published as published language so retrieval consumes it instead of redefining trust.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "Provenance",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Immutable locator bundle: document id, article id, page number, character offset, source URI, retrieval timestamp.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ExtractionQuality",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Measured extraction health: method (native/ocr), confidence, missing-glyph rate, acceptance flag.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "CorpusCollection",
+      "context": "EvidenceCorpus",
+      "type": "entity",
+      "description": "A named, versioned manifest of which documents and index version a run searched. A manifest, not a transactional aggregate over the whole corpus — it references documents, it does not contain them.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "RetrievalQuery",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Normalised search intent derived from a claim: claim text, entity and time filters, corpus snapshot. Not an aggregate — it is an input to an application operation, and the trace that matters is RetrievalTrace on the pack.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "EvidenceCandidate",
+      "context": "EvidenceRetrieval",
+      "type": "entity",
+      "description": "A retrieved Passage with stance label (supporting/contradicting/contextual), authority tier and component scores.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "EvidencePack",
+      "context": "EvidenceRetrieval",
+      "type": "aggregate-root",
+      "description": "The frozen, balanced bundle of candidates handed to an agent as justification for one claim.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "EvidenceScore",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Inspectable weighting: authority weight, lexical score, semantic similarity, recency weight, directness, final rank.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "StanceLabel",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Classification of a candidate relative to the claim: supporting, contradicting, contextual, tangential.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "RecencyPolicy",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Configurable decay function, reference date and minimum weight that operationalises 'current events outweigh history'.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "CoverageReport",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Measured evidence availability for a claim: candidate counts per stance, best authority found, gap flag.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "Stakeholder",
+      "context": "StakeholderModel",
+      "type": "aggregate-root",
+      "description": "An institution participating in Austrian healthcare policy (social insurance, ministry, chamber, patient representation, hospital association).",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "StakeholderProfile",
+      "context": "StakeholderModel",
+      "type": "entity",
+      "description": "The negotiating character of a Stakeholder: mandate, interests, constraints, budget limits, decision priorities and red lines.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Interest",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "A stated goal the stakeholder optimises for, with weight and the policy topics it applies to.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "Constraint",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "A hard limit (budget ceiling, legal competence, political feasibility) that a stakeholder cannot concede.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "BudgetLimit",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "Numeric spending envelope with period and tolerance used to reject unacceptable proposals.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "DecisionPriority",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "Ordered ranking the stakeholder applies when interests conflict.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "HistoricalPosition",
+      "context": "StakeholderModel",
+      "type": "entity",
+      "description": "A documented past stance of the institution, derived from press/institutional sources with provenance and date.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "AgentBinding",
+      "context": "StakeholderModel",
+      "type": "aggregate-root",
+      "description": "The immutable binding of a StakeholderProfile to an agent persona used in one simulation run, including persona rules and allowed evidence.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "InstitutionIdentity",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "Canonical institutional name, category and short code used in all identifiers and outputs.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "SimulationRun",
+      "context": "NegotiationSession",
+      "type": "aggregate-root",
+      "description": "One simulation of one policy question: pinned corpus snapshot, bound stakeholders, phase state machine, round cap and outcome.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "NegotiationMandate",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "The moderator-issued framing of the question: objective, constraints, selected stakeholders, rules and stopping conditions.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "NegotiationRound",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "A numbered turn cycle with per-stakeholder turns, closed by the moderator and scored for convergence.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Position",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "A stakeholder's stance on a conflict topic: proposal, claims, evidence refs, confidence and revision lineage.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Argument",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "A single turn's contribution: speaker, target, stance, claims, citations and a reference to the producing agent invocation.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "ArgumentStance",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "Whether the argument supports, opposes, qualifies or conditionally accepts the target.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ConflictTopic",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "An identified point of institutional disagreement with per-stakeholder stance history and resolution status.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Coalition",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "A set of stakeholders on a conflict topic behind one explicit shared proposal, with a formed round and reasons.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "RevisionReason",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "Structured justification of a position change: cited argument ids, evidence ids and stated driver.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "StoppingCondition",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "The rule that ended the run: consensus threshold met, round cap reached, or deadlock declared.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ConsensusRecord",
+      "context": "ConsensusAnalysis",
+      "type": "aggregate-root",
+      "description": "Per-conflict-topic outcome: consensus level, supporting and opposing stakeholders, threshold met or not.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "MajorityPosition",
+      "context": "ConsensusAnalysis",
+      "type": "entity",
+      "description": "The stance carried by the majority of weight-bearing stakeholders on a topic, with vote-like support listing.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "MinorityPosition",
+      "context": "ConsensusAnalysis",
+      "type": "entity",
+      "description": "A dissenting stance with its holders, arguments and unresolved objections.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "CompromisePackage",
+      "context": "ConsensusAnalysis",
+      "type": "aggregate-root",
+      "description": "A bundle of accepted cross-stakeholder proposal components with provenance and the rejected proposals list.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "ImpactAssessment",
+      "context": "ConsensusAnalysis",
+      "type": "entity",
+      "description": "Scenario effect estimates per package (e.g. waiting-time reduction, budget delta) with assumptions and uncertainty.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "SupportLevel",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "Weighted measure of support for a proposal across stakeholders, derived from interests and stances.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "UncertaintyLabel",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "Explicit statement of confidence basis for an estimate: evidenced, modelled, or assumed.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "UnresolvedConflict",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "A conflict topic still open at run close, with the positions that remain apart.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "DecisionBrief",
+      "context": "DecisionBrief",
+      "type": "aggregate-root",
+      "description": "A versioned, immutably persisted projection of one closed run. It is generated — it holds no input state of its own — but once published it is a first-class artefact with its own identity, version lineage and citation integrity.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "BriefSection",
+      "context": "DecisionBrief",
+      "type": "entity",
+      "description": "One of the eight required components with ordering, content and the entities it projects.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "CitationReference",
+      "context": "DecisionBrief",
+      "type": "entity",
+      "description": "A resolvable pointer from a brief statement to a Passage provenance with surrounding context.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "ActorSummary",
+      "context": "DecisionBrief",
+      "type": "value-object",
+      "description": "Institution, goals, constraints and positions adopted, as shown in the actors section.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "PositionTimeline",
+      "context": "DecisionBrief",
+      "type": "value-object",
+      "description": "Per-stakeholder stance trajectory across rounds, used for the position-change visualisation.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "BriefVersion",
+      "context": "DecisionBrief",
+      "type": "value-object",
+      "description": "Version marker linking a brief to the run id, corpus snapshot and generation timestamp.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "Claim",
+      "context": "ClaimValidation",
+      "type": "aggregate-root",
+      "description": "An extracted assertion from an argument: text, type (quantitative, legal, causal, qualitative), measure, value, period, geography.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "ClaimVerification",
+      "context": "ClaimValidation",
+      "type": "entity",
+      "description": "The verdict for a claim: supported, contradicted, unsupported, or ambiguous, with the source set and method.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "ContradictionFinding",
+      "context": "ClaimValidation",
+      "type": "entity",
+      "description": "A detected conflict between two verified claims or between a claim and an authoritative figure, with both provenances.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "ClaimType",
+      "context": "ClaimValidation",
+      "type": "value-object",
+      "description": "Classification driving the required verification path: quantitative, legal, causal, qualitative.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "VerificationVerdict",
+      "context": "ClaimValidation",
+      "type": "value-object",
+      "description": "Enumerated outcome with confidence basis: supported, contradicted, unsupported, ambiguous.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "MeasureReference",
+      "context": "ClaimValidation",
+      "type": "value-object",
+      "description": "Normalised identity of a measurable quantity: measure name, unit, reference period, geography, population.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ArticleSection",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Typed region of an Article: headline, standfirst, body, caption or quotation block. Drives directness scoring and quotation screening.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "QuotationBlock",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "A span of quoted or reported speech with speaker attribution; structurally retained but never promoted as evidence because the challenge forbids quoting real persons.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "LanguageTag",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Language variant marker (de-AT, de-DE) governing tokenisation, compound-word handling and embedding model choice for German-language retrieval.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "CanonicalArticleRef",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Pointer from a syndicated duplicate to the canonical article that owns the citable passages, preventing duplicate coverage from inflating support.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "IngestionRun",
+      "context": "EvidenceCorpus",
+      "type": "aggregate-root",
+      "description": "One batch ingestion execution over a shard of source files: documents attempted, accepted, quarantined, failed, with retry lineage and a terminal status. Makes corpus growth auditable and re-runs idempotent.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "IndexManifest",
+      "context": "EvidenceCorpus",
+      "type": "entity",
+      "description": "Published index state for a corpus snapshot: indexed passages, embedding model, index version, searchable-since. Belongs to the corpus collection rather than being a second aggregate over the same material.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "AuthorityWeight",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Numeric weight looked up from the corpus-owned AuthorityTier rubric. Keeps the rubric owned by EvidenceCorpus while retrieval only consumes it.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "RetrievalTrace",
+      "context": "EvidenceRetrieval",
+      "type": "entity",
+      "description": "Reproducibility record attached to each pack: index manifest version, embedding and reranker model ids, query rewrite applied, candidate counts per stance.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "QueryRewrite",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Deterministic expansion applied to a German-language claim before search: compound splitting, umlaut folding, institutional synonym mapping.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "NegotiatingPower",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "Derived leverage of an institution: mandate scope, budget authority, veto rights and coalition centrality. Drives game-theoretic reasoning instead of opinion averaging.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "VetoRight",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "The class of proposals an institution can block outright (e.g. statutory benefit changes without insurer consent). A hard constraint on what consensus is reachable.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "Dependency",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "Directional relation between two institutions — funding, approval, staffing, data provision — with strength and the proposal classes it affects.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "MandateScope",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "The legally and institutionally admissible range of what the stakeholder may agree to; bounds every concession an agent can make.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "TurnAssignment",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "A stakeholder's allocated floor in a round: position in turn order, the conflict topic, and whether the turn was used, passed or abstained.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "NegotiationPhase",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "Monotonic process stage: position-formation, debate, negotiation, compromise, closure. Guards which commands are legal at a given moment.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "Proposal",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "The structured substance of a position: measure, quantified effect with unit, target population, cost and affected stakeholders — what makes two positions machine-comparable.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ProposalComponent",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "One admissible part of a proposal (e.g. 'expand telemedicine for dermatology') carrying its own support record so packages can be assembled from accepted parts.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "CoalitionOffer",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "A recorded invitation to join a shared proposal on a conflict topic, with the invited stakeholder, conditions, and accept/decline outcome.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "Scenario",
+      "context": "ConsensusAnalysis",
+      "type": "aggregate-root",
+      "description": "A counterfactual being assessed: baseline versus the measures of one CompromisePackage, its horizon, affected population and stated assumptions. Impact only means something relative to a scenario.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "FeasibilityRating",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "Rated political, legal and administrative feasibility of a package with the basis for each rating; the third dimension the material demands alongside cost and acceptance.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ConsensusThreshold",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "The support level the mandate requires for consensus, together with how veto rights alter the effective bar.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "VetoBlockedOutcome",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "Record of a proposal that met the support threshold but is not consensus because a bound stakeholder holds a blocking competence over its class.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "CitedStatement",
+      "context": "DecisionBrief",
+      "type": "value-object",
+      "description": "The atomic unit of the brief: one statement with its citation references, the claim ids it rests on, and whether it is evidenced, narrative or unsupported. Makes 'which claim does this sentence rest on' answerable per sentence.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "RejectedProposalRecord",
+      "context": "DecisionBrief",
+      "type": "entity",
+      "description": "A measure that failed to gather support, with the stakeholders who blocked it and their stated reasons. The material explicitly requires 'proposals not implemented' as an output component.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "SimulationDisclaimer",
+      "context": "DecisionBrief",
+      "type": "value-object",
+      "description": "Statement of what the result is and is not: probabilistic agent reasoning over a pinned corpus, no determinism claim, no real-person positions.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "BriefComponentSlot",
+      "context": "DecisionBrief",
+      "type": "value-object",
+      "description": "Position of one mandated component among the eight, with its completion state; the structural guarantee that no component can be silently dropped.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ReferenceFigure",
+      "context": "ClaimValidation",
+      "type": "entity",
+      "description": "The canonical value of one MeasureReference taken from an authoritative source, with its as-of date and source tier. The baseline against which every agent claim in that measure is compared.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "ToleranceBand",
+      "context": "ClaimValidation",
+      "type": "value-object",
+      "description": "Admissible numeric deviation for a measure (rounding, revision, estimate spread) below which two figures are treated as equal.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "ExpertReview",
+      "context": "ClaimValidation",
+      "type": "entity",
+      "description": "Escalation record for claims the deterministic checks cannot settle: the question asked, the evidence supplied, the verdict and its basis. The feedback loop the material requires for figures.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": false,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "RoundLearning",
+      "context": "NegotiationSession",
+      "type": "entity",
+      "description": "Persisted digest of what one round taught the participants: arguments that withstood challenge, proposals that gained or lost support, coalitions formed, evidence that changed minds, and the position shifts it caused. This is the state the challenge requires so agents take partial results into subsequent rounds.",
+      "justification": {
+        "identityPersists": true,
+        "immutable": true,
+        "equalByState": false
+      }
+    },
+    {
+      "name": "LearningApplication",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "Explicit link from a later argument or position revision to the RoundLearning insight it applies, with the insight type (evidence accepted, alliance shift, proposal weakened).",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "LearningInsightType",
+      "context": "NegotiationSession",
+      "type": "value-object",
+      "description": "What kind of lesson was carried forward: challenger evidence accepted, own claim abandoned, coalition partner shifted, proposal support strengthened or weakened.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "MandateSource",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "The authoritative instrument grounding a power claim: legal provision, statutory instrument, budget decision or institutional statute, with citation and as-of date. The source of truth the review demanded for veto rights, competences and budget authority.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "AttributionStrength",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "How firmly a source attributes a stance to the institution: explicit attributed statement, reported institutional position, or mere mention. Governs whether a HistoricalPosition may be used.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "PowerSourceKind",
+      "context": "StakeholderModel",
+      "type": "value-object",
+      "description": "Classification of where an authority derives from: legislation, statutory instrument, budget decision, institutional statute, or negotiated agreement.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "EstimateBasis",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "Provenance class of a quantitative estimate: measured, derived from authoritative figures, modelled by a stated method, assumed, or not estimated. The distinction the review demanded between evidence-backed calculation and LLM assumption.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "DerivationInput",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "One enumerated input behind a derived figure: a ReferenceFigure id, a passage id, or a run-internal tally such as a stakeholder cost sum.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "EstimateLimitation",
+      "context": "ConsensusAnalysis",
+      "type": "value-object",
+      "description": "Stated limitation of an estimate: what it ignores, what it assumes constant, and which population or period it does not cover.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "AbsenceFinding",
+      "context": "EvidenceRetrieval",
+      "type": "value-object",
+      "description": "Recorded negative result for a stance: the queries issued, the corpus snapshot searched and the reason nothing met threshold. Turns 'no contradiction found' into an auditable fact rather than an omission or a blocker.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "SpeakerKind",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Who a statement is attributed to: institution, named person, anonymous source or unattributed. Decides whether a QuotationBlock is citable (institutional) or excluded (personal).",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "AuthorityRule",
+      "context": "EvidenceCorpus",
+      "type": "value-object",
+      "description": "Claim-type-specific ordering of source types, replacing a single global authority scale. Legal questions rank legislation first, quantitative ones official statistics, causal ones studies.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "VerificationPath",
+      "context": "ClaimValidation",
+      "type": "value-object",
+      "description": "The route a claim type must take: quantitative to reference comparison, legal to provision check, causal to study appraisal, qualitative to no-verification. Makes the differentiated handling explicit instead of one universal check.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    },
+    {
+      "name": "CausalSupport",
+      "context": "ClaimValidation",
+      "type": "value-object",
+      "description": "Appraisal of study evidence for a causal claim: study design, population, effect direction and whether it supports, contests or fails to address the claim.",
+      "justification": {
+        "identityPersists": false,
+        "immutable": true,
+        "equalByState": true
+      }
+    }
+  ],
+  "protocolProgress": {
+    "requirementsComplete": true,
+    "usecasesComplete": true
+  },
+  "aggregateRoots": "Document, EvidencePack, Stakeholder, AgentBinding, SimulationRun, ConsensusRecord, CompromisePackage, DecisionBrief, Claim, IngestionRun, Scenario"
+}

@@ -1,0 +1,33 @@
+{
+  "$comment": "Machine-readable projection of ADR-008. Validated by .pi/scripts/ci/check_modeling_depth.py. Context keys are snake_case because they are the src/ package names and the table-name prefixes (ADR-002).",
+  "source": ".pi/architecture/decisions/ADR-008-proportional-modeling-depth.md",
+  "depths": {
+    "tactical": {
+      "required_layers": ["domain", "application", "infrastructure", "interfaces"],
+      "forbidden_layers": [],
+      "requires_python_in": ["domain", "application"]
+    },
+    "service": {
+      "required_layers": ["application", "infrastructure"],
+      "forbidden_layers": ["domain"],
+      "requires_python_in": ["application", "infrastructure"]
+    },
+    "adapter": {
+      "required_layers": ["interfaces", "infrastructure"],
+      "forbidden_layers": ["domain", "application"],
+      "requires_python_in": ["interfaces", "infrastructure"]
+    }
+  },
+  "contexts": {
+    "evidence_corpus": "tactical",
+    "identity_access": "adapter",
+    "evidence_retrieval": "tactical",
+    "stakeholder_model": "tactical",
+    "claim_validation": "tactical",
+    "simulation_orchestration": "service",
+    "governance_compliance": "service",
+    "negotiation_session": "tactical",
+    "consensus_analysis": "tactical",
+    "decision_brief": "tactical"
+  }
+}

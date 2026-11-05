@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "health-policy-simulator"
+version = "0.1.0"
+description = "Institutional negotiation simulator for Austrian healthcare policy"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "health-policy-simulator" }]
+
+dependencies = [
+    "alembic>=1.14",
+    "asyncpg>=0.30",
+    "fastapi>=0.115",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "structlog>=24.4",
+    "uvicorn[standard]>=0.32",
+]
+
+[project.scripts]
+hps-api = "main:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+
+# Entrypoint module (src/main.py) is shipped next to the `shared` package.
+[tool.hatch.build.targets.wheel]
+packages = ["src/shared"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/main.py" = "main.py"
+
+# ── Ruff ──────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "migrations"]
+extend-exclude = [".venv", "dist", "build", ".pi"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplify
+    "C4",  # comprehensions
+    "PT",  # pytest style
+    "RUF", # ruff-specific
+    "S",   # bandit security rules
+    "ASYNC",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"migrations/versions/*" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ── mypy ──────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+files = ["src", "tests"]
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations/"]
+
+# ── pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: requires a reachable PostgreSQL instance with pgvector",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = ["if TYPE_CHECKING:", "raise NotImplementedError", "if __name__ == .__main__.:"]

@@ -1,0 +1,26 @@
+# Local development dependencies (PostgreSQL 16 + pgvector).
+# Port 5433 is used to avoid clashing with any PostgreSQL already listening on 5432.
+
+name: health-policy-simulator
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: hps-postgres
+    environment:
+      POSTGRES_USER: hps
+      POSTGRES_PASSWORD: hps
+      POSTGRES_DB: health_policy
+    ports:
+      - "5433:5432"
+    volumes:
+      - hps-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hps -d health_policy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  hps-pgdata:

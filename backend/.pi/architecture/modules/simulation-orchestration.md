@@ -1,0 +1,277 @@
+# SimulationOrchestration
+
+## Module Status
+
+**Status:** Planned
+**Depends:** NegotiationSession (ACL — invokes domain commands), StakeholderModel (persona versions), EvidenceRetrieval (packs per turn)
+**Last reviewed:** 2026-11-05
+**Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
+
+## Description
+
+Executes the agent workflow graph as a background job, streams progress events to clients and
+records the traceability envelope of every LLM call. Orchestrates sequencing; it never owns
+negotiation state.
+
+**Modeling Depth:** service (supporting subdomain)
+**Subdomain Rationale:** Necessary plumbing; correctness deferred to NegotiationSession aggregates.
+**Context Map:** anticorruption-layer → NegotiationSession (LangGraph invokes domain commands; domain state is never read from graph state).
+
+## Architecture
+
+| Layer | Responsibility | Path |
+|-------|--------------|------|
+| **Domain** | — (none; ADR-008 forbids aggregates here) | `src/simulation_orchestration/domain/` |
+| **Application** | `RunSimulationJob`, `StreamSimulationProgress`, `PauseOrResumeSimulation`, `RecordAgentInvocation` | `src/simulation_orchestration/application/` |
+| **Infrastructure** | LangGraph graph, worker loop, LLM provider adapters, SSE broker, job repository | `src/simulation_orchestration/infrastructure/` |
+| **Interfaces** | REST routers (pause/resume/usage), SSE endpoint, prompt templates | `src/simulation_orchestration/interfaces/` |
+
+**The ownership rule (ADR-003):** the graph holds `{run_id, round, phase, next_actor, budget_used}`.
+Every node calls an application service in `NegotiationSession`, which loads the aggregate, applies
+the rule and persists. The graph is a sequencer, not a model.
+
+## Related ADRs
+
+| ADR | Relevance |
+|---|---|
+| ADR-003 Cross-Context Communication | Graph sequencing vs domain ownership — the central constraint |
+| ADR-004 API Design | SSE with `Last-Event-ID` replay; `202` for long-running work |
+| ADR-006 Cost Tracking | `AgentInvocation` is owned here and is the reproducibility record |
+| ADR-008 Proportional Modeling Depth | Service depth: no domain model, persistence contract only |
+
+## Diagrams
+
+### Data Flow
+
+```mermaid
+flowchart LR
+    A[POST /runs] --> B[Job queue row]
+    B --> C[Worker picks job]
+    C --> D[LangGraph: mandate → select → open → rounds]
+    D --> E[Node: build prompt<br/>persona + evidence + learning]
+    E --> F[LLM call<br/>metered]
+    F --> G[Guard: EnforceInstitutionOnlyOutput]
+    G --> H[Domain command<br/>e.g. TakeNegotiationTurn]
+    H --> I[(Domain state)]
+    H --> J[Outbox event]
+    J --> K[SSE broker]
+    K --> L[Client stream]
+    F --> M[AgentInvocation record]
+    D --> N{Stopping condition}
+    N -->|met| O[Job complete]
+```
+
+### Entity Relationship (persistence, not aggregates)
+
+```mermaid
+classDiagram
+    class SimulationJob {
+        +JobId id
+        +RunId run_id
+        +JobStatus status
+        +int attempts
+        +str checkpoint
+    }
+    class AgentInvocation {
+        +InvocationId id
+        +RunId run_id
+        +int round
+        +str stakeholder
+        +str purpose
+        +str model
+        +str prompt_template
+        +str prompt_version
+        +dict parameters
+        +list evidence_pack_ids
+        +int input_tokens
+        +int output_tokens
+        +Decimal cost_estimate
+        +str outcome
+    }
+    class ProgressEvent {
+        +EventId id
+        +RunId run_id
+        +int sequence
+        +str kind
+        +dict payload
+    }
+    SimulationJob "1" --> "*" AgentInvocation : meters
+    SimulationJob "1" --> "*" ProgressEvent : streams
+```
+
+### Job State
+
+```mermaid
+stateDiagram-v2
+    [*] --> Queued
+    Queued --> Running : worker picks up
+    Running --> Paused : pause requested
+    Paused --> Running : resume
+    Running --> Completed : stopping condition met
+    Running --> Failed : unrecoverable error
+    Running --> BudgetExhausted : budget breach
+    BudgetExhausted --> Running : budget raised
+    Failed --> Queued : retry
+    Completed --> [*]
+```
+
+### Key Use Case Sequence — RunSimulationJob (one node)
+
+```mermaid
+sequenceDiagram
+    participant W as Worker
+    participant G as LangGraph node
+    participant App as NegotiationSession service
+    participant LLM as LLMClient port
+    participant Inv as RecordAgentInvocation
+    participant Bus as Outbox → SSE
+    W->>G: next node
+    G->>App: load state (ids only in graph)
+    App-->>G: run state
+    G->>LLM: complete(prompt, evidence)
+    LLM-->>G: structured output
+    G->>Inv: record(model, prompt@version, tokens, cost)
+    G->>App: command (e.g. revise_position)
+    App->>Bus: domain events
+    G-->>W: advance
+```
+
+## Service + Persistence Contract
+
+| Operation | Reads | Writes | Idempotent |
+|---|---|---|---|
+| `RunSimulationJob` | `simulation_orchestration_job`, domain state via commands | job row, progress events | yes — resumable from `checkpoint`, one turn per node |
+| `StreamSimulationProgress` | `progress` event log | — (read) | yes — replayable by `Last-Event-ID` |
+| `PauseOrResumeSimulation` | job row, run phase | job status | yes — pause is a flag checked at turn boundary |
+| `RecordAgentInvocation` | model price table | `agent_invocation` | yes — unique on `invocation_id` |
+
+**Persistence contract**
+
+| Table | Essential columns | Notes |
+|---|---|---|
+| `simulation_orchestration_job` | `id, run_id, status, attempts, checkpoint, budget_used, error` | `checkpoint` = last committed round/turn |
+| `simulation_orchestration_invocation` | `id, run_id, round, stakeholder, purpose, model, prompt_template, prompt_version, parameters jsonb, evidence_pack_ids[], input_tokens, output_tokens, cost_estimate, latency_ms, outcome, created_at` | Append-only; §ADR-006 |
+| `simulation_orchestration_progress` | `id, run_id, sequence, kind, payload jsonb, created_at` | Monotonic `sequence`; SSE source |
+| `simulation_orchestration_prompt` | `id, name, version, body, checksum` | Prompt template registry; version is persisted per invocation |
+
+**Restart semantics:** a worker crash after a domain commit but before the checkpoint write replays
+the same node; domain commands are idempotent on `(run_id, round, actor)` so the replay is a no-op
+and the checkpoint catches up. A crash before the commit loses only the LLM cost, never state.
+
+## Components
+
+**Service depth (ADR-008): no aggregates, no value objects, no domain events.** The module is
+defined by its application services and its persistence contract above.
+
+| Component | Layer | Responsibility |
+|---|---|---|
+| ``RunSimulationJob` / `StreamSimulationProgress` / `PauseOrResumeSimulation` / `RecordAgentInvocation`` | application | Job execution, streaming, metering (catalog above) |
+| `BudgetGuard`, `CheckpointPolicy`, `RetryPolicy` | domain (rules) | Pre-call budget checks, safe-boundary pausing, bounded backoff |
+| `JobStore`, `InvocationStore`, `ProgressStore`, `PromptRegistry` | infrastructure | Job/stream/metering persistence contract above |
+| `LLMClient` port, SSE endpoint | interfaces | Provider-independent LLM adapter and event stream |
+
+## Application Services (authoritative catalog)
+
+| Service | Use case | Maps to FR |
+|---|---|---|
+| `RunSimulationJob` | Execute the agent workflow graph as a background job, emitting progress events and supporting pause/resume. | FR-027 |
+| `StreamSimulationProgress` | Publish ordered progress events for a running simulation so clients observe rounds, turns and position changes as they commit. | FR-027 |
+| `PauseOrResumeSimulation` | Pause a running job at a safe boundary and resume it later from persisted negotiation state without losing rounds or arguments. | FR-028 |
+| `RecordAgentInvocation` | Persist the traceability envelope of every agent call: model, prompt template version, parameters, evidence pack ids and token cost. | FR-029 |
+
+**Additional helpers (below the catalog):** `EnforceRunBudget` (ADR-006 guard before each call),
+`RetryFailedNode` (bounded exponential backoff), `CollectUsageReport` (per-stakeholder/per-round view).
+
+## API Endpoints
+
+| Method | Path | Handler | Input | Output | Auth |
+|---|---|---|---|---|---|
+| POST | `/api/v1/runs/{run_id}:start` | `run_simulation_job` | `{}` | `202 {job_id}` | `runs:write` |
+| GET | `/api/v1/runs/{run_id}/stream` | `stream_simulation_progress` | `Last-Event-ID` | `text/event-stream` | `runs:read` |
+| POST | `/api/v1/runs/{run_id}:pause` | `pause_or_resume_simulation` | `{action: "pause"}` | `202 {status}` | `runs:write` |
+| POST | `/api/v1/runs/{run_id}:resume` | `pause_or_resume_simulation` | `{action: "resume", budget?}` | `202 {status}` | `runs:write` |
+| GET | `/api/v1/runs/{run_id}/usage` | `collect_usage_report` | — | tokens, cost, per-stakeholder breakdown | `runs:read` |
+| GET | `/api/v1/jobs/{job_id}` | `get_job` | — | status, attempts, checkpoint, error | `runs:read` |
+
+## Ubiquitous Language
+
+| Term | Definition |
+|---|---|
+| Simulation Job | The queued/running execution that advances a run |
+| Checkpoint | Last committed round/turn marker enabling resume |
+| Agent Invocation | One metered LLM call with its full reproducibility envelope |
+| Prompt Template Version | `name@version` identity persisted with each invocation |
+| Progress Event | Ordered, replayable event published for streaming |
+| Run Budget | `max_invocations` / `max_tokens` / `max_cost` guard per run |
+| Safe Boundary | Turn boundary where pausing is permitted |
+
+## Dependencies
+
+**Depends On:**
+
+| Module | What it provides |
+|---|---|
+| NegotiationSession | Domain commands (`OpenSimulationRun`, `TakeNegotiationTurn`, …) and state queries |
+| StakeholderModel | Persona version + profile for prompt construction |
+| EvidenceRetrieval | Evidence packs per claim, injected into prompts |
+| GovernanceCompliance | Guard verdict before persistence |
+| ClaimValidation | Verdicts injected into prompt context |
+
+**Used By:**
+
+| Consumer | What it provides |
+|---|---|
+| NegotiationSession | `invocation_id` linking an argument to its model call |
+| GovernanceCompliance | Invocation metadata for provenance disclosure |
+| DecisionBrief | Model/prompt versions cited in the disclaimer |
+
+## Implementation Sequence
+
+1. Job + progress tables, worker loop skeleton, `/healthz` integration
+2. `RunSimulationJob` for a two-agent stub graph (proves sequencing without domain depth)
+3. `RecordAgentInvocation` + price table + budget guard
+4. `StreamSimulationProgress` SSE with `Last-Event-ID` replay
+5. `PauseOrResumeSimulation` at turn boundary + crash/restart test
+6. Full graph: mandate → select → open → rounds → close
+7. Prompt template registry with versions
+8. Retry/backoff + dead-letter handling
+9. Usage report endpoint
+
+## Patterns & OOP Mapping
+
+| Component | Pattern | Rationale |
+|---|---|---|
+| Graph | **State machine (orchestration only)** | Nodes are steps; state lives in the domain |
+| LLM provider | **Adapter / Port** (`LLMClient`) | Provider independence; test double for CI |
+| Prompt assembly | **Builder** | Persona + evidence + learning + task, composed per purpose |
+| Cost guard | **Strategy** (`InvocationCap`, `TokenCap`, `CostCap`) | Three budget dimensions, same interface |
+| SSE fan-out | **Observer / pub-sub** | Progress events to N subscribers without coupling |
+| No aggregates | — | ADR-008 service depth: persistence contract, not domain model |
+
+**Explicitly rejected:** storing negotiation state in graph state. That would make pause/resume,
+replay and audit depend on framework internals, and it was rejected in ADR-003.
+
+## Acceptance Criteria
+
+| # | Component | Criterion | Verify In |
+|---|---|---|---|
+| 1 | Graph purity | No graph node mutates domain state directly; all mutations go through application services | architecture test |
+| 2 | Graph state | Graph state contains only ids/phase/budget — no positions, arguments or evidence | architecture test |
+| 3 | Invocation envelope | Every LLM call produces exactly one `agent_invocation` row with model, prompt@version, tokens, cost | integration |
+| 4 | Budget guard | Exceeding `max_cost` pauses the run and emits `RunBudgetExhausted`; no partial argument persisted | integration |
+| 5 | Pause boundary | Pause during a turn completes or discards the turn atomically; run state unchanged | integration |
+| 6 | Resume | A paused run resumes at the next turn with identical prior state | integration |
+| 7 | Crash recovery | Killing the worker mid-run and restarting neither duplicates arguments nor loses rounds | integration |
+| 8 | SSE ordering | Events arrive in monotonic `sequence`; reconnect with `Last-Event-ID` replays without gaps or duplicates | integration |
+| 9 | Prompt versioning | Changing a prompt template creates a new version; old invocations keep their version | unit |
+| 10 | Provider independence | Swapping the LLM adapter requires no change outside `infrastructure/` | architecture test |
+
+## Modeling Depth Note (ADR-008)
+
+This bounded context is a **supporting subdomain** — model at service/CRUD depth. Keep
+implementation to application services + persistence. Do NOT introduce new aggregates, value
+objects, or domain events beyond what this exploration captured.
+
+**Anti-corruption edges:**
+- SimulationOrchestration → NegotiationSession — LangGraph invokes domain commands; domain state is
+  never read from graph state.
