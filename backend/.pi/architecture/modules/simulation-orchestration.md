@@ -76,6 +76,7 @@ the rule and persists. The graph is a sequencer, not a model.
 | ADR-008 Proportional Modeling Depth | Service depth: no domain model, persistence contract only |
 | ADR-013 SimulationOrchestration Runtime Integration | Router+worker wiring; durable `0302` stores; boot-time model failure |
 | Issue #236 pause/resume runtime | Loop re-reads status each node; resume re-queues rather than setting RUNNING |
+| Issue #238 progress allocation | Store allocates `MAX(sequence)+1` under a per-run advisory lock; no read-then-write in the publisher |
 
 ## Diagrams
 
@@ -238,6 +239,7 @@ defined by its application services and its persistence contract above.
 |---|---|
 | Simulation Job | The queued/running execution that advances a run |
 | Checkpoint | Last committed round/turn marker enabling resume |
+| Progress sequence | Allocated by the store under a per-run lock; publisher sends sequence 0 |
 | Agent Invocation | One metered LLM call with its full reproducibility envelope |
 | Prompt Template Version | `name@version` identity persisted with each invocation |
 | Progress Event | Ordered, replayable event published for streaming |
