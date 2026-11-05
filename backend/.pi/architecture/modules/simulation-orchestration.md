@@ -316,7 +316,8 @@ lands, a deterministic bootstrap node closes the run so `POST :start` produces
 | 1 | Graph purity | No graph node mutates domain state directly; all mutations go through application services | architecture test |
 | 2 | Graph state | Graph state contains only ids/phase/budget — no positions, arguments or evidence | architecture test |
 | 3 | Invocation envelope | Every LLM call produces exactly one `agent_invocation` row with model, prompt@version, tokens, cost | integration |
-| 4 | Budget guard | Exceeding `max_cost` pauses the run and emits `RunBudgetExhausted`; no partial argument persisted | integration |
+| 4 | Budget guard | Exceeding `max_cost`/`max_tokens`/`max_invocations` pre-check pauses the run and emits `RunBudgetExhausted`; no invocation is attempted after rejection | integration |
+| 4a | Metering runtime | The temporary bootstrap graph records one metered envelope per turn; `budget_used` advances from the invocation store | integration |
 | 5 | Pause boundary | Pause during a turn completes or discards the turn atomically; run state unchanged | integration |
 | 6 | Resume | A paused run resumes at the next turn with identical prior state | integration |
 | 7 | Crash recovery | Killing the worker mid-run and restarting neither duplicates arguments nor loses rounds | integration |

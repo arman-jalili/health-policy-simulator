@@ -70,8 +70,9 @@ from simulation_orchestration.application.rules import (
     PauseBoundary,
     PromptVersioning,
 )
-from simulation_orchestration.application.state import initial_state
+from simulation_orchestration.application.state import initial_state, record_budget
 from simulation_orchestration.application.values import (
+    BudgetUsage,
     GraphState,
     JobId,
     JobStatus,
@@ -166,6 +167,37 @@ class RunSimulationJob:
                     job = replace(job, pause_reason=None)
                     await self._jobs.save(job)
                 break
+            usage = await self._current_usage(job)
+            job = replace(
+                job,
+                checkpoint=record_budget(job.checkpoint, usage),
+                budget_used=usage,
+                updated_at=self._clock.now(),
+            )
+            await self._jobs.save(job)
+            decision = self._budget_guard.evaluate(
+                budget=job.budget,
+                usage=usage,
+                requested_tokens=1,
+                requested_cost=Decimal("0.000001"),
+            )
+            if not decision.allowed:
+                paused = replace(
+                    job,
+                    status=JobStatus.PAUSED,
+                    error=decision.reason,
+                    claimed_by=None,
+                    lease_expires_at=None,
+                    updated_at=self._clock.now(),
+                )
+                await self._jobs.save(paused)
+                await self._publish(
+                    paused.run_id,
+                    ProgressKind.BUDGET_EXHAUSTED,
+                    self._budget_guard.exhaustion_event(paused.run_id, decision),
+                )
+                job = paused
+                break
             node = self._graph.next_node(job.checkpoint)
             if node is None:
                 job = replace(
@@ -188,16 +220,24 @@ class RunSimulationJob:
             latest = await self._jobs.get(job.job_id)
             if latest is not None and latest.status is JobStatus.PAUSED:
                 reason = latest.pause_reason or "pause_requested"
+                usage = await self._current_usage(latest)
                 job = replace(
                     latest,
-                    checkpoint=next_state,
+                    checkpoint=record_budget(next_state, usage),
+                    budget_used=usage,
                     pause_reason=None,
                     updated_at=self._clock.now(),
                 )
                 await self._jobs.save(job)
                 await self._publish_paused(job, reason, next_state)
                 break
-            job = replace(job, checkpoint=next_state, updated_at=self._clock.now())
+            usage = await self._current_usage(job)
+            job = replace(
+                job,
+                checkpoint=record_budget(next_state, usage),
+                budget_used=usage,
+                updated_at=self._clock.now(),
+            )
             await self._jobs.save(job)
             if next_state.phase is RunPhase.DONE:
                 job = replace(
@@ -239,6 +279,14 @@ class RunSimulationJob:
                 RunFailed(run_id=updated.run_id, error=error, attempts=updated.attempts),
             )
         return await self._snapshot(updated)
+
+    async def _current_usage(self, job: JobRecord) -> BudgetUsage:
+        usage = await self._invocations.usage_for_run(job.run_id)
+        return BudgetUsage(
+            invocations=usage.invocations,
+            tokens=usage.input_tokens + usage.output_tokens,
+            cost=usage.cost,
+        )
 
     async def _publish_paused(self, job: JobRecord, reason: str, checkpoint: GraphState) -> None:
         await self._publish(
@@ -354,6 +402,7 @@ class PauseOrResumeSimulation:
             lease_expires_at=None,
             pause_reason=None,
             error=None,
+            budget=request.budget if request.budget is not None else job.budget,
             updated_at=self._clock.now(),
         )
         await self._jobs.save(resumed)

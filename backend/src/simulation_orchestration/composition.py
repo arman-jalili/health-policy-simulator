@@ -35,7 +35,10 @@ from simulation_orchestration.application.services import (
     StreamSimulationProgress,
 )
 from simulation_orchestration.application.values import ModelPrice
-from simulation_orchestration.infrastructure.bootstrap import BootstrapTurnNode
+from simulation_orchestration.infrastructure.bootstrap import (
+    BootstrapMandateNode,
+    BootstrapRoundNode,
+)
 from simulation_orchestration.infrastructure.graph import SequentialWorkflowGraph
 from simulation_orchestration.infrastructure.memory import (
     InMemoryInvocationStore,
@@ -98,7 +101,15 @@ def build_container(
             )
         }
     )
-    graph = SequentialWorkflowGraph([BootstrapTurnNode()])
+    record_agent_invocation = RecordAgentInvocation(
+        invocations=invocations, prices=prices, clock=clock
+    )
+    graph = SequentialWorkflowGraph(
+        [
+            BootstrapMandateNode(record_agent_invocation, model=model_id),
+            BootstrapRoundNode(record_agent_invocation, model=model_id),
+        ]
+    )
     uow = DbUnitOfWork(database.session_factory)
     run_job = RunSimulationJob(
         graph=graph,
@@ -126,9 +137,7 @@ def build_container(
             clock=clock,
             uow=run_job._uow,
         ),
-        record_agent_invocation=RecordAgentInvocation(
-            invocations=invocations, prices=prices, clock=clock
-        ),
+        record_agent_invocation=record_agent_invocation,
         get_job=GetJob(jobs=jobs, progress=progress),
         collect_usage_report=CollectUsageReport(invocations=invocations),
         register_prompt_template=RegisterPromptTemplate(
