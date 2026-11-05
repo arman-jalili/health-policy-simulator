@@ -19,12 +19,14 @@ from shared.app import create_app
 from shared.config import Settings, get_settings
 from shared.enums import AuthMode, Persistence
 from shared.ids import new_id
+from simulation_orchestration.application.commands import StreamSimulationProgressRequest
 from simulation_orchestration.application.dto import (
     InvocationEnvelope,
     JobRecord,
     ProgressEventView,
 )
 from simulation_orchestration.application.rules import PromptVersioning
+from simulation_orchestration.application.services import StreamSimulationProgress
 from simulation_orchestration.application.state import initial_state
 from simulation_orchestration.application.values import (
     BudgetUsage,
@@ -159,6 +161,37 @@ async def test_job_invocation_progress_and_prompt_round_trip(
     restarted_prompts = SqlAlchemyPromptRegistry(session_factory)
     assert (await restarted_prompts.latest(first.name)).version == 2  # type: ignore[union-attr]
     assert (await restarted_prompts.get(first.name, 1)).body == "one"  # type: ignore[union-attr]
+
+
+async def test_concurrent_progress_appends_are_gapless_on_postgres(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime(2026, 11, 6, tzinfo=UTC)
+    run_id = RunId(new_id("run"))
+    progress = SqlAlchemyProgressStore(session_factory)
+
+    def event() -> ProgressEventView:
+        return ProgressEventView(
+            event_id=new_id("evt"),
+            run_id=run_id,
+            sequence=0,
+            kind=ProgressKind.STARTED,
+            payload={"concurrent": True},
+            created_at=now,
+        )
+
+    await asyncio.gather(*(progress.append(event()) for _ in range(10)))
+
+    stored = await progress.list_after(run_id, 0, 100)
+    assert [item.sequence for item in stored] == list(range(1, 11))
+    stream = StreamSimulationProgress(progress=progress)
+    replay = [
+        item
+        async for item in stream.execute(
+            StreamSimulationProgressRequest(run_id=run_id, last_event_id=stored[4].event_id)
+        )
+    ]
+    assert [item.sequence for item in replay] == [6, 7, 8, 9, 10]
 
 
 async def test_public_api_runs_on_postgres_through_worker(

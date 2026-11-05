@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -267,17 +268,29 @@ class SqlAlchemyProgressStore:
 
     async def append(self, event: ProgressEventView) -> ProgressEventView:
         async with self._session_factory() as session, session.begin():
+            sequence = event.sequence
+            if sequence <= 0:
+                # One transaction-scoped advisory lock per run serialises allocation.
+                await session.execute(
+                    select(func.pg_advisory_xact_lock(func.hashtextextended(str(event.run_id), 0)))
+                )
+                latest = await session.scalar(
+                    select(func.max(ProgressRow.sequence)).where(
+                        ProgressRow.run_id == str(event.run_id)
+                    )
+                )
+                sequence = int(latest or 0) + 1
             session.add(
                 ProgressRow(
                     id=event.event_id,
                     run_id=str(event.run_id),
-                    sequence=event.sequence,
+                    sequence=sequence,
                     kind=event.kind.value,
                     payload=dict(event.payload),
                     created_at=event.created_at,
                 )
             )
-        return event
+        return replace(event, sequence=sequence)
 
     async def list_after(
         self, run_id: RunId, after_sequence: int, limit: int

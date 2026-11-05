@@ -51,7 +51,7 @@ on every claim (60 s default); an expired lease makes the job claimable again.
 | `/readyz` `simulation_worker: dead` | Worker task finished unexpectedly | Supervisor restarts it and increments `simulation_worker_restarts_total`; check logs if it stays dead |
 | `/readyz` red | Database unreachable | Restore DB; process stays live but not ready |
 | SSE reconnect repeats events | Client reused an old `Last-Event-ID` | Use the last received `id:`; server replays strictly after it |
-| Duplicate progress sequence | Two workers wrote the same stream | Unique `(run_id, sequence)` rejects it; inspect worker ownership |
+| Duplicate progress sequence | A non-application writer bypassed the store allocator | Use `append` with sequence 0; the store serialises allocation under a per-run advisory lock |
 | Invocation duplicate | Provider retried an existing id | Append-once is intentional; inspect the existing envelope |
 | Budget exhaustion | `max_cost`/`max_tokens`/`max_invocations` breached before a turn | Inspect `error` and `budget_used`; resume with a raised `budget` body; no rejected invocation is executed |
 | `INVALID_JOB_TRANSITION` | Pause/resume from a terminal state | Read `GET /jobs/{id}`; only queued/running pause and paused resume are legal |

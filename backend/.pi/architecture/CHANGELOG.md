@@ -48,6 +48,27 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - SimulationOrchestration progress sequence allocation (issue #238)
+
+### Changed
+- `ProgressPublisher` no longer reads `latest_sequence` and adds one; it submits sequence 0.
+- PostgreSQL allocates `MAX(sequence)+1` under `pg_advisory_xact_lock` in the append transaction.
+- In-memory allocates under an `asyncio.Lock`; explicit sequences remain supported for fixtures.
+- Added concurrent publish/replay proofs for both adapters (10 publishes → sequences 1..10, SSE each once).
+
+### Impact Analysis
+- Files affected: `application/progress.py`, both progress adapters, tests/docs
+- Canonical refs: module doc SSE ordering invariant, runbook
+- Validators: tests, contract proofing, integration
+
+### Status
+- [x] Atomic allocation in the store
+- [x] No `IntegrityError` from the application path
+- [x] SSE replay gapless after a concurrent burst
+- [x] Both adapters behave identically
+
+---
+
 ## [2026-11-06] - SimulationOrchestration budget runtime (issue #237)
 
 ### Changed

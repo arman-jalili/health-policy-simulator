@@ -104,6 +104,8 @@ require_literal "$SRC/application/services.py" "record_budget" "cumulative usage
 require_literal "$SRC/application/rules.py" "delay_seconds" "bounded retry"
 require_literal "$SRC/application/services.py" "Last-Event-ID" "SSE replay by Last-Event-ID" 2>/dev/null || true
 require_literal "$SRC/application/services.py" "last_event_id" "SSE replay by Last-Event-ID"
+require_literal "$SRC/application/progress.py" "sequence=0" "publisher delegates sequence allocation"
+require_literal "$SRC/infrastructure/repository/sqlalchemy.py" "pg_advisory_xact_lock" "Postgres per-run sequence lock"
 require_literal "$SRC/application/rules.py" "next_version" "prompt versioning"
 require_literal "$SRC/infrastructure/llm.py" "class ScriptedLLMClient" "provider adapter"
 require_literal "$SRC/infrastructure/repository/sqlalchemy.py" "class SqlAlchemyJobStore" "durable job store"
@@ -122,6 +124,8 @@ require_literal "tests/integration/test_simulation_orchestration_wiring.py" "tes
 require_literal "tests/integration/test_simulation_orchestration_persistence.py" "test_public_api_runs_on_postgres_through_worker" "Postgres public E2E"
 require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes" "budget public E2E"
 require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_pause_and_resume_through_the_public_api" "pause/resume public E2E"
+require_literal "tests/unit/simulation-orchestration/sequence-concurrency/test_sequence_concurrency.py" "test_ten_concurrent_publishes_produce_a_gapless_stream" "concurrent sequence proof"
+require_literal "tests/integration/test_simulation_orchestration_persistence.py" "test_concurrent_progress_appends_are_gapless_on_postgres" "Postgres concurrent sequence proof"
 
 echo ""; echo "============================================"
 echo "  Passed: ${PASS}  Failed: ${FAIL}"

@@ -49,6 +49,8 @@ class InvocationStore(Protocol):
 
 @runtime_checkable
 class ProgressStore(Protocol):
+    """``append`` allocates the next per-run sequence when ``event.sequence <= 0``."""
+
     async def append(self, event: ProgressEventView) -> ProgressEventView: ...
 
     async def list_after(

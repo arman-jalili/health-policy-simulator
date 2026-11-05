@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -118,18 +119,24 @@ class InMemoryJobStore:
 
 
 class InMemoryProgressStore:
-    """Append-only progress log ordered by per-run sequence."""
+    """Append-only progress log; sequence 0 is allocated under a process lock."""
 
     def __init__(self) -> None:
         self._events: dict[str, list[ProgressEventView]] = {}
+        self._lock = asyncio.Lock()
 
     async def append(self, event: ProgressEventView) -> ProgressEventView:
-        stream = self._events.setdefault(str(event.run_id), [])
-        if any(item.sequence == event.sequence for item in stream):
-            raise ValueError(f"duplicate progress sequence {event.sequence}")
-        stream.append(event)
-        stream.sort(key=lambda item: item.sequence)
-        return event
+        async with self._lock:
+            stream = self._events.setdefault(str(event.run_id), [])
+            sequence = event.sequence
+            if sequence <= 0:
+                sequence = stream[-1].sequence + 1 if stream else 1
+            if any(item.sequence == sequence for item in stream):
+                raise ValueError(f"duplicate progress sequence {sequence}")
+            stored = replace(event, sequence=sequence)
+            stream.append(stored)
+            stream.sort(key=lambda item: item.sequence)
+            return stored
 
     async def list_after(
         self, run_id: RunId, after_sequence: int, limit: int

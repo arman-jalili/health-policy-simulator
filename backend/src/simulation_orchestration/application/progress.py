@@ -22,12 +22,11 @@ class ProgressPublisher:
     async def publish(
         self, run_id: RunId, kind: ProgressKind, event: SimulationEvent
     ) -> ProgressEventView:
-        sequence = await self._progress.latest_sequence(run_id) + 1
         METRICS.increment("simulation_progress_events_total", {"kind": kind.value})
         view = ProgressEventView(
             event_id=new_id("evt"),
             run_id=run_id,
-            sequence=sequence,
+            sequence=0,
             kind=kind,
             payload=asdict(cast(Any, event)),
             created_at=self._clock.now(),
