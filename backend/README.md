@@ -90,7 +90,8 @@ Implemented: `evidence_corpus`, `evidence_retrieval`, `identity_access`, `stakeh
 
 ## Configuration
 
-Required: `DATABASE_URL`. Everything else has a safe default; see `.env.example`.
+Required: `DATABASE_URL`. Everything else has a safe default; see `.env.example`. Copying the example
+verbatim is supported; only secret-shaped variables must be rotated (see `docs/configuration.md`).
 
 `PERSISTENCE` selects the adapter family: `postgres` (default) or `memory`. Memory is explicit, is
 intended for tests and a database-less local demo, and is refused outside `ENV=local`.

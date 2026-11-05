@@ -17,8 +17,9 @@ Operational procedures for the health-policy-simulator API. Phase 0 scope: one p
 ## Boot failure: `ConfigError: Invalid configuration`
 
 1. Read the message — it names the offending variable (`DATABASE_URL: ...`).
-2. Confirm `.env` exists and matches `.env.example`, or that the orchestrator injected
-   `DATABASE_URL`.
+2. Confirm `.env` exists and matches `.env.example` for non-secret defaults, or that the orchestrator
+   injected `DATABASE_URL`. Secret-shaped variables must be rotated; see
+   `docs/configuration.md`.
 3. Do not start the process with a guessed URL: a wrong DSN surfaces later as opaque 503s.
 
 ## Alert: `readyz` returns 503 (`code: NOT_READY`)

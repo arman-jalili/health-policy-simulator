@@ -626,25 +626,16 @@ check_arch_sanity() {
         log_skip "Architecture sanity" "No concurrency-sensitive code in this slice"
     fi
 
-    # Settings/env collision check
-    local collisions=0
+    # Settings/env collision check: only secret-shaped variables must be rotated.
     if [[ -f ".env.example" ]] && [[ -f ".env" ]]; then
-        while IFS= read -r line; do
-            var_name=$(echo "$line" | cut -d= -f1)
-            if grep -q "^${var_name}=" ".env" 2>/dev/null; then
-                local example_val actual_val
-                example_val=$(grep "^${var_name}=" ".env.example" | cut -d= -f2-)
-                actual_val=$(grep "^${var_name}=" ".env" | cut -d= -f2-)
-                if [[ "$example_val" == "$actual_val" ]]; then
-                    ((collisions++))
-                fi
-            fi
-        done < <(grep -v "^#" .env.example 2>/dev/null | grep "=" || true)
-    fi
-    if [[ $collisions -gt 0 ]]; then
-        log_fail "$check_name" "${collisions} env vars in .env match .env.example (should be different)"
+        if env_output=$(bash "${SCRIPTS_DIR}/check_env_placeholders.sh" .env .env.example 2>&1); then
+            log_pass "Architecture sanity (no secret placeholders)"
+
+        else
+            log_fail "$check_name" "$env_output"
+        fi
     else
-        log_pass "Architecture sanity (no settings/env collisions)"
+        log_pass "Architecture sanity (no .env present; example defaults are safe)"
     fi
 }
 
