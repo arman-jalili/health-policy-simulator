@@ -3,7 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
   pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -11,6 +17,10 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.12"
+
+defaults:
+  run:
+    working-directory: backend
 
 jobs:
   quality:
