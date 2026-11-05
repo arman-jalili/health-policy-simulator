@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Contract frozen (implementation pending)
 **Depends:** EvidenceCorpus (open-host — `PassageView`, `ProvenanceView`, `AuthorityTier` rubric, index manifest version)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -15,6 +15,37 @@ stance classification and recency weighting. Never owns the corpus itself.
 **Modeling Depth:** tactical (core domain)
 **Subdomain Rationale:** Balanced supporting/contradicting evidence retrieval prevents one-sided argumentation.
 **Context Map:** EvidenceCorpus → open-host; anticorruption-layer → NegotiationSession (Retrieval returns EvidencePacks; negotiation maps them to ClaimEvidence refs, never raw vector hits).
+
+## Contract Freeze (2026-11-05)
+
+The public contract is frozen before implementation. Names, fields, layers and method signatures
+below are the review baseline; implementation issues fill the TODO bodies without renaming them.
+
+| Contract | Location | Frozen names |
+|---|---|---|
+| Aggregate | `src/evidence_retrieval/domain/evidence_pack.py` | `EvidencePack`, `add_candidate`, `record_absence`, `freeze`, `assert_every_candidate_has_provenance` |
+| Entities | `src/evidence_retrieval/domain/entities.py` | `EvidenceCandidate`, `RetrievalTrace` |
+| Value objects | `src/evidence_retrieval/domain/values.py` | `PackId`, `ClaimText`, `SnapshotId`, `PassageId`, `StanceLabel`, `EvidenceScore`, `RecencyPolicy`, `AbsenceFinding`, `AuthorityWeight`, `QueryRewrite`, `RetrievalQuery`, `CoverageReport` |
+| Domain services | `src/evidence_retrieval/domain/services.py` | `ScoreEvidenceCandidates`, `ApplyRecencyPolicy`, `ReciprocalRankFusion`, `StanceClassifier` |
+| Repository ports | `src/evidence_retrieval/domain/repositories.py` | `EvidencePackRepository`, `PassageSearchPort` |
+| Events | `src/evidence_retrieval/domain/events.py` | `EvidencePackAssembled`, `ContradictingEvidenceSurfaced`, `EvidenceAbsenceRecorded` |
+| Errors | `src/evidence_retrieval/domain/errors.py` | `PackFrozen`, `AbsenceWithContradiction`, `CandidateWithoutProvenance`, `EvidencePackNotFound` |
+| Use cases | `src/evidence_retrieval/application/services.py` | `SearchEvidenceCandidates`, `AssembleEvidencePack`, `GetEvidencePack`, `GetScoreBreakdown`, `ReweightEvidencePack` |
+| Request/result DTOs | `src/evidence_retrieval/application/commands.py`, `src/evidence_retrieval/application/dto.py` | one request object per use case; candidate, pack, trace, score and readiness results |
+| Vendor ports | `src/evidence_retrieval/application/ports.py` | `EmbeddingPort`, `RerankerPort`, `QueryRewritePort`, `RetrievalReadinessPort`, `Clock` |
+| Evaluation | `src/evidence_retrieval/evaluation.py` | `EvaluationCase`, `RecallReport`, `EvaluationHarness` |
+| API | `src/evidence_retrieval/interfaces/http/router.py`, `src/evidence_retrieval/interfaces/http/schemas.py` | five `/api/v1/evidence/*` routes with declared scopes |
+| Published ACL | `src/evidence_retrieval/interfaces/published.py` | `EvidencePackView`, `EvidenceCandidateView`, `AbsenceView`, `RetrievalTraceView`, `ScoreBreakdownView` |
+| Composition | `src/evidence_retrieval/composition.py` | `EvidenceRetrievalContainer`, `build_container` (TODO until wiring) |
+
+**Frozen decisions:** IDs are `NewType` strings; `StanceLabel` has exactly four members; every
+`EvidenceScore.final` equals the sum of its five components; `RecencyPolicy` defaults to a 365-day
+half-life with legislation exempt; `EvidencePackView` carries references and provenance but never
+passage text or vectors; `PassageSearchPort` is the only corpus access. The tactical layer keeps
+`domain/` and `application/` free of ORM, FastAPI and vendor imports.
+
+**Not mounted yet:** the router is concrete but is not included in `shared.app` until the wiring
+issue; a TODO body must never answer a real request.
 
 ## Architecture
 

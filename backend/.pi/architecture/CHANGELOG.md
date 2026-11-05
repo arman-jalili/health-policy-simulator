@@ -48,6 +48,43 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - EvidenceRetrieval contract frozen (issue #61)
+
+### Changed
+- Module: evidence-retrieval
+  - Aggregate: frozen `EvidencePack` fields, one-way `freeze()`, absence and provenance guards
+  - Entities: `EvidenceCandidate`, `RetrievalTrace`
+  - Value objects: IDs, `StanceLabel`, `EvidenceScore`, `RecencyPolicy`, `AbsenceFinding`,
+    `AuthorityWeight`, `QueryRewrite`, `RetrievalQuery`, `CoverageReport`
+  - Services: domain `ScoreEvidenceCandidates`, `ApplyRecencyPolicy`, `ReciprocalRankFusion`,
+    `StanceClassifier`; application search/assemble/read/reweight use cases
+  - Ports: `EvidencePackRepository`, `PassageSearchPort`, embedding/reranker/rewrite/readiness/clock
+  - API: five `/api/v1/evidence/*` routes with `runs:read` / `runs:write` scopes
+  - Events: `EvidencePackAssembled`, `ContradictingEvidenceSurfaced`, `EvidenceAbsenceRecorded`
+  - Errors: `PACK_FROZEN` (409), `ABSENCE_WITH_CONTRADICTION` (409),
+    `CANDIDATE_WITHOUT_PROVENANCE` (422), `EVIDENCE_PACK_NOT_FOUND` (404)
+
+### Impact Analysis
+- Files affected:
+  - `src/evidence_retrieval/domain/`
+  - `src/evidence_retrieval/application/`
+  - `src/evidence_retrieval/interfaces/`
+  - `src/evidence_retrieval/composition.py`
+  - `tests/unit/evidence-retrieval/`
+- Canonical refs to update:
+  - `.pi/architecture/modules/evidence-retrieval.md#contract-freeze-2026-11-05`
+- Validators required: tests, architecture, modeling depth, canonical
+
+### Migration Steps
+1. None — interface-only freeze; no schema or runtime wiring yet.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation unchanged (stubs only)
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-05] - Phase 1 acceptance evidence recorded
 
 ### Changed
