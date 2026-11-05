@@ -20,6 +20,7 @@ from simulation_orchestration.application.values import (
     PromptTemplate,
     RunBudget,
     RunId,
+    RunPhase,
 )
 
 
@@ -84,12 +85,26 @@ class PauseBoundary:
     """Pause is honoured only between turns; the current turn completes or discards atomically."""
 
     def can_pause(self, state: GraphState) -> bool:
-        raise NotImplementedError("PauseBoundary is implemented by issue #210")
+        return state.phase is not RunPhase.DONE
 
     def resolve(
         self, *, action: PauseAction, state: GraphState, turn_committed: bool
     ) -> PauseDecision:
-        raise NotImplementedError("PauseBoundary is implemented by issue #210")
+        if action is PauseAction.RESUME:
+            return PauseDecision(accepted=True, checkpoint=state)
+        if not self.can_pause(state):
+            return PauseDecision(
+                accepted=False,
+                checkpoint=None,
+                reason="run is already terminal",
+            )
+        if not turn_committed:
+            return PauseDecision(
+                accepted=True,
+                checkpoint=state,
+                reason="in-flight turn discarded before checkpoint",
+            )
+        return PauseDecision(accepted=True, checkpoint=state)
 
 
 class RetryPolicy:

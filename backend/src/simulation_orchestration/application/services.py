@@ -10,8 +10,11 @@ remove a frozen member without a new freeze entry.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import asdict, replace
 from decimal import Decimal
+from typing import Any, cast
 
+from shared.ids import new_id
 from simulation_orchestration.application.commands import (
     CollectUsageReportRequest,
     GetJobRequest,
@@ -32,6 +35,11 @@ from simulation_orchestration.application.dto import (
     StartSimulationResult,
     UsageReportResult,
 )
+from simulation_orchestration.application.errors import (
+    InvalidJobTransition,
+    SimulationRunNotFound,
+)
+from simulation_orchestration.application.events import RunPaused, RunResumed, SimulationEvent
 from simulation_orchestration.application.ports import (
     Clock,
     NegotiationGateway,
@@ -48,7 +56,14 @@ from simulation_orchestration.application.repositories import (
 from simulation_orchestration.application.rules import (
     BudgetGuard,
     CheckpointPolicy,
+    PauseBoundary,
     PromptVersioning,
+)
+from simulation_orchestration.application.values import (
+    JobStatus,
+    PauseAction,
+    ProgressKind,
+    RunId,
 )
 
 
@@ -112,7 +127,50 @@ class PauseOrResumeSimulation:
         self._uow = uow
 
     async def execute(self, request: PauseOrResumeSimulationRequest) -> PauseResumeResult:
-        raise NotImplementedError("PauseOrResumeSimulation is implemented by issue #210")
+        job = await self._jobs.get_by_run(request.run_id)
+        if job is None:
+            raise SimulationRunNotFound(f"no simulation job for run {request.run_id}")
+        if request.action is PauseAction.PAUSE:
+            if job.status not in {JobStatus.QUEUED, JobStatus.RUNNING}:
+                raise InvalidJobTransition(f"cannot pause a {job.status.value} job")
+            decision = PauseBoundary().resolve(
+                action=request.action, state=job.checkpoint, turn_committed=True
+            )
+            if not decision.accepted:
+                raise InvalidJobTransition(decision.reason or "pause boundary rejected")
+            paused = replace(job, status=JobStatus.PAUSED)
+            await self._jobs.save(paused)
+            paused_event = RunPaused(
+                run_id=job.run_id,
+                reason=request.reason,
+                checkpoint=job.checkpoint,
+            )
+            await self._publish(job.run_id, ProgressKind.PAUSED, paused_event)
+            return PauseResumeResult(
+                run_id=job.run_id, status=JobStatus.PAUSED, checkpoint=job.checkpoint
+            )
+        if job.status is not JobStatus.PAUSED:
+            raise InvalidJobTransition(f"cannot resume a {job.status.value} job")
+        resumed = replace(job, status=JobStatus.RUNNING)
+        await self._jobs.save(resumed)
+        resumed_event = RunResumed(run_id=job.run_id, checkpoint=job.checkpoint)
+        await self._publish(job.run_id, ProgressKind.RESUMED, resumed_event)
+        return PauseResumeResult(
+            run_id=job.run_id, status=JobStatus.RUNNING, checkpoint=job.checkpoint
+        )
+
+    async def _publish(self, run_id: RunId, kind: ProgressKind, event: SimulationEvent) -> None:
+        sequence = await self._progress.latest_sequence(run_id) + 1
+        await self._progress.append(
+            ProgressEventView(
+                event_id=new_id("evt"),
+                run_id=run_id,
+                sequence=sequence,
+                kind=kind,
+                payload=asdict(cast(Any, event)),
+                created_at=self._clock.now(),
+            )
+        )
 
 
 class RecordAgentInvocation:

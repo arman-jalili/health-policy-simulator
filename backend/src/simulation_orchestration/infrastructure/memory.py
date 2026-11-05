@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime
 from decimal import Decimal
 
 from simulation_orchestration.application.dto import (
     InvocationEnvelope,
+    JobRecord,
+    ProgressEventView,
     RoundUsage,
     StakeholderUsage,
     UsageAggregate,
 )
-from simulation_orchestration.application.values import RunId
+from simulation_orchestration.application.values import JobId, JobStatus, RunId
 
 
 class InMemoryInvocationStore:
@@ -64,3 +68,75 @@ def _round_usage(round_no: int, items: list[InvocationEnvelope]) -> RoundUsage:
         output_tokens=sum(item.output_tokens for item in items),
         cost=sum((item.cost_estimate for item in items), Decimal("0")),
     )
+
+
+class InMemoryJobStore:
+    """Job store with optimistic save; one claim per queued job."""
+
+    def __init__(self) -> None:
+        self._jobs: dict[str, JobRecord] = {}
+
+    async def add(self, job: JobRecord) -> None:
+        self._jobs.setdefault(str(job.job_id), job)
+
+    async def get(self, job_id: JobId) -> JobRecord | None:
+        return self._jobs.get(str(job_id))
+
+    async def get_by_run(self, run_id: RunId) -> JobRecord | None:
+        for job in self._jobs.values():
+            if job.run_id == run_id:
+                return job
+        return None
+
+    async def save(self, job: JobRecord) -> None:
+        self._jobs[str(job.job_id)] = job
+
+    async def claim_next(self, worker_id: str, now: datetime) -> JobRecord | None:
+        for job in self._jobs.values():
+            if job.status is JobStatus.QUEUED:
+                claimed = replace(
+                    job,
+                    status=JobStatus.RUNNING,
+                    attempts=job.attempts + 1,
+                    claimed_by=worker_id,
+                    updated_at=now,
+                )
+                self._jobs[str(job.job_id)] = claimed
+                return claimed
+        return None
+
+    async def list_resumable(self) -> list[JobRecord]:
+        return [
+            job
+            for job in self._jobs.values()
+            if job.status in {JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.PAUSED}
+        ]
+
+
+class InMemoryProgressStore:
+    """Append-only progress log ordered by per-run sequence."""
+
+    def __init__(self) -> None:
+        self._events: dict[str, list[ProgressEventView]] = {}
+
+    async def append(self, event: ProgressEventView) -> ProgressEventView:
+        stream = self._events.setdefault(str(event.run_id), [])
+        if any(item.sequence == event.sequence for item in stream):
+            raise ValueError(f"duplicate progress sequence {event.sequence}")
+        stream.append(event)
+        stream.sort(key=lambda item: item.sequence)
+        return event
+
+    async def list_after(
+        self, run_id: RunId, after_sequence: int, limit: int
+    ) -> list[ProgressEventView]:
+        return [
+            item for item in self._events.get(str(run_id), []) if item.sequence > after_sequence
+        ][:limit]
+
+    async def latest_sequence(self, run_id: RunId) -> int:
+        stream = self._events.get(str(run_id), [])
+        return stream[-1].sequence if stream else 0
+
+    async def max_sequence(self, run_id: RunId) -> int:
+        return await self.latest_sequence(run_id)
