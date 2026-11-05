@@ -136,8 +136,13 @@ class Stakeholder:
         raise NotImplementedError("record_historical_position is implemented by issue #110")
 
     def negotiating_power(self) -> NegotiatingPower:
-        """Derive leverage from grounded inputs only; implemented by issue #109."""
-        raise NotImplementedError("negotiating_power is implemented by issue #109")
+        """Derive leverage from grounded inputs only; never assignable."""
+        return NegotiatingPower.derive(
+            mandate_scope=self.profile.mandate_scope,
+            budget=self.profile.budget,
+            veto_rights=self.veto_rights,
+            dependencies=self.dependencies,
+        )
 
     def drain_events(self) -> list[DomainEvent]:
         """Return and clear pending domain events for the outbox."""
