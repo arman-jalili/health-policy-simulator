@@ -21,6 +21,7 @@ from shared.config import Settings, get_settings
 from shared.db import Database
 from shared.http.errors import register_error_handlers
 from shared.http.health import router as health_router
+from shared.http.metrics import router as metrics_router
 from shared.http.middleware import RequestContextMiddleware
 from shared.log_setup import configure_logging, get_logger
 
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
     register_error_handlers(app)
     app.include_router(health_router)
+    app.include_router(metrics_router)
     app.include_router(evidence_corpus_router)
     return app
 

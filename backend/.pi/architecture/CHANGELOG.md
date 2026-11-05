@@ -132,3 +132,15 @@ Track which changes have been synced to implementation:
 
 *Last updated: 2026-11-05*
 *Framework version: 1.2.0*
+
+## 2026-11-05 — EvidenceCorpus implemented
+
+- Contract frozen (values, entities, events, errors, ports, DTOs, API surface) and then implemented
+  component by component: entities/invariants, value-object validation, domain rules, extraction
+  (native + OCR), segmentation strategies, authority classification, canonical linking, snapshot
+  pinning, PostgreSQL `tsvector` indexing, and the HTTP surface.
+- Migrations: `0102_evidence_corpus_index` (indexed passages + index manifest).
+- Proofing: `.pi/scripts/ci/check_evidence_corpus_contract.py` verifies routes, enums, rubric, event
+  payloads, error codes, port implementations and invariants; wired into CI and the hardening stages.
+- Observability: `GET /metrics` (Prometheus text) with request, duration and domain-event counters.
+- Known deferral: document/article/passage persistence is in-memory; SQLAlchemy adapters are stubs.

@@ -439,7 +439,7 @@ run_stage_security() {
         fi
     else
         # Fallback: basic grep
-        if grep -rE "(sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16})" . --include="*.py" --include="*.ts" --include="*.env" 2>/dev/null | grep -v ".git" | grep -v "node_modules" | head -1 | grep -q .; then
+        if grep -rE "(sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16})" . --include="*.py" --include="*.ts" --include="*.env" 2>/dev/null | grep -vE "(\.git/|node_modules|\.venv/|site-packages|/dist/|/build/)" | head -1 | grep -q .; then
             log_fail "secret_scan" "potential secrets found" "$(( $(date +%s) - t ))"
         else
             log_pass "secret_scan" "$(( $(date +%s) - t ))"

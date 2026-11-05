@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+from fastapi import FastAPI
 
 from shared.http.middleware import REQUEST_ID_HEADER, TRACE_ID_HEADER
 from tests.conftest import StubDatabase
@@ -62,3 +63,26 @@ async def test_invalid_trace_id_is_replaced(client: httpx.AsyncClient) -> None:
     generated = response.headers[REQUEST_ID_HEADER]
     assert generated != "short"
     assert generated.startswith("req_")
+
+
+async def test_metrics_exposes_prometheus_counters(client: httpx.AsyncClient) -> None:
+    await client.get("/healthz")
+
+    response = await client.get("/metrics")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "http_requests_total" in response.text
+    assert 'method="GET"' in response.text
+
+
+async def test_domain_event_counter_is_exposed(client: httpx.AsyncClient, app: FastAPI) -> None:
+    from evidence_corpus.domain.events import PassageRevertedFromIndex
+
+    await app.state.corpus.events.publish(
+        [PassageRevertedFromIndex(passage_id="psg_1", reason="retraction")], actor="test"
+    )
+
+    response = await client.get("/metrics")
+
+    assert 'domain_events_total{event="PassageRevertedFromIndex"} 1.0' in response.text

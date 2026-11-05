@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** In Progress — contract frozen 2026-11-05
+**Status:** Implemented — contract frozen and behaviour delivered 2026-11-05
 **Depends:** — (foundation context, no upstream module)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -26,6 +26,20 @@ chunking and citation-grade provenance. Publishes passages as an open host for r
 | **Interfaces** | FastAPI routers, event subscribers, OpenAPI models | `src/evidence_corpus/interfaces/` |
 
 Layers depend inward only. `domain/` imports neither SQLAlchemy nor FastAPI.
+
+### Implementation status (2026-11-05)
+
+| Area | State | Notes |
+|---|---|---|
+| Aggregates and invariants | implemented | `Document`, `IngestionRun`, `CorpusSnapshot`; 7 invariants enforced in behaviour |
+| Extraction | implemented | PyMuPDF native probe/extract, Tesseract OCR fallback, quality gate |
+| Segmentation | implemented | single-article and clipping-digest strategies |
+| Authority and duplicates | implemented | claim-type rubric, duplicate detection, canonical linking |
+| Indexing | implemented | PostgreSQL `tsvector` (German, GIN) + published index manifest |
+| Snapshots | implemented | document set + index version, hashed manifest |
+| API | implemented | 8 endpoints, uniform envelope, scopes published as `x-required-scope` |
+| Persistence | partially deferred | documents/articles/passages are held in memory (`infrastructure/memory.py`); the SQLAlchemy adapters in `infrastructure/repository/sqlalchemy.py` still raise. The search index **is** persisted (migration `0102`). Re-ingestion is therefore required after a restart — recorded as the next persistence slice. |
+| Embeddings | deferred | `passage_embedding` (pgvector) lands with EvidenceRetrieval, which owns the model choice |
 
 ### Frozen contract (2026-11-05)
 

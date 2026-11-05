@@ -18,6 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from shared.ids import new_id
 from shared.log_setup import get_logger
+from shared.metrics import METRICS
 
 REQUEST_ID_HEADER = "X-Request-ID"
 TRACE_ID_HEADER = "X-Trace-Id"
@@ -60,6 +61,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             duration_ms = round((perf_counter() - started) * 1000, 2)
             response.headers[REQUEST_ID_HEADER] = trace_id
             response.headers[TRACE_ID_HEADER] = trace_id
+            METRICS.increment(
+                "http_requests_total",
+                {"method": request.method, "status": str(response.status_code)},
+            )
+            METRICS.increment("http_request_duration_ms_total", amount=duration_ms)
             logger.info(
                 "http_request",
                 status_code=response.status_code,

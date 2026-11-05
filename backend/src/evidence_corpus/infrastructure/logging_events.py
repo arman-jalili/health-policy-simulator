@@ -12,6 +12,7 @@ from collections.abc import Sequence
 
 from evidence_corpus.domain.events import DomainEvent
 from shared.log_setup import get_logger
+from shared.metrics import METRICS
 
 logger = get_logger(__name__)
 
@@ -31,4 +32,5 @@ class LoggingEventPublisher:
     ) -> None:
         for event in events:
             self.published.append(event)
+            METRICS.increment("domain_events_total", {"event": event.name})
             logger.info("domain_event", event_name=event.name, actor=actor)
