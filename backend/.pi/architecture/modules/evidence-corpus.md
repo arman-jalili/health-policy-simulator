@@ -482,6 +482,21 @@ Baseline for all other contexts (wired in issue #26).
 | Published language | `PassageView`/`ProvenanceView` exposed to EvidenceRetrieval through a port, not tables | architecture test: no cross-context table access |
 | Residue | no `_not_implemented` stub, no stale "handlers not wired" docstring | grep in CI |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| `AuthorityRule.for_claim_type` | ingestion publish path | `authority_tier` and rank in the published provenance view | the tier is constant or defaults to `unknown` for every passage (#99 pattern) |
+| `ExtractionQualityGate` | before a passage becomes citable | rejection recorded, passage stays non-citable | the gate runs after publication, so unusable text is already quotable |
+| snapshot manifest | evidence pack assembly input | `snapshot_id` on a pack resolves to manifest rows | the manifest is written but retrieval reads live rows |
+| `OutboxEventPublisher` | aggregate save | `shared_event_outbox` row in the same transaction | a logging publisher is wired (W4) |
+| memory and postgres adapters | the same passage, same claim type | identical `authority_tier` | the two adapters disagree for the same input |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

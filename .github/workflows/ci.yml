@@ -68,6 +68,8 @@ jobs:
         run: uv run python .pi/scripts/ci/check_evidence_corpus_contract.py
       - name: Canonical references
         run: bash .pi/scripts/validate-canonical.sh
+      - name: Collaborator reachability (W8)
+        run: uv run python .pi/scripts/ci/check_collaborator_reachability.py
       - name: IdentityAccess contract proofing
         run: bash .pi/scripts/ci/check_identity-access_contracts.sh
       - name: StakeholderModel contract proofing

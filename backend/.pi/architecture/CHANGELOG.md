@@ -48,6 +48,54 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Wiring gates W8–W10 (collaborator reachability)
+
+### Changed
+- Roadmap: added **W8** (every injected collaborator is invoked on the production path and its effect is
+  observable from outside; port adapters proven equal for the same input), **W9** (counters/sequences
+  allocated atomically by the store, proven under concurrency) and **W10** (background-task liveness
+  reported by `/readyz`, a dead task is not `ok`) to the cross-cutting Wiring Definition of Done.
+- Every module doc now carries a **Collaborator reachability (W8)** table: collaborator → entry point →
+  observable effect → failure mode. Modules with counters/background tasks also carry W9/W10 obligations
+  (simulation-orchestration, negotiation-session, consensus-analysis).
+- `modules/module-template.md`: added the Wiring Contract section (W1–W10 + reachability table) so new
+  modules inherit the gates instead of rediscovering them.
+- `modules/claim-validation.md`: corrected the false claim that migration `0301` seeds ~10 reference
+  figures — it creates tables only; figures enter through `POST /reference-figures`. Inventing
+  authoritative values is worse than the honest `AMBIGUOUS` gap.
+- `modules/simulation-orchestration.md`: repaired the Wiring Contract table (a runtime paragraph had been
+  inserted inside it, orphaning three rows).
+- Added the mechanical W8 gate: `.pi/scripts/ci/check_collaborator_reachability.py` fails CI when an
+  attribute assigned as `self._x` in `__init__` is never read. Wired into the Architecture validators job,
+  covered by `tests/unit/test_collaborator_reachability.py` (including a stale-allowlist test), and seeded
+  with a 13-entry ratchet (#246) so no new dead injection can land while the existing ones are fixed.
+
+### Why
+Four epics passed W1–W7 while shipping collaborators with no call site: `BudgetGuard`, `RetryPolicy`,
+`CheckpointPolicy`, `list_resumable`, `ResolveMeasureIdentity`, `ContradictionDetector`,
+`RecordContradiction`, `PauseBoundary` inputs. Proofing passed because it asserts shapes (`class X
+exists`, `method names`) rather than call sites. The evidence and the incidents are recorded in the
+roadmap under "Why W8–W10 exist".
+
+### Impact Analysis
+- Files affected: `.pi/architecture/implementation-roadmap.md`, all ten `modules/*.md`, `CHANGELOG.md`
+- Canonical refs to update: none (docs are the source)
+- Validators required: `validate-architecture.sh`, `validate-canonical.sh`, docs policy stage
+
+### Migration Steps
+1. Apply the reachability table to every new module before its first implementation issue.
+2. Extend each proofing script with a reachability check: for every collaborator in the container, assert a
+   call site outside `composition.py` and one public-entry-point test that observes the effect.
+3. Add the W9 concurrency test wherever a sequence/ordinal is introduced.
+4. Add the W10 liveness field whenever lifespan starts a task.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated (W8 reachability check + CI step + guard tests)
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-06] - Readiness env rule (issue #239)
 
 ### Changed

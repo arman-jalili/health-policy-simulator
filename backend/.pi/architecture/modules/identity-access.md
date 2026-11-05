@@ -248,6 +248,20 @@ GovernanceCompliance for actor attribution.
 | Attribution | `Principal.label` flows into every command's `actor` and into `agent_invocation` | integration test: event actor is non-empty |
 | ACL isolation | no module outside `identity_access/infrastructure` imports key-store types (the composition root is the sole adapter-wiring exception) | architecture test |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| `require_scope` dependency | every non-health route | 401/403 with an error code | the scope is declared in OpenAPI only |
+| token verification | every authenticated request | 401 after expiry or key rotation | the signature is checked but expiry is not |
+| `Principal.label` | command → event write | non-empty actor on outbox and invocation rows | the actor is an empty string |
+| demo-mode guard | boot | refusal to start when `ENV=production` | demo mode is silently accepted |
+
 ## Runtime Integration
 
 Entry path: `src/shared/app.py::create_app` → `identity_access.composition.build_identity_access_container`

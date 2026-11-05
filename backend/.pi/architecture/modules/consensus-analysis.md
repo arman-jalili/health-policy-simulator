@@ -336,6 +336,26 @@ and `MinorityPositionRecorded` are audit-critical (they record refusals and diss
 | Events | Consensus, veto blocks and blocked estimates published through the outbox | `ConsensusBlockedByVeto` row present |
 | Estimation | `AssessImpact` uses the shared metered LLM client, never a direct provider SDK call | usage report shows the invocation |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| mandate threshold | `DeriveConsensus` | `partial` / `unresolved` below the threshold | a default threshold is used |
+| veto precedence | `DeriveConsensus` | `blocked_by_veto` at any support level | the veto is stored but never evaluated |
+| `EstimateBasis` | `AssessImpact` | the estimate carries its basis and the invocation id, and is metered | an estimate without provenance or cost |
+| event subscriber | subscription registered in composition | rows appear with no API call | the handler is implemented but never subscribed |
+| projection rebuild | operator command | a rebuild reproduces the rows exactly | the rebuild reads live state instead of the log |
+
+### Atomic allocation (W9)
+
+Projection rows are keyed by the log position they were derived from, not by insertion order, so a rebuild
+is order-independent and reproducible. Proof: rebuild from the log twice → identical rows and ordinals.
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

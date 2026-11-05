@@ -316,6 +316,21 @@ prove the gate works).
 | Events | Publication, versioning and every blocked publication published through the outbox | `CitationResolutionFailed` row present |
 | Auth | `briefs:publish` enforced (ADR-005), not merely declared in OpenAPI | 403 test with an analyst key |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| `CitationResolver` | publication | 422 + `CitationResolutionFailed` | a citation is stored unresolved |
+| provenance gate | publication | publication blocked when the port is missing | the gate is skipped so publishing can succeed |
+| section completeness | publication | 422 listing the missing sections | a partial brief is published |
+| `briefs:publish` scope | publish route | 403 with an analyst key | the scope is declared in OpenAPI only |
+| version creation | `POST :version` | the prior version is unchanged and still retrievable | the brief is updated in place |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

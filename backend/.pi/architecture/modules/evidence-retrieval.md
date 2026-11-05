@@ -408,6 +408,22 @@ application, query rewriting — these fail all three triage questions and remai
 | Events | Packs and absences published through the outbox | `EvidencePackAssembled` row in `shared_event_outbox` |
 | Degraded mode | If the embedding provider is unreachable the module must fail loudly (readiness red), never silently return lexical-only results labelled as hybrid | `/readyz` reflects embedding/reranker reachability |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| `GermanQueryRewrite` | `SearchEvidenceCandidates` | the trace records the form actually searched **and** the ranking differs from the unrewritten query | the expansion is built and then discarded, or ANDed by the adapter (#140) |
+| fusion + reranker | pack assembly | per-candidate components combine into the rank; the rerank delta is in the trace | constant scores presented as hybrid (#99) |
+| stance classifier | candidate mapping | a `stance` per candidate | one default stance for every candidate |
+| recency exemption | score derivation | a 1995 statute keeps full weight; a 1995 press report does not | the exemption table is read but never applied |
+| absence recorder | empty-result path | absence row written, `absence != null`, HTTP 200 | an empty list is returned instead of an absence |
+| memory and postgres adapters | the same claim against the same snapshot | identical candidate ids and order | the two adapters rank differently |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

@@ -414,6 +414,21 @@ audit-critical — recorded without an audit obligation.
 | Events | Registrations, powers and weak attributions published through the outbox | `MandateSourceCited` / `AuthorityClaimRejected` rows present |
 | Grounding data | Every veto/budget limit ships with a `MandateSource`; seeded via migration or operator endpoint, never defaulted | integration test: persona without grounding is refused at boot |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| attribution filter (`is_usable`) | `GET /history` and negotiation reads | `usable: false` excluded when `usable_only=true` | the filter exists only in a unit test |
+| mandate-source grounding | `POST /powers` | `accepted: false` + `AuthorityClaimRejected` | a default `MandateSource` is injected to keep the call green |
+| persona loader | boot | boot aborts on one invalid persona | the loader skips bad personas and continues |
+| institutional allowlist hand-over | composition → governance guard | the guard recognises all nine institutions | the list is handed over but the guard reads its own copy |
+| persistence posture (D-001) | boot | the in-memory posture is visible in `/readyz`, not reported as `ok` | memory state is reported as healthy persistence |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

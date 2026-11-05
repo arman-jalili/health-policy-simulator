@@ -133,6 +133,35 @@ before the implementation issue can be closed. These ACs flow into the generated
 
 ---
 
+## Wiring Contract
+
+A module is not done when its tests pass. It is done when it is reachable from `create_app` and every
+collaborator it injects actually runs. Delete a row and you have described a module that green CI cannot
+distinguish from a working one.
+
+| # | Wiring point | Requirement | Proof |
+|---|---|---|---|
+| W1 | Router | `app.include_router(...)` in `src/shared/app.py` | boot test asserting every documented route is in the app |
+| W2 | Composition | `build_container(settings)` selects adapters by config; memory is never the silent default outside tests | boot test with the production config |
+| W3 | Persistence | migrations own every table the repositories query | `alembic upgrade head` on an empty DB, then restart round-trip |
+| W4 | Events | drained events leave through `shared_event_outbox` in the aggregate's transaction | outbox row present after a command |
+| W5 | Published language | cross-context reads go through a port, never another context's tables | architecture test on imports |
+| W6 | Fail closed | a missing upstream dependency refuses, never degrades to permissive | negative test with the dependency unbound |
+| W7 | Boot | registration + adapter selection asserted by a boot test | deleting a router registration turns CI red |
+| W8 | Reachability | every injected collaborator is invoked from a named entry point and its effect is observable from outside | a call site outside `composition.py`/tests **and** a test driving the public entry point; a unit test of the collaborator is never proof; adapters implementing one port are proven equal |
+| W9 | Atomic allocation | monotonic counters/sequences/ordinals are allocated by the store, not `max + 1` in application code | concurrency test: N writers → `1..N`, no loss, no `IntegrityError` |
+| W10 | Liveness | each background task started by lifespan reports health and degrades `/readyz` when dead | kill-the-task test |
+
+### Collaborator reachability (W8)
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| [Policy object / guard / parser / resolver] | [application service or route] | [API field, persisted row, emitted event, metric] | [what a dead injection looks like] |
+
+A collaborator with no row is a defect in this document, not a detail of implementation. The recurring
+failure in this codebase is a class that is constructed, injected, unit-tested and never called — proofing
+checks shapes and cannot see the missing call site.
+
 ## Dependencies
 
 ### Depends On

@@ -250,6 +250,21 @@ and can be argued with — three disqualifying properties for a compliance contr
 | Determinism | No LLM call in the guard path; rule version recorded per violation | unit test monkeypatching the LLM client to raise — guard must still work |
 | Provenance | `DisclosePositionProvenance` reads invocations from SimulationOrchestration and verdicts from ClaimValidation | integration test: disclosure record complete for a real run |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| institution allowlist | boot | boot aborts on an empty or personal-name allowlist | an empty allowlist is treated as "permit all" |
+| rule engine | every argument write | `rule_version` recorded on each violation row | a violation is recorded without a rule version |
+| `violation_hash` uniqueness | retry path | a duplicate retry yields one row | duplicate rows on retry |
+| `DisclosePositionProvenance` | brief publication | a complete disclosure record for a real run | a partial record is published |
+| LLM independence | guard path | the guard still works with the LLM client raising | the guard calls the model and degrades to permissive |
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

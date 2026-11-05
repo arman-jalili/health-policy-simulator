@@ -359,7 +359,7 @@ class ReferenceFigureRepository(Protocol):
 2. `ResolveMeasureIdentity` with unit/period/geography normalisation tests
 3. Number extraction from German prose (`3,2 Mrd. €`, `22 Prozent`, `1.204`)
 4. `FigureComparison` with tolerance
-5. `ReferenceFigure` curation: seed table of ~10 authoritative figures
+5. `ReferenceFigure` registration through `POST /reference-figures` — **nothing is seeded** (no invented figures)
 6. `Claim.verify` type dispatch with path-not-applicable tests
 7. `FlagUnsupportedAssertion` + `Unverifiable` path
 8. Contradiction detection across a run's claims
@@ -383,10 +383,25 @@ class ReferenceFigureRepository(Protocol):
 |---|---|---|
 | Router | `app.include_router(claim_validation_router)` | boot test asserting registration |
 | Composition | Verification paths bound to EvidenceCorpus (provisions, authoritative passages) and to the shared metered LLM client for causal appraisal | integration test: one claim per path |
-| Seeded data | Migration `0301` seeds the curated `ReferenceFigure` set (~10 authoritative figures with tier + as_of); an empty table must make the verifier report `ambiguous`, never `supported` | integration test on an empty table |
+| Reference data | Migration `0301` creates the tables but seeds **no** figures: inventing authoritative values is worse than an honest gap. An empty table makes every quantitative claim `AMBIGUOUS`, never `VERIFIED`. Figures enter only through `POST /reference-figures` with a tier and `as_of`, and press-tier values are refused | integration test: empty table → `ambiguous`; registered figure → verdict changes |
 | Downstream port | `ClaimVerdictView` exposed to NegotiationSession and ConsensusAnalysis | integration test: an argument with a contradicted claim is refused |
 | Persistence | Migration `0301` applied; verdicts and contradictions survive restart | restart round-trip |
 | Events | Verdicts and refusals published through the outbox | `ClaimRejected` / `UnsupportedAssertionFlagged` rows present |
+
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| `ResolveMeasureIdentity` | register **and** verify routes | case/unit/geography variants resolve to one identity | raw request strings are compared (#200) |
+| `GermanNumberParser` | verify when `asserted_value` is absent | ambiguity yields `UNSUPPORTED`, never `CONTRADICTED` | the first number in the text is taken as the figure (#202) |
+| `ContradictionDetector.finding_for` + `RecordContradiction` | `VerifyClaim`, after the verdict | a row visible at `GET /contradictions` | the detector is unit-tested and never called (#201) |
+| `ToleranceBand` | figure comparison | `delta` and the verdict respond to the band | the band is a constant or the comparison is post-hoc |
+| `EvidencePort` | legal and causal paths | the verdict cites real provisions / studies | `EmptyEvidence` is silently wired outside tests |
 
 ## Acceptance Criteria
 

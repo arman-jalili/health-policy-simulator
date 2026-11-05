@@ -300,6 +300,9 @@ section; this is the phase-level checklist that applies to each `### Modules` ro
 | W5 | Cross-context access uses ports/published language | a context imports another context's repositories or tables |
 | W6 | Missing upstream dependency fails closed | a guard/gate silently degrades to permissive |
 | W7 | Boot test asserts registration + adapter selection | deleting a router registration leaves CI green |
+| **W8** | **Every injected collaborator is invoked on the production path, and its effect is observable from outside** (API field, persisted row, emitted event, metric). A policy object, guard, parser, resolver or normaliser that is constructed, injected and unit-tested but never called is **not wired**. Proof: a call site outside `composition.py`/tests **and** a test that drives a public entry point and asserts the effect — a unit test of the collaborator is never proof. Adapters that implement the same port must be proven equal for the same input | the collaborator exists in the container and nothing reads it; the gate is "green" because proofing checks shapes (`class X exists`, `method names`) instead of call sites |
+| **W9** | **Any monotonic counter, sequence or ordinal is allocated atomically by the store**, not computed as `max + 1` in application code, and a concurrency test proves no duplicates and no loss | a `UNIQUE(run_id, sequence)` constraint is the only guard, so the second concurrent writer raises `IntegrityError` and the event is silently lost |
+| **W10** | **Liveness of every background task started by lifespan is observable**: `/readyz` reports it and it degrades when the task dies; a restart/died counter exists in metrics | readiness reports `ok` from container presence while the worker task is dead, so the demo advertises green and does nothing |
 
 **EvidenceCorpus — W1–W7 evidence (276c4cc):**
 
@@ -323,6 +326,35 @@ section; this is the phase-level checklist that applies to each `### Modules` ro
 
 Phase 1's W1–W7 pass for both EvidenceCorpus and IdentityAccess.
 
+**Mechanical enforcement:** W8 is checked by
+`.pi/scripts/ci/check_collaborator_reachability.py` — any attribute assigned as `self._x` in `__init__`
+and never read fails CI. W9 and W10 are checked by the module integration tests they name.
+
+**Why W8–W10 exist (retroactive evidence)**
+
+The first four epics passed W1–W7 while shipping collaborators with no runtime call site. Each of these
+was found by probing the running app, not by the proofing scripts, which check shapes and therefore
+cannot see a missing call site:
+
+| Gate | Failure | Where it was found |
+|---|---|---|
+| W8 | `BudgetGuard.evaluate`, `RetryPolicy`, `list_resumable`, `PauseBoundary` inputs — injected, never invoked; `max_invocations=1` did not stop a run and `budget_used` stayed zero | #237 (fixed in #242) |
+| W8 | `PauseBoundary.resolve(..., turn_committed=True)` hardcoded → the "discard in-flight turn" branch unreachable; pause could not interrupt a run, resume never re-queued | #236 (fixed in #241) |
+| W8 | `ResolveMeasureIdentity` only called by its unit test → `kassenstellen` vs `Kassenstellen` silently `AMBIGUOUS` | #200 |
+| W8 | `ContradictionDetector.finding_for` / `RecordContradiction` never called → `/contradictions` structurally always empty | #201 |
+| W8 | `GermanNumberParser` invoked but never asserted on realistic input ("Im Jahr 2026 gibt es 3.200.000 …" → `CONTRADICTED`) | #202 |
+| W8 | German compound rewrite applied to a `plainto_tsquery` adapter that ANDs the `OR` expansion → 0 hits; the memory adapter disagreed, so tests passed | #140 (fixed in #142) |
+| W9 | `ProgressPublisher` used `latest_sequence + 1` → concurrent publishes raised `IntegrityError` and dropped events | #238 (fixed in #243) |
+| W10 | One exception in `run()` ended the worker task for the process lifetime; `/readyz` still said `ok` | #235 (fixed in #240) |
+
+Two consequences for every module below:
+
+1. The proofing script must assert **reachability**, not shape: for each injected collaborator, a call
+   site outside `composition.py` and a test that drives a public entry point and observes the effect.
+2. A module doc's `## Wiring Contract` now carries a **Collaborator reachability (W8)** table naming, per
+   collaborator, the entry point, the observable effect and the failure mode. A new collaborator without a
+   row is a documentation defect, not a detail.
+
 **Definition of Done template (append to each issue)**
 
 ```
@@ -333,6 +365,10 @@ Phase 1's W1–W7 pass for both EvidenceCorpus and IdentityAccess.
 - [ ] W5 no cross-context repository/table access (architecture test)
 - [ ] W6 missing dependency fails closed
 - [ ] W7 restart round-trip proven by an integration test
+- [ ] W8 every injected collaborator has a call site outside composition/tests, and a public-entry-point
+      test asserting its effect (reachability, not shape); port adapters proven equal for the same input
+- [ ] W9 counters/sequences allocated atomically by the store, proven by a concurrency test
+- [ ] W10 background tasks report liveness in /readyz and metrics; a dead task is not "ok"
 ```
 
 ---

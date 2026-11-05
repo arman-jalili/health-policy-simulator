@@ -456,6 +456,26 @@ the LangGraph nodes; no cross-aggregate transaction joining a run with a corpus 
 | Guard on the write path | No argument or position can be persisted without a GovernanceCompliance verdict; the port must not have a permissive default | negative test: guard unreachable ⇒ writes fail, not pass |
 | Orchestrator hook | Graph nodes invoke these application services and hold only ids in graph state | architecture test: no graph state fields for positions/arguments |
 
+
+### Collaborator reachability (W8)
+
+Every row is a call-site obligation, not a description: the collaborator must be invoked from the named entry point, and its effect must be visible from outside the module. A collaborator with no row here is a defect in this document. A unit test of the collaborator is never proof of wiring — the proof drives the entry point and reads the effect. Enforced mechanically by
+`.pi/scripts/ci/check_collaborator_reachability.py`, which fails CI when a collaborator is assigned in
+`__init__` and never read.
+
+| Collaborator | Invoked from | Observable effect | Fails when |
+|---|---|---|---|
+| `EnforceInstitutionOnlyOutput` | blocking dependency on the argument/position write path | 5xx when the guard is unbound; a violation row otherwise | the guard is constructed and the request path skips it |
+| `AgentInvocation` reference | argument write | `invocation_id` present on every argument | nullable, so cost attribution silently disappears |
+| debate / abstention policy | round close | abstention recorded for actors who did not speak | a silent skip manufactures quorum |
+| run-log append | every command | replay fold equals live state | the log is written outside the aggregate transaction |
+
+### Atomic allocation (W9)
+
+Round and event ordinals are allocated by the store per run, never derived from "current count + 1" or
+from insertion order. Proof: two concurrent commands for one run produce distinct, gap-free ordinals, and a
+replay ordered by ordinal reproduces the live fold exactly.
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
