@@ -22,6 +22,9 @@ from evidence_corpus.infrastructure.indexing import models as corpus_index_model
 from evidence_corpus.infrastructure.repository import (  # noqa: F401
     models as corpus_repository_models,
 )
+from identity_access.infrastructure.repository import (  # noqa: F401
+    models as identity_access_repository_models,
+)
 from shared import audit, outbox  # noqa: F401  (imports register tables on Base.metadata)
 from shared.config import get_settings
 from shared.db import Base
