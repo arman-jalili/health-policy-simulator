@@ -104,6 +104,12 @@ async def readyz(request: Request) -> JSONResponse:
                 )
             )
 
+    stakeholder = getattr(request.app.state, "stakeholder_model", None)
+    if stakeholder is not None:
+        institution_count = len(stakeholder.allowlist.institutions)
+        checks["stakeholder_model"] = "ok" if institution_count == 9 else "degraded"
+        checks["stakeholder_institutions"] = str(institution_count)
+
     if failures:
         raise ServiceUnavailableError(
             "A required dependency is unavailable",

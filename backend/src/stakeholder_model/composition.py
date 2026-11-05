@@ -19,6 +19,8 @@ from evidence_corpus.domain.published import PassageView
 from shared.clock import SystemClock
 from shared.config import Settings
 from shared.db import Database, UnitOfWork
+from shared.enums import Persistence
+from shared.log_setup import get_logger
 from stakeholder_model.application.ports import UnitOfWork as UnitOfWorkPort
 from stakeholder_model.application.services import (
     BindAgentPersona,
@@ -47,6 +49,8 @@ from stakeholder_model.interfaces.published import (
     InstitutionalAllowlistView,
     to_allowlist_view,
 )
+
+logger = get_logger(__name__)
 
 
 class CorpusPort(Protocol):
@@ -103,12 +107,22 @@ def build_container(
     loader = PersonaFactory(persona_directory)
     personas = tuple(loader.load_all())
     identities = tuple(persona.identity for persona in personas)
+    logger.info(
+        "stakeholder_personas_loaded",
+        count=len(personas),
+        codes=sorted(identity.code for identity in identities),
+    )
+    if settings.persistence is Persistence.POSTGRES:
+        logger.warning(
+            "stakeholder_profiles_in_memory",
+            detail="durable profile adapter is a follow-up; runtime state resets on restart",
+        )
     guard = InstitutionalAllowlistGuard(identities)
     repository = InMemoryStakeholderRepository(list(personas))
     bindings = InMemoryAgentBindingRepository()
     clock = SystemClock()
     unit_of_work: UnitOfWorkPort
-    if settings.persistence.value == "postgres" and database is not None:
+    if settings.persistence is Persistence.POSTGRES and database is not None:
         unit_of_work = UnitOfWork(database.session_factory)
     else:
         unit_of_work = _NullUnitOfWork()

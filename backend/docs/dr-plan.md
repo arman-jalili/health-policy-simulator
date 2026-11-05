@@ -67,6 +67,8 @@ Verify restores, do not assume them: `pg_restore` into a scratch database monthl
 Authentication recovery: `docs/dr-plan-identity-access.md` (key-table restore, revocation after
 restore, credential compromise). Keys are hashed; plaintext is never backed up.
 
+Stakeholder model recovery: `docs/dr-plan-stakeholder-model.md` (persona cards, allowlist, in-memory limitation).
+
 Evidence retrieval recovery: `docs/dr-plan-evidence-retrieval.md` (pack table restore, snapshot/
 index consistency checks, reweighted pack lineage).
 

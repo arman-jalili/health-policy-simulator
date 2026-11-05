@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Contract frozen — implementation follows contract-freeze issue #102
+**Status:** implemented (2026-11-06) — contract frozen in #102, runtime integration in #118
 **Depends:** EvidenceCorpus (historical positions are extracted from attributed corpus passages)
 **Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -46,6 +46,24 @@ signature is a contract change, not a refactor.
 
 **Stub policy:** behaviour methods raise `NotImplementedError` naming the issue that fills them.
 Routers are concrete (no separate handler interface); the container shape is `interfaces/http/deps.py`.
+
+## Runtime Integration
+
+The context runs through the application shell, not a test-only library (ADR-009, ADR-011).
+
+| Concern | Implementation |
+|---|---|
+| Entry path | `shared.app.create_app` → `stakeholder_model.composition.build_container` → router |
+| Persona input | exactly 9 YAML cards under `backend/config/personas/` |
+| Boot validation | invalid card aborts construction before serving (name, interests, constraints, grounding, category/class) |
+| Public API | registry, profile update, power citation, history read/write, run selection, run binding |
+| Allowlist | `PublishInstitutionalAllowlist` → `InstitutionalAllowlistGuard` for GovernanceCompliance |
+| Readiness | `/readyz` reports `stakeholder_model` and the published institution count |
+| Proof | `tests/integration/test_stakeholder_wiring.py` exercises the public API |
+
+**Known deployment limitation:** the runtime currently seeds the registry from persona cards and keeps
+mutable profile/history/binding state in memory. Durable PostgreSQL persistence for these records is
+the next deployment step, not a hidden default. The runbook and DR plan state this explicitly.
 
 ## Related ADRs
 

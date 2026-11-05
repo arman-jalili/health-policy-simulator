@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from evidence_corpus.domain.values import AuthorityTier
 from shared.ids import new_id
+from shared.metrics import METRICS
 from stakeholder_model.application.commands import (
     BindAgentPersonaRequest,
     CitePowerSourceRequest,
@@ -98,6 +99,7 @@ class RegisterStakeholder:
         )
         async with self._unit_of_work.transaction():
             await self._repository.save(stakeholder)
+        METRICS.increment("stakeholder_registrations_total")
         return RegisterStakeholderResult(
             stakeholder_id=stakeholder.id,
             profile_version=stakeholder.profile.version,
@@ -181,6 +183,7 @@ class CitePowerSource:
         except UnsourcedAuthority as error:
             async with self._unit_of_work.transaction():
                 await self._repository.save(stakeholder)
+            METRICS.increment("stakeholder_authority_rejections_total")
             return CitePowerSourceResult(
                 stakeholder_id=stakeholder.id,
                 accepted=False,
@@ -222,6 +225,7 @@ class RecordHistoricalPosition:
         )
         async with self._unit_of_work.transaction():
             await self._repository.save(stakeholder)
+        METRICS.increment("stakeholder_positions_total")
         return HistoricalPositionResult(
             position_id=position.id,
             stakeholder_id=stakeholder.id,
@@ -259,6 +263,7 @@ class SelectRelevantStakeholders:
             (selection for selection in selections if selection.materiality.value > 0.0),
             key=lambda selection: (-selection.materiality.value, selection.stakeholder_id),
         )
+        METRICS.increment("stakeholder_selections_total")
         return SelectStakeholdersResult(
             run_id=request.run_id,
             mandate=request.mandate,
@@ -324,6 +329,7 @@ class BindAgentPersona:
                         persona_version=binding.persona_version,
                     )
                 )
+        METRICS.increment("stakeholder_bindings_total", amount=float(len(bindings)))
         return BindPersonasResult(run_id=request.run_id, bindings=tuple(bindings))
 
 
@@ -440,4 +446,5 @@ class PublishInstitutionalAllowlist:
         stakeholders = await self._repository.all_registered()
         identities = tuple(stakeholder.identity for stakeholder in stakeholders)
         await self._guard.publish_allowlist(identities)
+        METRICS.increment("stakeholder_allowlist_publishes_total")
         return InstitutionalAllowlistResult(institutions=identities)

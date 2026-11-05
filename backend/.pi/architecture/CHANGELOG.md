@@ -48,6 +48,38 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - StakeholderModel architecture readiness (issue #120)
+
+### Changed
+- Module: stakeholder-model
+  - Added `docs/runbook-stakeholder-model.md` and `docs/dr-plan-stakeholder-model.md`, linked from
+    the shared runbook/DR index.
+  - Added business/technical counters for registrations, selections, bindings, positions,
+    authority refusals and allowlist publications.
+  - `/readyz` reports `stakeholder_model` plus the published institution count.
+  - Module status set to implemented with a Runtime Integration section; README/stakeholder
+    section and proofing command synced.
+  - The in-memory durability limitation is explicit in the module doc, README, runbook and DR plan.
+
+### Impact Analysis
+- Files affected:
+  - `src/stakeholder_model/application/services.py`
+  - `src/stakeholder_model/composition.py`
+  - `src/shared/http/health.py`
+  - `docs/runbook-stakeholder-model.md`, `docs/dr-plan-stakeholder-model.md`
+  - `README.md`, `.pi/architecture/modules/stakeholder-model.md`
+- Canonical refs: module doc, ADR-011
+- Validators: readiness, architecture, canonical, ci, tests, operations
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Observability updated
+- [x] Runbook and DR plan added
+- [x] Readiness validator run
+
+---
+
 ## [2026-11-06] - StakeholderModel runtime integration (issue #118)
 
 ### Changed
