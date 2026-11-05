@@ -46,6 +46,7 @@ issue; implementation issues may fill bodies but must not change signatures.
 | ADR-003 Cross-Context Communication | Guard sits in front of the negotiation write path |
 | ADR-006 Cost Tracking | Rejected/rewritten outputs are still metered |
 | ADR-008 Proportional Modeling Depth | Service depth: no aggregates, no domain events of its own |
+| ADR-014 GovernanceCompliance Runtime Integration | Guard/router/container mounted; empty allowlist aborts boot; no LLM on the guard path |
 
 ## Diagrams
 
