@@ -48,6 +48,32 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - SimulationOrchestration budget runtime (issue #237)
+
+### Changed
+- `RunSimulationJob` refreshes cumulative usage before every node, persists it via `record_budget`,
+  and calls `BudgetGuard.evaluate` as a pre-call gate for invocations, tokens and cost.
+- Rejection pauses the job, records the reason, publishes `run.budget_exhausted` and never calls the
+  node.
+- `budget_used` and `/runs/{id}/usage` now advance from real invocation envelopes, including the
+  bootstrap turns. Resume can replace the budget so an operator can raise it.
+- The temporary bootstrap graph is now two metered scripted turns, exercising the budget path through
+  the public API.
+
+### Impact Analysis
+- Files affected: `application/services.py`, bootstrap graph, composition, integration tests/docs
+- Canonical refs: ADR-006, module doc, runbook
+- Validators: tests, contract proofing, runtime wiring, architecture
+
+### Status
+- [x] Pre-call budget gate
+- [x] Persisted cumulative usage
+- [x] Budget exhaustion event + paused job
+- [x] Public API budget-of-1 proof
+- [x] Token/cost dimensions enforced
+
+---
+
 ## [2026-11-06] - SimulationOrchestration pause/resume runtime (issue #236)
 
 ### Changed

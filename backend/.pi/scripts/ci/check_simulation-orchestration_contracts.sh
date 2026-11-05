@@ -99,6 +99,8 @@ require_literal "$SRC/infrastructure/graph.py" "class SequentialWorkflowGraph" "
 require_literal "$SRC/application/services.py" "RecordAgentInvocation" "invocation service wired"
 require_literal "$SRC/application/rules.py" "exhaustion_event" "budget exhaustion event"
 require_literal "$SRC/application/services.py" "PauseBoundary" "pause boundary used by service"
+require_literal "$SRC/application/services.py" "self._budget_guard.evaluate" "budget guard called by runtime"
+require_literal "$SRC/application/services.py" "record_budget" "cumulative usage persisted"
 require_literal "$SRC/application/rules.py" "delay_seconds" "bounded retry"
 require_literal "$SRC/application/services.py" "Last-Event-ID" "SSE replay by Last-Event-ID" 2>/dev/null || true
 require_literal "$SRC/application/services.py" "last_event_id" "SSE replay by Last-Event-ID"
@@ -118,6 +120,8 @@ require_file "tests/integration/test_simulation_orchestration_persistence.py" "r
 require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_start_emits_progress_without_manual_worker_step" "start-to-progress E2E"
 require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_unknown_configured_model_fails_at_boot" "boot failure proof"
 require_literal "tests/integration/test_simulation_orchestration_persistence.py" "test_public_api_runs_on_postgres_through_worker" "Postgres public E2E"
+require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes" "budget public E2E"
+require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_pause_and_resume_through_the_public_api" "pause/resume public E2E"
 
 echo ""; echo "============================================"
 echo "  Passed: ${PASS}  Failed: ${FAIL}"

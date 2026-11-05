@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from decimal import Decimal
 from typing import Any, cast
 
 import httpx
@@ -136,18 +137,71 @@ async def test_pause_and_resume_through_the_public_api() -> None:
         assert stream.text.index("event: run.paused") < stream.text.index("event: run.resumed")
 
 
-async def test_usage_endpoint_returns_zero_usage_for_bootstrap_run() -> None:
+async def test_usage_endpoint_reports_bootstrap_invocations() -> None:
     app = create_app(_settings())
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
-        await client.post("/api/v1/runs/run_2:start", json={})
+        started = await client.post("/api/v1/runs/run_2:start", json={})
+        job_id = started.json()["job_id"]
+        for _ in range(100):
+            job = (await client.get(f"/api/v1/jobs/{job_id}")).json()
+            if job["status"] == "completed":
+                break
+            await asyncio.sleep(0.02)
         usage = await client.get("/api/v1/runs/run_2/usage")
         assert usage.status_code == 200, usage.text
-        assert usage.json()["total_invocations"] == 0
-        assert usage.json()["cost"] == "0"
+        assert usage.json()["total_invocations"] == 2
+        assert Decimal(usage.json()["cost"]) == Decimal("0")
+        assert job["checkpoint"]["budget_used_invocations"] == 2
+
+
+async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() -> None:
+    app = create_app(_settings())
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+    ):
+        started = await client.post(
+            "/api/v1/runs/run_budget:start", json={"budget": {"max_invocations": 1}}
+        )
+        assert started.status_code == 202, started.text
+        job_id = started.json()["job_id"]
+
+        for _ in range(100):
+            job = (await client.get(f"/api/v1/jobs/{job_id}")).json()
+            if job["status"] == "paused":
+                break
+            await asyncio.sleep(0.02)
+        assert job["status"] == "paused"
+        assert "invocations budget exhausted" in job["error"]
+        assert job["checkpoint"]["budget_used_invocations"] == 1
+
+        usage = await client.get("/api/v1/runs/run_budget/usage")
+        assert usage.json()["total_invocations"] == 1
+
+        stream = await client.get("/api/v1/runs/run_budget/stream")
+        assert "event: run.budget_exhausted" in stream.text
+
+        resumed = await client.post(
+            "/api/v1/runs/run_budget:resume",
+            json={"action": "resume", "budget": {"max_invocations": 2}},
+        )
+        assert resumed.status_code == 202, resumed.text
+        assert resumed.json()["status"] == "queued"
+
+        for _ in range(100):
+            job = (await client.get(f"/api/v1/jobs/{job_id}")).json()
+            if job["status"] == "completed":
+                break
+            await asyncio.sleep(0.02)
+        assert job["status"] == "completed"
+        assert job["checkpoint"]["budget_used_invocations"] == 2
+        usage = await client.get("/api/v1/runs/run_budget/usage")
+        assert usage.json()["total_invocations"] == 2
 
 
 def test_unknown_configured_model_fails_at_boot() -> None:

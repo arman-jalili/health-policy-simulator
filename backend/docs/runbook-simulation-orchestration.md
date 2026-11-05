@@ -28,6 +28,9 @@ architecture: `.pi/architecture/modules/simulation-orchestration.md`; runtime de
    persistence/model.
 6. `POST /api/v1/runs/{run_id}:start` → 202. The worker must move the job to `completed` and
    `GET /runs/{run_id}/stream` must show `run.started` → `run.completed` without a manual step.
+7. `GET /runs/{run_id}/usage` reports the bootstrap turns' metered envelopes; `GET /jobs/{id}`
+   `budget_used` matches the usage report. A budget of 1 pauses after the first invocation with
+   `run.budget_exhausted`.
 
 ## Graceful shutdown
 
@@ -50,7 +53,7 @@ on every claim (60 s default); an expired lease makes the job claimable again.
 | SSE reconnect repeats events | Client reused an old `Last-Event-ID` | Use the last received `id:`; server replays strictly after it |
 | Duplicate progress sequence | Two workers wrote the same stream | Unique `(run_id, sequence)` rejects it; inspect worker ownership |
 | Invocation duplicate | Provider retried an existing id | Append-once is intentional; inspect the existing envelope |
-| Budget exhaustion | `max_cost`/`max_tokens`/`max_invocations` breached | Raise the budget and resume; no partial argument is persisted |
+| Budget exhaustion | `max_cost`/`max_tokens`/`max_invocations` breached before a turn | Inspect `error` and `budget_used`; resume with a raised `budget` body; no rejected invocation is executed |
 | `INVALID_JOB_TRANSITION` | Pause/resume from a terminal state | Read `GET /jobs/{id}`; only queued/running pause and paused resume are legal |
 | Resume returns `queued`, not `running` | Resume re-queues the job for the worker | Wait for the worker to claim it; inspect `attempts` and progress sequence |
 
