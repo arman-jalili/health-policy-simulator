@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+import yaml
+
+from shared.app import create_app
+from shared.config import Settings
+from shared.enums import Persistence
+from stakeholder_model.composition import build_container as build_stakeholder_container
 from stakeholder_model.interfaces.http.deps import StakeholderModelContainer, get_container
 from stakeholder_model.interfaces.http.router import router
 
@@ -56,3 +65,60 @@ def test_container_binds_every_application_service() -> None:
         "transaction",
     } <= set(annotations)
     assert callable(get_container)
+
+
+DATABASE_URL = "postgresql+asyncpg://hps:hps@localhost:5433/health_policy"
+
+
+def _settings() -> Settings:
+    return Settings(
+        _env_file=None,
+        database_url=DATABASE_URL,
+        persistence=Persistence.MEMORY,
+    )
+
+
+async def test_container_publishes_all_nine_institutions_to_the_guard() -> None:
+    container = build_stakeholder_container(_settings())
+
+    allowlist = await container.publish_allowlist.execute()
+
+    assert len(container.personas) == 9
+    assert len(allowlist.institutions) == 9
+    assert container.guard.codes == {
+        "aerztekammer",
+        "apothekerkammer",
+        "bmsgpk",
+        "krankenhausgesellschaft",
+        "landesgesundheitsfonds",
+        "oegk",
+        "patientenanwaltschaft",
+        "privatkrankenanstalten",
+        "sozialversicherung",
+    }
+    assert all(container.guard.recognises(code) for code in container.guard.codes)
+
+
+def test_app_mounts_the_stakeholder_routes() -> None:
+    app = create_app(_settings())
+
+    paths = set(app.openapi()["paths"])
+
+    assert "/api/v1/stakeholders" in paths
+    assert "/api/v1/stakeholders/{stakeholder_id}" in paths
+    assert "/api/v1/runs/{run_id}/stakeholders:select" in paths
+    assert "/api/v1/runs/{run_id}/stakeholders:bind" in paths
+    assert app.state.stakeholder_model is not None
+
+
+def test_invalid_persona_aborts_container_boot(tmp_path: Path) -> None:
+    source = Path("config/personas/oegk.yaml").read_text(encoding="utf-8")
+    document = yaml.safe_load(source)
+    document["code"] = "broken"
+    document["interests"] = []
+    (tmp_path / "broken.yaml").write_text(
+        yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="no interests"):
+        build_stakeholder_container(_settings(), persona_directory=tmp_path)

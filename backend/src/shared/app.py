@@ -32,6 +32,8 @@ from shared.http.middleware import RequestContextMiddleware
 from shared.log_setup import configure_logging, get_logger
 from shared.outbox import OutboxEvent
 from shared.relay import WILDCARD, OutboxRelay
+from stakeholder_model.composition import build_container as build_stakeholder_container
+from stakeholder_model.interfaces.http.router import router as stakeholder_model_router
 
 logger = get_logger(__name__)
 
@@ -87,6 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app_settings, database, corpus=app.state.corpus
     )
     app.state.identity_access = build_identity_access_container(app_settings, database)
+    app.state.stakeholder_model = build_stakeholder_container(app_settings, database)
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -105,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(evidence_corpus_router)
     app.include_router(evidence_retrieval_router)
     app.include_router(identity_access_router)
+    app.include_router(stakeholder_model_router)
     return app
 
 
