@@ -15,3 +15,20 @@ class ClaimVerdictView:
     claim_type: str
     sources: tuple[str, ...]
     delta: Decimal | None = None
+
+
+def to_verdict_view(
+    *,
+    claim_id: str,
+    verdict: str,
+    claim_type: str,
+    sources: tuple[str, ...],
+    delta: Decimal | None,
+) -> ClaimVerdictView:
+    return ClaimVerdictView(
+        claim_id=claim_id,
+        verdict=verdict,
+        claim_type=claim_type,
+        sources=sources,
+        delta=delta,
+    )

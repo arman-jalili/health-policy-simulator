@@ -50,12 +50,32 @@ class ReferenceFigureResponse(BaseModel):
     figure_id: str
 
 
+class ReferenceFigureItem(BaseModel):
+    figure_id: str
+    measure: str
+    unit: str
+    period: str
+    geography: str
+    value: str
+    tier: str
+    as_of: str
+    source_id: str
+
+
 class ReferenceFiguresResponse(BaseModel):
-    items: list[dict[str, str]]
+    items: list[ReferenceFigureItem]
+
+
+class ContradictionItem(BaseModel):
+    finding_id: str
+    claim_id_a: str
+    claim_id_b: str
+    measure: str
+    delta: str
 
 
 class ContradictionResponse(BaseModel):
-    items: list[dict[str, str]]
+    items: list[ContradictionItem]
 
 
 class ReviewBody(BaseModel):

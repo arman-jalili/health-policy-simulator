@@ -10,7 +10,6 @@ an expert review can settle.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal
 
 from claim_validation.domain.entities import ClaimVerification, ExpertReview
 from claim_validation.domain.errors import PathNotApplicable, ReviewNotEscalated
@@ -196,9 +195,3 @@ class Claim:
             method="no_applicable_path",
         )
         self.events.append(ClaimMarkedUnverifiable(str(self.id), self.type))
-
-
-def _assert_decimals(value: Decimal | None) -> Decimal:
-    if value is None:
-        raise ValueError("value is required")
-    return value

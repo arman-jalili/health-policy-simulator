@@ -16,6 +16,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from claim_validation.composition import build_container as build_claim_validation_container
+from claim_validation.interfaces.http.router import router as claim_validation_router
 from evidence_corpus.composition import build_container
 from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
 from evidence_retrieval.composition import build_container as build_retrieval_container
@@ -90,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.identity_access = build_identity_access_container(app_settings, database)
     app.state.stakeholder_model = build_stakeholder_container(app_settings, database)
+    app.state.claim_validation = build_claim_validation_container(app_settings, database)
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -109,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(evidence_retrieval_router)
     app.include_router(identity_access_router)
     app.include_router(stakeholder_model_router)
+    app.include_router(claim_validation_router)
     return app
 
 
