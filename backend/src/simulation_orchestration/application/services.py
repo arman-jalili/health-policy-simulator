@@ -2,9 +2,8 @@
 
 Canonical: .pi/architecture/modules/simulation-orchestration.md
 
-Constructors, service names and ``execute`` signatures are frozen. Bodies raise
-``NotImplementedError`` naming the issue that implements them; later issues may not rename or
-remove a frozen member without a new freeze entry.
+Constructors, service names and ``execute`` signatures are frozen. Later issues may not rename or
+remove a frozen member without a new freeze entry; all bodies are implemented.
 """
 
 from __future__ import annotations
