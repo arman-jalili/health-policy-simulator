@@ -20,13 +20,23 @@ every position can be explained by its sources, arguments and model invocation.
 
 | Layer | Responsibility | Path |
 |-------|--------------|------|
-| **Domain** | — (none; ADR-008 forbids aggregates here) | `src/governance_compliance/domain/` |
+| **Domain** | — (empty ADR-008 marker; no aggregates, VOs or domain events) | `src/governance_compliance/domain/__init__.py` |
 | **Application** | `EnforceInstitutionOnlyOutput`, `DisclosePositionProvenance`, `RecordGovernanceViolation` | `src/governance_compliance/application/` |
 | **Infrastructure** | NER adapter, rule engine, violation repository, provenance assembler | `src/governance_compliance/infrastructure/` |
 | **Interfaces** | Guard port consumed by NegotiationSession; REST read endpoints | `src/governance_compliance/interfaces/` |
 
 **Anti-corruption edge:** `GovernanceCompliance → NegotiationSession`. The guard is invoked *before*
 any argument or position is persisted. It returns a verdict, never a mutated domain object.
+
+## Contract Freeze (issue #248)
+
+The frozen surface is documented in [`docs/contracts-governance-compliance.md`](../../../docs/contracts-governance-compliance.md):
+application values, commands, DTOs, services, rules, ports, repository ports, error codes, five HTTP
+routes and the published guard/provenance views. The guard rule chain lives in `application/rules.py`,
+not `domain/`, because ADR-008 forbids domain modules for this service-depth context.
+
+The freeze is additive-only. Renaming or removing a frozen member requires a new contract-freeze
+issue; implementation issues may fill bodies but must not change signatures.
 
 ## Related ADRs
 
@@ -147,7 +157,7 @@ defined by its application services and its persistence contract above.
 | Component | Layer | Responsibility |
 |---|---|---|
 | ``EnforceInstitutionOnlyOutput` / `DisclosePositionProvenance` / `RecordGovernanceViolation`` | application | Guard and provenance orchestration (catalog above) |
-| `GuardRuleChain` (`GC-001`…`GC-005`) | domain (rules) | Deterministic rule evaluation returning accept / rewrite / reject |
+| `GuardRuleChain` (`GC-001`…`GC-005`) | application (rules) | Deterministic rule evaluation returning accept / rewrite / reject |
 | `ViolationStore`, `ProvenanceStore`, `AllowlistLoader` | infrastructure | Append-only persistence; keyed for idempotency |
 | `require_scope` guarded routers | interfaces | Guard, violations, provenance, allowlist endpoints |
 

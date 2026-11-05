@@ -48,6 +48,35 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - GovernanceCompliance contract freeze (issue #248)
+
+### Changed
+- Created `src/governance_compliance/` at ADR-008 service depth: empty `domain/` marker,
+  application values/commands/DTOs/ports/repositories/rules/services, infrastructure repository
+  ports, a concrete HTTP router and published guard/provenance views.
+- Froze the five guard rules (`GC-001`…`GC-005`), three decisions, five violation classes, seven
+  stable error codes, five routes/scopes and the idempotency records (`violation_hash`,
+  `(position_id, version)`).
+- The guard rule chain is an application collaborator, not a domain layer: no aggregates, value
+  objects or domain events are introduced.
+- Documented the surface in `docs/contracts-governance-compliance.md` and replaced the invalid
+  generated TDD placeholders with 76 structural contract checks.
+
+### Impact Analysis
+- Files affected: `src/governance_compliance/**`, `tests/unit/governance-compliance/contract/`,
+  `docs/contracts-governance-compliance.md`, module doc, README
+- Canonical refs: ADR-007, ADR-008, module doc
+- Validators: architecture, modeling depth, DDD structure, tests, canonical
+
+### Status
+- [x] Interfaces and DTOs frozen
+- [x] Rules, ports and repository ports frozen
+- [x] HTTP routes, scopes and error codes frozen
+- [x] ADR-008 service depth preserved
+- [x] Structural contract checks added
+
+---
+
 ## [2026-11-06] - Wiring gates W8–W10 (collaborator reachability)
 
 ### Changed
