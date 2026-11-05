@@ -1,0 +1,34 @@
+# Repository root — health-policy-simulator
+
+Monorepo root. The agent workspace and the backend application live in `backend/`; its own
+`.gitignore` covers Python artefacts.
+
+# ── OS / editors ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── Node / frontend (frontend/ is scaffolded later) ───────────────────────────
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# ── Agent runtime state (regenerated, never merged) ───────────────────────────
+backend/guardian-sessions.json
+backend/.pi/.guardian-epic-state.json
+backend/.pi/.guardian-pipeline-state.json
+backend/.pi/preflight_report.json
+backend/.pi/workspaces/

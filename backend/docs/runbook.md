@@ -1,13 +1,13 @@
 # Runbook
 
 Operational procedures for the health-policy-simulator API. Phase 0 scope: one process
-(`main:create_app`) and one PostgreSQL 16 database with `pgvector` and `pg_trgm`.
+(`shared.app:create_app`) and one PostgreSQL 16 database with `pgvector` and `pg_trgm`.
 
 ## Service shape
 
 | Item | Value |
 |---|---|
-| Entrypoint | `hps-api` (equivalently `uvicorn main:create_app --factory`) |
+| Entrypoint | `hps-api` (equivalently `uvicorn shared.app:create_app --factory`) |
 | Liveness | `GET /healthz` — process only, never touches the database |
 | Readiness | `GET /readyz` — `SELECT 1`; `503 NOT_READY` when the database is unreachable |
 | Logs | JSON on stdout; every line of a request carries `trace_id` |

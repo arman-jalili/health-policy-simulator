@@ -27,8 +27,7 @@
 ```
 backend/
 ├── src/
-│   ├── main.py       # composition root (create_app)
-│   └── shared/       # shared kernel: config, errors, ids, clock, db, outbox, audit, log, http
+│   └── shared/       # shared kernel: app factory, config, errors, ids, clock, db, outbox, log, http
 ├── migrations/       # Alembic revision chain (0000_bootstrap)
 ├── tests/            # unit/ (no I/O) and integration/ (PostgreSQL)
 ├── docs/             # runbook.md, dr-plan.md
@@ -87,7 +86,7 @@ python3 .pi/scripts/ci/check_modeling_depth.py
 | `.pi/architecture/implementation-roadmap.md` | Phase plan and acceptance criteria |
 | `.pi/architecture/decisions/` | Accepted ADRs (stack, depth, storage, API, auth, compliance) |
 | `.pi/architecture/modules/` | Canonical module documents (one per bounded context) |
-| `src/main.py` | Composition root — the only place contexts are wired together |
+| `src/shared/app.py` | Composition root — the only place contexts are wired together |
 | `src/shared/config.py` | Settings, fail-fast validation, demo/production guard |
 | `src/shared/outbox.py` | Transactional outbox writer (the only event publication path) |
 | `migrations/versions/0000_bootstrap.py` | Extensions + shared tables |

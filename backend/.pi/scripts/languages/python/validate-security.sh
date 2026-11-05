@@ -2,12 +2,14 @@
 # validate-security.sh — Python
 set -euo pipefail
 
-# Activate Poetry venv if available
+# Activate the project virtualenv if available (Poetry, then uv/.venv)
 if [ -f "poetry.lock" ] && command -v poetry &>/dev/null; then
     POETRY_ENV=$(poetry env info --path 2>/dev/null || true)
     if [ -n "$POETRY_ENV" ] && [ -f "$POETRY_ENV/bin/activate" ]; then
         source "$POETRY_ENV/bin/activate"
     fi
+elif [ -z "${VIRTUAL_ENV:-}" ] && [ -f ".venv/bin/activate" ]; then
+    source ".venv/bin/activate"
 fi
 
 SRC_DIR="${1:-src}"

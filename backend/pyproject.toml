@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-hps-api = "main:main"
+hps-api = "shared.app:main"
 
 [dependency-groups]
 dev = [
@@ -35,12 +35,11 @@ dev = [
     "ruff>=0.8",
 ]
 
-# Entrypoint module (src/main.py) is shipped next to the `shared` package.
+# Composition root lives in `shared/app.py`, so the wheel ships exactly one importable package.
+# Editable installs therefore map `src/shared` and never leave a stale copy of the entrypoint in
+# site-packages that could shadow the working tree.
 [tool.hatch.build.targets.wheel]
 packages = ["src/shared"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/main.py" = "main.py"
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]
