@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -20,10 +21,12 @@ from claim_validation.interfaces.http.deps import ClaimValidationContainer, get_
 from claim_validation.interfaces.http.schemas import (
     ClaimDetailResponse,
     ClaimVerdictResponse,
+    ContradictionItem,
     ContradictionResponse,
     FlagBody,
     MeasureBody,
     ReferenceFigureBody,
+    ReferenceFigureItem,
     ReferenceFigureResponse,
     ReferenceFiguresResponse,
     ReviewBody,
@@ -64,6 +67,7 @@ async def verify_claim(
             text=body.text,
             claim_type=ClaimType(body.claim_type) if body.claim_type else None,
             measure=_measure(body.measure),
+            asserted_value=Decimal(body.asserted_value) if body.asserted_value else None,
         )
     )
     return ClaimVerdictResponse(
@@ -165,7 +169,22 @@ async def list_reference_figures(
     container: Annotated[ClaimValidationContainer, Depends(get_container)],
 ) -> ReferenceFiguresResponse:
     items = await container.list_reference_figures.execute(ListReferenceFiguresRequest())
-    return ReferenceFiguresResponse(items=[item.__dict__ for item in items])
+    return ReferenceFiguresResponse(
+        items=[
+            ReferenceFigureItem(
+                figure_id=item.figure_id,
+                measure=item.measure,
+                unit=item.unit,
+                period=item.period,
+                geography=item.geography,
+                value=str(item.value),
+                tier=item.tier,
+                as_of=item.as_of,
+                source_id=item.source_id,
+            )
+            for item in items
+        ]
+    )
 
 
 @router.get(
@@ -179,7 +198,18 @@ async def list_contradictions(
     container: Annotated[ClaimValidationContainer, Depends(get_container)],
 ) -> ContradictionResponse:
     items = await container.list_contradictions.execute(ListContradictionsRequest())
-    return ContradictionResponse(items=[item.__dict__ for item in items])
+    return ContradictionResponse(
+        items=[
+            ContradictionItem(
+                finding_id=item.finding_id,
+                claim_id_a=item.claim_id_a,
+                claim_id_b=item.claim_id_b,
+                measure=item.measure,
+                delta=str(item.delta),
+            )
+            for item in items
+        ]
+    )
 
 
 @router.post(
