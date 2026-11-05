@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
-from typing import NewType
+from typing import Final, NewType
 
 StakeholderId = NewType("StakeholderId", str)
 """Identity of an institution in the registry (``stk_...``)."""
@@ -258,6 +258,16 @@ class Dependency:
         _require_unit_interval(self.strength, "Dependency.strength")
 
 
+_SCOPE_REFERENCE_TOPICS: Final[int] = 4
+_BUDGET_REFERENCE_EUR: Final[Decimal] = Decimal("100000000")
+_VETO_REFERENCE_COUNT: Final[int] = 3
+_DEPENDENCY_REFERENCE_COUNT: Final[int] = 4
+_SCOPE_WEIGHT: Final[float] = 0.30
+_BUDGET_WEIGHT: Final[float] = 0.25
+_VETO_WEIGHT: Final[float] = 0.30
+_CENTRALITY_WEIGHT: Final[float] = 0.15
+
+
 @dataclass(frozen=True, slots=True)
 class NegotiatingPower:
     """Derived leverage; recomputed from grounded inputs, never assigned."""
@@ -281,8 +291,28 @@ class NegotiatingPower:
         veto_rights: list[VetoRight],
         dependencies: list[Dependency],
     ) -> NegotiatingPower:
-        """Derive power from grounded inputs; implemented by issue #109."""
-        raise NotImplementedError("NegotiatingPower.derive is implemented by issue #109")
+        """Derive power deterministically from grounded inputs.
+
+        Each driver is normalised against a published reference so the same scope/budget/vetoes
+        always produce the same power. ``centrality`` counts outgoing and incoming dependencies.
+        """
+        scope = min(1.0, len(mandate_scope.topics) / _SCOPE_REFERENCE_TOPICS)
+        budget_score = min(1.0, float(budget.amount_eur) / float(_BUDGET_REFERENCE_EUR))
+        vetoes = min(1.0, len(veto_rights) / _VETO_REFERENCE_COUNT)
+        centrality = min(1.0, len(dependencies) / _DEPENDENCY_REFERENCE_COUNT)
+        total = (
+            _SCOPE_WEIGHT * scope
+            + _BUDGET_WEIGHT * budget_score
+            + _VETO_WEIGHT * vetoes
+            + _CENTRALITY_WEIGHT * centrality
+        )
+        return cls(
+            scope=scope,
+            budget=budget_score,
+            vetoes=vetoes,
+            centrality=centrality,
+            total=min(1.0, total),
+        )
 
 
 @dataclass(frozen=True, slots=True)
