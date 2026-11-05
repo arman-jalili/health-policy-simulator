@@ -59,7 +59,9 @@ from stakeholder_model.domain.repositories import (
 from stakeholder_model.domain.services import AttributionRule, MaterialityScorer
 from stakeholder_model.domain.stakeholder import Stakeholder, StakeholderProfile
 from stakeholder_model.domain.values import (
+    AttributionStrength,
     BindingId,
+    InstitutionIdentity,
     PersonaVersion,
     ProfileVersion,
     ProposalClass,
@@ -213,13 +215,14 @@ class RecordHistoricalPosition:
         self._clock = clock
 
     async def execute(self, request: RecordHistoricalPositionRequest) -> HistoricalPositionResult:
-        """Record one attributed position and persist the aggregate."""
+        """Classify attribution from the cited corpus passage; never trust the client body."""
         stakeholder = await self._repository.get(request.stakeholder_id)
         if stakeholder is None:
             raise StakeholderNotFound(request.stakeholder_id)
+        attribution = await self._classify(stakeholder.identity, request)
         position = stakeholder.record_historical_position(
             stance=request.stance,
-            attribution=request.attribution,
+            attribution=attribution,
             stated_on=request.stated_on,
             passage_id=request.passage_id,
         )
@@ -235,6 +238,20 @@ class RecordHistoricalPosition:
             passage_id=position.passage_id,
             usable=position.usable,
         )
+
+    async def _classify(
+        self, identity: InstitutionIdentity, request: RecordHistoricalPositionRequest
+    ) -> AttributionStrength:
+        passages = await self._corpus.passages_about(identity)
+        passage = next(
+            (item for item in passages if item.passage_id == str(request.passage_id)), None
+        )
+        if passage is None:
+            return AttributionStrength.MENTION
+        named = identity.name.casefold() in passage.text.casefold() or (
+            identity.short_name.casefold() in passage.text.casefold()
+        )
+        return self._attribution_rule.classify(passage.speaker_kind, explicitly_named=named)
 
 
 class SelectRelevantStakeholders:

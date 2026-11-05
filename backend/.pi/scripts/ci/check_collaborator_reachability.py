@@ -44,10 +44,6 @@ _ALLOWED: dict[str, str] = {
     "src/simulation_orchestration/application/services.py:RegisterPromptTemplate._clock": (
         "#246 (PromptVersioning stamps datetime.now instead)"
     ),
-    "src/stakeholder_model/application/services.py:RecordHistoricalPosition._attribution_rule": (
-        "#245 (attribution strength is client-supplied)"
-    ),
-    "src/stakeholder_model/application/services.py:RecordHistoricalPosition._corpus": "#245 (passage unverified)",
     "src/stakeholder_model/application/services.py:RecordHistoricalPosition._clock": "#246 (injected clock unused)",
     "src/stakeholder_model/application/services.py:RegisterStakeholder._clock": "#246 (injected clock unused)",
     "src/stakeholder_model/application/services.py:BindAgentPersona._clock": "#246 (injected clock unused)",
