@@ -248,6 +248,14 @@ GovernanceCompliance for actor attribution.
 | Attribution | `Principal.label` flows into every command's `actor` and into `agent_invocation` | integration test: event actor is non-empty |
 | ACL isolation | no module outside `identity_access/infrastructure` imports key-store types (the composition root is the sole adapter-wiring exception) | architecture test |
 
+## Runtime Integration
+
+Entry path: `src/shared/app.py::create_app` → `identity_access.composition.build_identity_access_container`
+→ `app.state.identity_access`. The guard is attached router-wide through `require_declared_scope`,
+and the admin router is mounted in the same shell. The pre-wiring `501` stub and the inline demo-host
+set are deleted; there is no parallel auth path left. E2E proof:
+`tests/integration/test_identity_access_e2e.py` (ADR-009).
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

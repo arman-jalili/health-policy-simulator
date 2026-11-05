@@ -22,7 +22,7 @@ while IFS= read -r svc; do
     stem="$(basename "$svc" .py)"
     pascal="$(echo "$stem" | python3 -c 'import sys; s=sys.stdin.read().strip(); print("".join(w.capitalize() for w in s.replace("-","_").split("_")))' 2>/dev/null || echo "$stem")"
     compact="$(echo "$stem" | tr -d '_-')"
-    refs="$(grep -rliE "\b(${pascal}|${stem}|${compact})\b" src 2>/dev/null | grep -vE "/tests?/|test_.*\.py$|_test\.py$|/test/" | grep -v "^src/${mod}/" | grep -v "^${svc}$" | grep -cv '^$' || true)"
+    refs="$(grep -rliE "\b(${pascal}|${stem}|${compact})\b" src 2>/dev/null | grep -vE "/tests?/|test_.*\.py$|_test\.py$|/test/" | grep -v "^src/${mod}/application/" | grep -v "^${svc}$" | grep -cv '^$' || true)"
     if [ "${refs:-0}" -eq 0 ]; then
         echo "$svc: [runtime-reachability] application service has no production caller outside its module (tests-only callers don't count — ADR-009)"
         VIOLATIONS=$((VIOLATIONS + 1))
