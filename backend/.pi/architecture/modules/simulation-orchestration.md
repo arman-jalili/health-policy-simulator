@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Implemented — contract frozen #205; wiring #216; durable runtime #217
+**Status:** implemented (2026-11-06) — contract frozen #205, wiring #216, durable runtime #217, proofing #218, readiness #219
 **Depends:** NegotiationSession (ACL — invokes domain commands), StakeholderModel (persona versions), EvidenceRetrieval (packs per turn)
 **Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd

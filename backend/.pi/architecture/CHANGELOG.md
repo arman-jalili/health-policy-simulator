@@ -48,6 +48,31 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - SimulationOrchestration architecture readiness (issue #219)
+
+### Changed
+- Added `docs/runbook-simulation-orchestration.md` and
+  `docs/dr-plan-simulation-orchestration.md`, linked from the shared runbook/DR indexes.
+- Added runtime metrics: jobs started/completed, invocations, tokens, cost, progress events and
+  budget exhaustion.
+- Boot log `simulation_orchestration_wired`; `/readyz` reports `simulation_orchestration`,
+  persistence family and configured model.
+- Module status set to implemented; roadmap migration `0302` marked delivered.
+
+### Impact Analysis
+- Files affected: `src/simulation_orchestration/{application,composition.py}`,
+  `src/shared/http/health.py`, docs, roadmap
+- Canonical refs: module doc, ADR-013
+- Validators: readiness 9/9, architecture, canonical, operations, proofing 122/0
+
+### Status
+- [x] Runbook + DR plan
+- [x] Observability
+- [x] Canonical/module docs synced
+- [x] Readiness validator green
+
+---
+
 ## [2026-11-06] - SimulationOrchestration contract freeze (issue #205)
 
 ### Changed

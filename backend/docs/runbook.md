@@ -112,6 +112,7 @@ revocation, credential compromise).
 
 Stakeholder model operations: `docs/runbook-stakeholder-model.md` (persona cards, allowlist, selection/binding).
 Claim validation operations: `docs/runbook-claim-validation.md` (verification, reference figures, review).
+Simulation orchestration operations: `docs/runbook-simulation-orchestration.md` (worker, jobs, SSE, budget).
 
 Evidence retrieval operations: `docs/runbook-evidence-retrieval.md` (pack lifecycle, hybrid-search
 triage, retrieval readiness and reweighting).

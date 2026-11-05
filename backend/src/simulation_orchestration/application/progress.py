@@ -6,6 +6,7 @@ from dataclasses import asdict
 from typing import Any, cast
 
 from shared.ids import new_id
+from shared.metrics import METRICS
 from simulation_orchestration.application.dto import ProgressEventView
 from simulation_orchestration.application.events import SimulationEvent
 from simulation_orchestration.application.ports import Clock
@@ -22,6 +23,7 @@ class ProgressPublisher:
         self, run_id: RunId, kind: ProgressKind, event: SimulationEvent
     ) -> ProgressEventView:
         sequence = await self._progress.latest_sequence(run_id) + 1
+        METRICS.increment("simulation_progress_events_total", {"kind": kind.value})
         view = ProgressEventView(
             event_id=new_id("evt"),
             run_id=run_id,

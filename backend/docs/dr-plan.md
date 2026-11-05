@@ -69,6 +69,7 @@ restore, credential compromise). Keys are hashed; plaintext is never backed up.
 
 Stakeholder model recovery: `docs/dr-plan-stakeholder-model.md` (persona cards, allowlist, in-memory limitation).
 Claim validation recovery: `docs/dr-plan-claim-validation.md` (migration 0301, claims, reference figures).
+Simulation orchestration recovery: `docs/dr-plan-simulation-orchestration.md` (migration 0302, jobs, progress, metering).
 
 Evidence retrieval recovery: `docs/dr-plan-evidence-retrieval.md` (pack table restore, snapshot/
 index consistency checks, reweighted pack lineage).

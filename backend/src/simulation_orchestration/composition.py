@@ -10,6 +10,7 @@ from shared.config import Settings
 from shared.db import Database
 from shared.db import UnitOfWork as DbUnitOfWork
 from shared.enums import Persistence
+from shared.log_setup import get_logger
 from simulation_orchestration.application.errors import UnknownModel
 from simulation_orchestration.application.ports import NegotiationGateway, WorkerLoop
 from simulation_orchestration.application.repositories import (
@@ -53,6 +54,7 @@ from simulation_orchestration.infrastructure.repository.sqlalchemy import (
 from simulation_orchestration.infrastructure.worker import BackgroundWorker
 
 _SUPPORTED_MODELS = frozenset({"scripted-local"})
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +110,12 @@ def build_container(
         checkpoint_policy=CheckpointPolicy(),
         clock=clock,
         uow=uow,
+    )
+    logger.info(
+        "simulation_orchestration_wired",
+        persistence=settings.persistence.value,
+        model=model_id,
+        stores="postgresql" if settings.persistence is Persistence.POSTGRES else "memory",
     )
     return SimulationOrchestrationContainer(
         run_simulation_job=run_job,

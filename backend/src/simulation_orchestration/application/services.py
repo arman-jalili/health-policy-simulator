@@ -13,6 +13,7 @@ from dataclasses import replace
 from decimal import Decimal
 
 from shared.ids import new_id
+from shared.metrics import METRICS
 from simulation_orchestration.application.commands import (
     CollectUsageReportRequest,
     GetJobRequest,
@@ -122,6 +123,7 @@ class RunSimulationJob:
             budget=request.budget,
         )
         await self._jobs.add(job)
+        METRICS.increment("simulation_jobs_started_total")
         await self._publish(
             request.run_id,
             ProgressKind.QUEUED,
@@ -161,6 +163,7 @@ class RunSimulationJob:
                     updated_at=self._clock.now(),
                 )
                 await self._jobs.save(job)
+                METRICS.increment("simulation_jobs_completed_total")
                 await self._publish(
                     job.run_id,
                     ProgressKind.COMPLETED,
@@ -173,6 +176,7 @@ class RunSimulationJob:
             if next_state.phase is RunPhase.DONE:
                 job = replace(job, status=JobStatus.COMPLETED)
                 await self._jobs.save(job)
+                METRICS.increment("simulation_jobs_completed_total")
                 await self._publish(
                     job.run_id,
                     ProgressKind.COMPLETED,
@@ -323,6 +327,11 @@ class RecordAgentInvocation:
             created_at=self._clock.now(),
         )
         await self._invocations.add(envelope)
+        METRICS.increment("simulation_invocations_total")
+        METRICS.increment(
+            "simulation_tokens_total", amount=envelope.input_tokens + envelope.output_tokens
+        )
+        METRICS.increment("simulation_cost_total", amount=float(envelope.cost_estimate))
         return InvocationRecordResult(
             invocation_id=envelope.invocation_id,
             run_id=envelope.run_id,

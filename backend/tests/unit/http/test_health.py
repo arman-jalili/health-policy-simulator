@@ -44,6 +44,9 @@ async def test_readyz_reports_ready_when_database_answers(
         "stakeholder_institutions": "9",
         "claim_validation": "ok",
         "claim_validation_persistence": "memory",
+        "simulation_orchestration": "ok",
+        "simulation_orchestration_persistence": "memory",
+        "simulation_model": "scripted-local",
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1
