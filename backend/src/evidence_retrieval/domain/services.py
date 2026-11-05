@@ -36,8 +36,20 @@ class ScoreEvidenceCandidates:
         recency: float,
         directness: float,
     ) -> EvidenceScore:
-        """Return the component breakdown whose ``final`` is their sum."""
-        raise NotImplementedError("ScoreEvidenceCandidates.score is a frozen stub")
+        """Return the component breakdown whose ``final`` is their sum.
+
+        Inputs are normalized contributions in ``[0, 1]``; authority is the corpus weight. The
+        score keeps each contribution visible so a later policy change cannot hide behind a single
+        opaque number.
+        """
+        return EvidenceScore(
+            authority=authority.weight,
+            lexical=lexical,
+            semantic=semantic,
+            recency=recency,
+            directness=directness,
+            final=authority.weight + lexical + semantic + recency + directness,
+        )
 
 
 class ApplyRecencyPolicy:
