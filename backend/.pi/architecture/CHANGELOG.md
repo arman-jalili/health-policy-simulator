@@ -48,6 +48,38 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - StakeholderModel contract freeze (issue #102)
+
+### Changed
+- Module: stakeholder-model
+  - Domain: froze IDs, enums, value objects, `Stakeholder`, `StakeholderProfile`,
+    `AgentBinding`, eleven event payloads, error codes, repository protocols and policy stubs.
+  - Application: froze one request/result DTO per use case, transaction/clock/guard/persona ports
+    and every application service signature.
+  - Interfaces: froze the partner contract (`StakeholderProfileView`, `AgentBindingView`,
+    `InstitutionalAllowlistView`) and the eight `/api/v1` routes with request/response schemas.
+  - Stubs raise `NotImplementedError` naming the implementation issue; no behaviour was added.
+
+### Impact Analysis
+- Files affected:
+  - `src/stakeholder_model/**`
+  - `tests/unit/stakeholder-model/**`
+- Canonical refs: `.pi/architecture/modules/stakeholder-model.md`
+- Validators: architecture, canonical, ci, tests, security, operations, runtime-wiring
+
+### Migration Steps
+1. Implementation issues replace the named `NotImplementedError` bodies.
+2. Contracts are additive-only; rename requires a new freeze entry.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation stubs created
+- [x] Canonical refs updated
+- [x] Validators run
+
+---
+
 ## [2026-11-05] - EvidenceRetrieval scores, hybrid path and trace truthfulness (issue #99)
 
 ### Changed

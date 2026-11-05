@@ -2,9 +2,9 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Contract frozen — implementation follows contract-freeze issue #102
 **Depends:** EvidenceCorpus (historical positions are extracted from attributed corpus passages)
-**Last reviewed:** 2026-11-05
+**Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description
@@ -24,6 +24,28 @@ becomes a negotiating agent persona. Guarantees institutions only, never persons
 | **Application** | `RegisterStakeholder`, `BindAgentPersona`, `SelectRelevantStakeholders`, `RecordHistoricalPosition` | `src/stakeholder_model/application/` |
 | **Infrastructure** | SQLAlchemy repositories, YAML persona loader, corpus port for historical positions | `src/stakeholder_model/infrastructure/` |
 | **Interfaces** | REST routers, `StakeholderProfileView` published to NegotiationSession | `src/stakeholder_model/interfaces/` |
+
+## Contract Freeze (issue #102)
+
+**Frozen:** 2026-11-06. Implementation issues consume these interfaces; changing a name, field or
+signature is a contract change, not a refactor.
+
+| Contract area | Location | Frozen surface |
+|---|---|---|
+| Domain values | `src/stakeholder_model/domain/values.py` | IDs, enums, institutions, interests, constraints, budgets, mandates, vetoes, power, attribution, positions |
+| Aggregates | `src/stakeholder_model/domain/stakeholder.py`, `agent_binding.py` | `Stakeholder`, `StakeholderProfile`, `AgentBinding` fields and commands |
+| Errors | `src/stakeholder_model/domain/errors.py` | stable codes for person representation, incomplete profile, unsourced authority, veto narrowing, missing aggregates |
+| Events | `src/stakeholder_model/domain/events.py` | all eleven payloads from the event table below |
+| Repository ports | `src/stakeholder_model/domain/repositories.py` | `StakeholderRepository`, `AgentBindingRepository`, `CorpusEvidencePort` |
+| Domain policies | `src/stakeholder_model/domain/services.py` | `MaterialityScorer`, attribution strategies, persona position selection |
+| Application DTOs | `src/stakeholder_model/application/{commands,dto}.py` | one request/result object per use case |
+| Application ports | `src/stakeholder_model/application/ports.py` | transaction, clock, guard, persona factory |
+| Application services | `src/stakeholder_model/application/services.py` | every use case with an `execute` method |
+| Partner contract | `src/stakeholder_model/interfaces/published.py` | `StakeholderProfileView`, `AgentBindingView`, `InstitutionalAllowlistView` |
+| HTTP | `src/stakeholder_model/interfaces/http/` | eight routes, scopes, request/response schemas |
+
+**Stub policy:** behaviour methods raise `NotImplementedError` naming the issue that fills them.
+Routers are concrete (no separate handler interface); the container shape is `interfaces/http/deps.py`.
 
 ## Related ADRs
 
