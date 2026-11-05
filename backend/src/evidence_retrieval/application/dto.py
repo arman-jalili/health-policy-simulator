@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from evidence_corpus.domain.published import ProvenanceView
+from evidence_corpus.domain.values import SourceType
 from evidence_retrieval.domain.values import (
     EvidenceScore,
     PassageId,
@@ -29,13 +30,19 @@ class CandidateResult:
     stance: StanceLabel
     score: EvidenceScore
     provenance: ProvenanceView | None
+    source_type: SourceType = SourceType.OTHER
 
 
 @dataclass(frozen=True, slots=True)
 class SearchCandidatesResult:
-    """Output of ``SearchEvidenceCandidates``."""
+    """Output of ``SearchEvidenceCandidates`` plus the retrieval facts a trace must record."""
 
     candidates: list[CandidateResult]
+    retrieval_mode: str = "lexical"
+    embedding_model: str = "none"
+    reranker_model: str = "none"
+    index_version: str = "unknown"
+    query_rewrite: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +62,8 @@ class TraceResult:
     reranker_model: str
     query_rewrite: str
     stance_counts: Mapping[StanceLabel, int]
+    retrieval_mode: str = "lexical"
+    index_version: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,8 +98,13 @@ class ScoreBreakdownResult:
 
 @dataclass(frozen=True, slots=True)
 class RetrievalReadiness:
-    """Dependency readiness for hybrid retrieval; readiness must be red if either is unreachable."""
+    """Dependency readiness for the active retrieval mode.
+
+    ``mode`` is the capability that actually runs, not an aspiration. An unbound dense/reranker
+    port is reported in ``detail`` while the lexical path remains ready.
+    """
 
     embeddings_reachable: bool
     reranker_reachable: bool
     detail: str | None = None
+    mode: str = "lexical"

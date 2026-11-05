@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from evidence_corpus.application.dto import IndexManifestView
 from evidence_corpus.domain.published import PassageView
 from evidence_corpus.infrastructure.indexing.models import IndexedPassage, IndexManifestRow
+from shared.text_embedding import MODEL_ID
 
 
 def _version(indexed_ids: list[str]) -> str:
@@ -65,7 +66,7 @@ class PostgresIndexWriter:
             )
             manifest = IndexManifestView(
                 index_version=_version(indexed_ids),
-                embedding_model="none",
+                embedding_model=MODEL_ID,
                 searchable_since=datetime.now(tz=UTC),
                 passage_count=int(total or 0),
             )
@@ -82,6 +83,7 @@ class PostgresIndexWriter:
                 statement.on_conflict_do_update(
                     index_elements=[IndexManifestRow.index_version],
                     set_={
+                        "embedding_model": statement.excluded.embedding_model,
                         "passage_count": statement.excluded.passage_count,
                         "searchable_since": statement.excluded.searchable_since,
                         "is_current": True,

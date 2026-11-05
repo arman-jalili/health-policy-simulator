@@ -10,8 +10,8 @@ from tests.unit.evidence_retrieval_contract_helpers import SRC, field_names, imp
 from evidence_retrieval.composition import EvidenceRetrievalContainer
 from evidence_retrieval.infrastructure.adapters import (
     CorpusPassageSearch,
-    LexicalEmbedding,
-    NoopReranker,
+    HashingEmbedding,
+    OverlapReranker,
     RuleBasedStanceModel,
     StaticRetrievalReadiness,
 )
@@ -78,8 +78,8 @@ def test_memory_wiring_binds_corpus_ports_not_tables() -> None:
 
     assert isinstance(container.packs, InMemoryEvidencePackRepository)
     assert isinstance(container.passage_search, CorpusPassageSearch)
-    assert isinstance(container.embeddings, LexicalEmbedding)
-    assert isinstance(container.reranker, NoopReranker)
+    assert isinstance(container.embeddings, HashingEmbedding)
+    assert isinstance(container.reranker, OverlapReranker)
     assert isinstance(container.query_rewrite, GermanQueryRewrite)
     assert isinstance(container.readiness, StaticRetrievalReadiness)
     assert isinstance(container.stance_classifier._model, RuleBasedStanceModel)

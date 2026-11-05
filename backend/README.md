@@ -131,9 +131,10 @@ Keys are stored as salted SHA-256 hashes; revocation takes effect on the next re
 
 ## Evidence retrieval
 
-`/api/v1/evidence/*` searches a pinned corpus snapshot, classifies stance, scores with an
-inspectable breakdown, and freezes balanced packs with truthful absence. `/readyz` reports
-`evidence_retrieval` and turns red when embeddings or the reranker are unreachable. Operations:
+`/api/v1/evidence/*` runs lexical + dense retrieval over a pinned corpus snapshot, fuses the
+rankings, reranks, classifies stance and derives every score component per candidate. Dense uses a
+vendor-free `hashing-char3gram-v1` adapter; pgvector HNSW is target-state. `/readyz` reports
+`evidence_retrieval_mode` plus the capability detail. Operations:
 `docs/runbook-evidence-retrieval.md`; recovery: `docs/dr-plan-evidence-retrieval.md`. Contract
 proofing: `bash .pi/scripts/ci/check_evidence-retrieval_contracts.sh`.
 

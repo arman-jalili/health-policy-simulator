@@ -8,7 +8,11 @@ against the domain contract and wired by the composition root.
 
 from __future__ import annotations
 
-from evidence_corpus.domain.values import AuthorityTier, SourceType
+import re
+from datetime import UTC, date, datetime
+
+from evidence_corpus.domain.published import PassageView, SnapshotIndexView
+from evidence_corpus.domain.values import AuthorityRule, AuthorityTier, SourceType
 from evidence_retrieval.application.commands import (
     ApplyRecencyPolicyRequest,
     AssembleEvidencePackRequest,
@@ -25,7 +29,7 @@ from evidence_retrieval.application.dto import (
     SearchCandidatesResult,
     TraceResult,
 )
-from evidence_retrieval.application.ports import Clock, QueryRewritePort
+from evidence_retrieval.application.ports import Clock, QueryRewritePort, RerankerPort
 from evidence_retrieval.domain.entities import EvidenceCandidate, RetrievalTrace
 from evidence_retrieval.domain.errors import EvidencePackNotFound
 from evidence_retrieval.domain.evidence_pack import EvidencePack
@@ -35,6 +39,7 @@ from evidence_retrieval.domain.services import (
     ReciprocalRankFusion,
     ScoreEvidenceCandidates,
     StanceClassifier,
+    directness_score,
 )
 from evidence_retrieval.domain.values import (
     AuthorityWeight,
@@ -43,11 +48,39 @@ from evidence_retrieval.domain.values import (
     PackId,
     PassageId,
     QueryRewrite,
+    RecencyPolicy,
     SnapshotId,
+    StanceAssessment,
     StanceLabel,
 )
 from shared.ids import new_id
 from shared.metrics import METRICS
+
+_TERM_PATTERN = re.compile(r"[a-z0-9äöüß]+")
+_GERMAN_STOPWORDS = frozenset({"der", "die", "das", "und", "werden", "or"})
+
+
+def _lexical_relevance(query: str, text: str) -> float:
+    """Return the fraction of distinct query terms present in the passage.
+
+    This is a real measurement of the lexical hit, not a constant. It intentionally uses term
+    presence rather than ORM rank so the value is reproducible across in-memory and PostgreSQL.
+    """
+    terms = {
+        term for term in _TERM_PATTERN.findall(query.casefold()) if term not in _GERMAN_STOPWORDS
+    }
+    if not terms:
+        return 0.0
+    text_terms = set(_TERM_PATTERN.findall(text.casefold()))
+    return len(terms & text_terms) / len(terms)
+
+
+def _tier_for(source_type: SourceType) -> AuthorityTier:
+    """Map a declared corpus source type to its rubric tier; unknown is never scorable."""
+    try:
+        return AuthorityTier(source_type.value)
+    except ValueError as exc:
+        raise ValueError(f"source type {source_type.value!r} cannot be scored") from exc
 
 
 class SearchEvidenceCandidates:
@@ -61,46 +94,113 @@ class SearchEvidenceCandidates:
         fusion: ReciprocalRankFusion,
         stance_classifier: StanceClassifier,
         scorer: ScoreEvidenceCandidates,
+        recency: ApplyRecencyPolicy | None = None,
+        clock: Clock | None = None,
+        reranker: RerankerPort | None = None,
     ) -> None:
         self._search_port = search_port
         self._query_rewrite = query_rewrite
         self._fusion = fusion
         self._stance_classifier = stance_classifier
         self._scorer = scorer
+        self._recency = recency or ApplyRecencyPolicy()
+        self._clock = clock
+        self._reranker = reranker
 
     async def execute(self, request: SearchEvidenceCandidatesRequest) -> SearchCandidatesResult:
-        """Return scored candidates with stance and provenance for one claim."""
+        """Return scored candidates with stance, derived components and provenance for one claim."""
         rewrite = self._query_rewrite.rewrite(request.claim)
         rule = await self._search_port.authority_rule(request.claim_type)
-        authority = AuthorityWeight.from_rule(rule, AuthorityTier.OTHER)
-        passages = await self._search_port.search(
-            rewrite.expanded, SnapshotId(request.snapshot_id), request.limit
-        )
+        snapshot_id = SnapshotId(request.snapshot_id)
+        index = await self._snapshot_index(snapshot_id)
+        lexical = await self._search_port.search(rewrite.expanded, snapshot_id, request.limit)
+        dense: list[tuple[PassageView, float]] = []
+        dense_lookup = getattr(self._search_port, "dense_search", None)
+        if index.embedding_model != "none" and dense_lookup is not None:
+            dense = list(await dense_lookup(rewrite.expanded, snapshot_id, request.limit))
+        mode = "lexical+dense" if dense else "lexical"
+        fused = self._fusion.fuse([lexical, [hit[0] for hit in dense]]) if dense else lexical
+        if self._reranker is not None:
+            passages = await self._reranker.rerank(request.claim, fused, request.limit)
+        else:
+            passages = fused
+        semantic_scores = {hit[0].passage_id: hit[1] for hit in dense}
+        as_of = self._clock.now().date() if self._clock is not None else datetime.now(tz=UTC).date()
+        policy = RecencyPolicy()
         candidates = [
-            CandidateResult(
-                passage_id=PassageId(passage.passage_id),
-                stance=await self._stance_classifier.classify(ClaimText(request.claim), passage),
-                score=self._scorer.score(
-                    authority=authority,
-                    lexical=1.0,
-                    semantic=1.0,
-                    recency=1.0,
-                    directness=1.0,
-                ),
-                provenance=passage.provenance,
+            await self._candidate(
+                request=request,
+                rewrite_expanded=rewrite.expanded,
+                rule=rule,
+                passage=passage,
+                policy=policy,
+                as_of=as_of,
+                semantic=semantic_scores.get(passage.passage_id, 0.0),
             )
             for passage in passages
         ]
         METRICS.increment(
             "evidence_retrieval_searches_total",
-            {"claim_type": request.claim_type.value},
+            {"claim_type": request.claim_type.value, "mode": mode},
         )
         METRICS.increment(
             "evidence_retrieval_candidates_total",
             {"claim_type": request.claim_type.value},
             len(candidates),
         )
-        return SearchCandidatesResult(candidates=candidates)
+        return SearchCandidatesResult(
+            candidates=candidates,
+            retrieval_mode=mode,
+            embedding_model=index.embedding_model,
+            reranker_model=self._reranker.model_id if self._reranker is not None else "none",
+            index_version=index.index_version,
+            query_rewrite=rewrite.expanded,
+        )
+
+    async def _candidate(
+        self,
+        *,
+        request: SearchEvidenceCandidatesRequest,
+        rewrite_expanded: str,
+        rule: AuthorityRule,
+        passage: PassageView,
+        policy: RecencyPolicy,
+        as_of: date,
+        semantic: float,
+    ) -> CandidateResult:
+        assessment = await self._assess(ClaimText(request.claim), passage)
+        authority = AuthorityWeight.from_rule(rule, _tier_for(passage.source_type))
+        recency = self._recency.apply(
+            policy=policy,
+            published_on=passage.provenance.published_on,
+            source_type=passage.source_type,
+            as_of=as_of,
+        )
+        return CandidateResult(
+            passage_id=PassageId(passage.passage_id),
+            stance=assessment.label,
+            score=self._scorer.score(
+                authority=authority,
+                lexical=_lexical_relevance(rewrite_expanded, passage.text),
+                semantic=semantic,
+                recency=recency,
+                directness=assessment.directness,
+            ),
+            provenance=passage.provenance,
+            source_type=passage.source_type,
+        )
+
+    async def _assess(self, claim: ClaimText, passage: PassageView) -> StanceAssessment:
+        assess = getattr(self._stance_classifier, "assess", None)
+        if assess is not None:
+            result = await assess(claim, passage)
+            if isinstance(result, StanceAssessment):
+                return result
+        label = await self._stance_classifier.classify(claim, passage)
+        return StanceAssessment(label=label, directness=directness_score(str(claim), passage.text))
+
+    async def _snapshot_index(self, snapshot_id: SnapshotId) -> SnapshotIndexView:
+        return await self._search_port.snapshot_index(snapshot_id)
 
 
 class AssembleEvidencePack:
@@ -126,21 +226,26 @@ class AssembleEvidencePack:
                 snapshot_id=request.snapshot_id,
             )
         )
-        rewrite = QueryRewrite(original=request.claim, expanded=request.claim)
+        rewrite = QueryRewrite(
+            original=request.claim,
+            expanded=result.query_rewrite or request.claim,
+        )
         trace = RetrievalTrace(
-            embedding_model="configured",
-            reranker_model="configured",
+            embedding_model=result.embedding_model,
+            reranker_model=result.reranker_model,
             query_rewrite=rewrite,
             stance_counts={
                 stance: sum(1 for c in result.candidates if c.stance is stance)
                 for stance in StanceLabel
             },
+            retrieval_mode=result.retrieval_mode,
+            index_version=result.index_version,
         )
         pack = EvidencePack(
             id=PackId(new_id("evp")),
             claim=ClaimText(request.claim),
             snapshot_id=SnapshotId(request.snapshot_id),
-            index_version="snapshot:" + request.snapshot_id,
+            index_version=result.index_version,
             trace=trace,
         )
         for candidate in result.candidates:
@@ -150,6 +255,7 @@ class AssembleEvidencePack:
                     stance=candidate.stance,
                     score=candidate.score,
                     provenance=candidate.provenance,
+                    source_type=candidate.source_type,
                 )
             )
         if not any(c.stance is StanceLabel.CONTRADICTING for c in result.candidates):
@@ -195,6 +301,8 @@ def _pack_result(pack: EvidencePack) -> EvidencePackResult:
             reranker_model=pack.trace.reranker_model,
             query_rewrite=pack.trace.query_rewrite.expanded,
             stance_counts=dict(pack.trace.stance_counts),
+            retrieval_mode=pack.trace.retrieval_mode,
+            index_version=pack.trace.index_version,
         ),
         frozen_at=pack.frozen_at,
     )
@@ -266,6 +374,8 @@ class ReweightEvidencePack:
                     expanded=stored.trace.query_rewrite.expanded,
                 ),
                 stance_counts=dict(stored.trace.stance_counts),
+                retrieval_mode=stored.trace.retrieval_mode,
+                index_version=stored.trace.index_version,
             ),
         )
         as_of = self._clock.now().date()
@@ -275,7 +385,7 @@ class ReweightEvidencePack:
                 self._recency.apply(
                     policy=request.policy,
                     published_on=provenance.published_on,
-                    source_type=SourceType.OTHER,
+                    source_type=candidate.source_type,
                     as_of=as_of,
                 )
                 if provenance is not None
@@ -300,6 +410,7 @@ class ReweightEvidencePack:
                         ),
                     ),
                     provenance=provenance,
+                    source_type=candidate.source_type,
                 )
             )
         if stored.absence is not None:

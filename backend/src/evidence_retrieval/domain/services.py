@@ -9,6 +9,7 @@ vendor types.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Sequence
 from datetime import date
 
@@ -20,8 +21,31 @@ from evidence_retrieval.domain.values import (
     ClaimText,
     EvidenceScore,
     RecencyPolicy,
+    StanceAssessment,
     StanceLabel,
 )
+
+_TERM_PATTERN = re.compile(r"[a-z0-9äöüß]+")
+_GERMAN_STOPWORDS = frozenset({"der", "die", "das", "und", "werden", "or"})
+
+
+def directness_score(claim: str, text: str) -> float:
+    """Return how directly ``text`` states ``claim``: exact phrase, then term overlap.
+
+    The value is deliberately derived from the text, not a constant. A verbatim statement gets
+    ``1.0``; a passage that only shares topic terms gets the fraction of claim terms it covers.
+    """
+    claim_normalized = " ".join(_TERM_PATTERN.findall(claim.casefold()))
+    text_normalized = " ".join(_TERM_PATTERN.findall(text.casefold()))
+    if claim_normalized and claim_normalized in text_normalized:
+        return 1.0
+    claim_terms = {
+        term for term in _TERM_PATTERN.findall(claim.casefold()) if term not in _GERMAN_STOPWORDS
+    }
+    if not claim_terms:
+        return 0.0
+    text_terms = set(_TERM_PATTERN.findall(text.casefold()))
+    return len(claim_terms & text_terms) / len(claim_terms)
 
 
 class ScoreEvidenceCandidates:
@@ -121,7 +145,14 @@ class StanceClassifier:
         The model proposes; this service refuses anything that is not a declared label. Validation
         happens here so an adapter cannot smuggle sentiment or free text into the stance contract.
         """
+        return (await self.assess(claim, passage)).label
+
+    async def assess(self, claim: ClaimText, passage: PassageView) -> StanceAssessment:
+        """Classify stance and derive directness from the same claim/passage evidence."""
         label = await self._model.classify(str(claim), passage)
         if not isinstance(label, StanceLabel):
             raise ValueError(f"stance model returned an unknown label: {label!r}")
-        return label
+        return StanceAssessment(
+            label=label,
+            directness=directness_score(str(claim), passage.text),
+        )

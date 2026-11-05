@@ -506,6 +506,7 @@ def _to_passage_view(row: PassageRow) -> PassageView:
         provenance=provenance_view(provenance),
         speaker_kind=SpeakerKind(row.speaker_kind),
         citable=row.citable,
+        source_type=SourceType(document_row.source_type),
     )
 
 

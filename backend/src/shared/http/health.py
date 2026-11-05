@@ -92,6 +92,9 @@ async def readyz(request: Request) -> JSONResponse:
         readiness = await retrieval.readiness.check()
         retrieval_ok = readiness.embeddings_reachable and readiness.reranker_reachable
         checks["evidence_retrieval"] = "ok" if retrieval_ok else "unreachable"
+        checks["evidence_retrieval_mode"] = readiness.mode
+        if readiness.detail is not None:
+            checks["evidence_retrieval_detail"] = readiness.detail
         if not retrieval_ok:
             failures.append(
                 ErrorDetail(

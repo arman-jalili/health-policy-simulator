@@ -42,6 +42,18 @@ class StanceLabel(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class StanceAssessment:
+    """A stance label plus the evidence that makes the passage direct or merely topical."""
+
+    label: StanceLabel
+    directness: float
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.directness <= 1.0:
+            raise ValueError("StanceAssessment.directness must be within [0, 1]")
+
+
+@dataclass(frozen=True, slots=True)
 class EvidenceScore:
     """Inspectable multi-component weighting; equal by components (ADR-008).
 

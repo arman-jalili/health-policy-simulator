@@ -30,6 +30,7 @@ def test_candidate_provenance_is_optional_at_construction_but_not_at_freeze() ->
         "stance",
         "score",
         "provenance",
+        "source_type",
     ]
     assert EvidenceCandidate.__annotations__["provenance"] is not None
     assert hasattr(EvidencePack, "assert_every_candidate_has_provenance")

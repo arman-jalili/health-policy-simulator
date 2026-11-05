@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from evidence_corpus.domain.values import Offsets, SpeakerKind
+from evidence_corpus.domain.values import Offsets, SourceType, SpeakerKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,3 +38,16 @@ class PassageView:
     provenance: ProvenanceView
     speaker_kind: SpeakerKind
     citable: bool
+    source_type: SourceType = SourceType.OTHER
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotIndexView:
+    """The corpus index a snapshot is pinned to, as published to retrieval.
+
+    Retrieval records this in ``RetrievalTrace`` instead of inventing an index version or a model
+    name. ``embedding_model`` names the active dense model, or ``none`` when unbound.
+    """
+
+    index_version: str
+    embedding_model: str

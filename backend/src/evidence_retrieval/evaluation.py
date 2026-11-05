@@ -38,13 +38,17 @@ class RecallReport:
     case_count: int
     recall_at_k: float
     per_case_recall: Mapping[str, float]
+    retrieval_mode: str = "unknown"
 
 
 class EvaluationHarness:
     """Run a labelled set through the real search path and report recall."""
 
-    def __init__(self, search: SearchEvidenceCandidates) -> None:
+    def __init__(
+        self, search: SearchEvidenceCandidates, *, retrieval_mode: str = "unknown"
+    ) -> None:
         self._search = search
+        self._retrieval_mode = retrieval_mode
 
     async def run(self, cases: Sequence[EvaluationCase], *, k: int = 10) -> RecallReport:
         """Return the measured report; the caller decides whether it is good enough."""
@@ -71,4 +75,5 @@ class EvaluationHarness:
             case_count=len(cases),
             recall_at_k=sum(per_case.values()) / len(per_case),
             per_case_recall=per_case,
+            retrieval_mode=self._retrieval_mode,
         )

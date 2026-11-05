@@ -92,6 +92,8 @@ def test_pack_records_the_index_version_and_trace_for_reproducibility() -> None:
         "reranker_model",
         "query_rewrite",
         "stance_counts",
+        "retrieval_mode",
+        "index_version",
     ]
 
 

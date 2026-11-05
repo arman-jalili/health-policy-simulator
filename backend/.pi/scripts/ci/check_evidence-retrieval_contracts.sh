@@ -83,7 +83,9 @@ for entry in \
     "EvidencePackRepository:save" \
     "EvidencePackRepository:latest_for_claim" \
     "PassageSearchPort:search" \
-    "PassageSearchPort:authority_rule"
+    "PassageSearchPort:authority_rule" \
+    "PassageSearchPort:snapshot_index" \
+    "PassageSearchPort:dense_search"
 do
     interface="${entry%%:*}"
     method="${entry##*:}"
@@ -102,11 +104,17 @@ done
 require_literal "$SRC/infrastructure/adapters.py" "class CorpusPassageSearch" "corpus published-language adapter"
 require_method "$SRC/infrastructure/adapters.py" search "CorpusPassageSearch.search"
 require_method "$SRC/infrastructure/adapters.py" authority_rule "CorpusPassageSearch.authority_rule"
+require_literal "$SRC/infrastructure/adapters.py" "class HashingEmbedding" "dense embedding adapter"
+require_literal "$SRC/infrastructure/adapters.py" "class OverlapReranker" "reranker adapter"
 require_literal "$SRC/infrastructure/adapters.py" "class RuleBasedStanceModel" "stance baseline"
 require_method "$SRC/infrastructure/adapters.py" classify "RuleBasedStanceModel.classify"
 require_literal "$SRC/infrastructure/adapters.py" "class StaticRetrievalReadiness" "readiness adapter"
 require_method "$SRC/infrastructure/adapters.py" check "StaticRetrievalReadiness.check"
 require_literal "$SRC/infrastructure/query_rewrite.py" "class GermanQueryRewrite" "query rewrite adapter"
+require_literal "$SRC/domain/entities.py" "retrieval_mode" "trace records retrieval mode"
+require_literal "$SRC/domain/entities.py" "index_version" "trace records index version"
+require_absent_recursive "$SRC/application" "AuthorityTier.OTHER" "scoring path has no hardcoded OTHER tier"
+require_file "scripts/evaluate_retrieval.py" "lexical-vs-hybrid evaluation script"
 require_method "$SRC/infrastructure/query_rewrite.py" rewrite "GermanQueryRewrite.rewrite"
 
 echo ""

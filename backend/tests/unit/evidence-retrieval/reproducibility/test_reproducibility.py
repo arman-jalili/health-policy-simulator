@@ -31,6 +31,8 @@ def test_trace_names_both_models_and_the_rewrite() -> None:
         "reranker_model",
         "query_rewrite",
         "stance_counts",
+        "retrieval_mode",
+        "index_version",
     ]
 
 
@@ -55,3 +57,13 @@ def test_assembling_the_same_claim_against_the_same_snapshot_is_a_defined_operat
 
     assert operation["x-required-scope"] == "runs:write"
     assert operation["responses"]["201"]["description"]
+
+
+def test_trace_never_uses_a_configured_placeholder() -> None:
+    from tests.unit.evidence_retrieval_contract_helpers import SRC
+
+    source = (SRC / "application/services.py").read_text(encoding="utf-8")
+
+    assert '"configured"' not in source
+    assert "retrieval_mode" in source
+    assert "index_version" in source

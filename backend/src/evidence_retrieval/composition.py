@@ -36,8 +36,8 @@ from evidence_retrieval.domain.services import (
 )
 from evidence_retrieval.infrastructure.adapters import (
     CorpusPassageSearch,
-    LexicalEmbedding,
-    NoopReranker,
+    HashingEmbedding,
+    OverlapReranker,
     RuleBasedStanceModel,
     StaticRetrievalReadiness,
     SystemClock,
@@ -109,32 +109,43 @@ def build_container(
         packs = SqlAlchemyEvidencePackRepository(database.session_factory)
         unit_of_work = UnitOfWork(database.session_factory)
 
+    embeddings = HashingEmbedding()
+    reranker = OverlapReranker()
     passage_search = CorpusPassageSearch(
         index=corpus.index_writer,  # type: ignore[arg-type]
         passages=corpus.passages,
         snapshots=corpus.snapshots,
         authority_rules=corpus.authority_rules,
+        embeddings=embeddings,
     )
     query_rewrite = GermanQueryRewrite()
     fusion = ReciprocalRankFusion()
     stance_classifier = StanceClassifier(RuleBasedStanceModel())
     scorer = ScoreEvidenceCandidates()
     clock = SystemClock()
+    recency = ApplyRecencyPolicy()
     search_candidates = SearchEvidenceCandidates(
         search_port=passage_search,
         query_rewrite=query_rewrite,
         fusion=fusion,
         stance_classifier=stance_classifier,
         scorer=scorer,
+        recency=recency,
+        clock=clock,
+        reranker=reranker,
     )
-    recency = ApplyRecencyPolicy()
     return EvidenceRetrievalContainer(
         packs=packs,
         passage_search=passage_search,
-        embeddings=LexicalEmbedding(),
-        reranker=NoopReranker(),
+        embeddings=embeddings,
+        reranker=reranker,
         query_rewrite=query_rewrite,
-        readiness=StaticRetrievalReadiness(True, True),
+        readiness=StaticRetrievalReadiness(
+            True,
+            True,
+            detail="lexical+dense (hashing-char3gram-v1); reranker overlap-reranker-v1",
+            mode="lexical+dense",
+        ),
         fusion=fusion,
         stance_classifier=stance_classifier,
         scorer=scorer,

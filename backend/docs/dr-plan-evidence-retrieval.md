@@ -27,7 +27,9 @@ shared PostgreSQL database and redeploys the stateless API.
 | Evaluation reports | CI artifact | per evaluation run | 30 days |
 
 Frozen packs are immutable, so a restored pack is safe to reuse as-is. Recomputing a pack requires
-the same snapshot and index manifest named in its trace.
+the same snapshot, index manifest and embedding/reranker model ids named in its trace. The current
+dense adapter is deterministic (`hashing-char3gram-v1`); a vendor encoder must be re-indexed or
+restored with the same model.
 
 ## Restore procedure
 
