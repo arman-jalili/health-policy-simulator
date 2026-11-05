@@ -171,6 +171,10 @@ Bootstrap only — no bounded contexts.
 
 **Goal:** Numbers are checkable, LLM calls are metered and traceable, and no person-level output can reach persistence.
 
+**ClaimValidation verified:** 2026-11-06 — aggregate, paths, tolerance, reference provenance,
+contradiction, escalation, unsupported retention, German parsing, measure identity, API and
+persistence (migration `0301`) are implemented.
+
 ### Modules
 
 | Module | Deliverables | Architecture Doc |
@@ -193,9 +197,12 @@ Bootstrap only — no bounded contexts.
 
 ### Acceptance Criteria
 
-- [ ] `3.2 Mrd` vs `3.25 Mrd` is **not** a contradiction; `3.2 vs 4.1` is
-- [ ] A causal claim is never marked verified; a qualitative claim is recorded unverifiable, not dropped
-- [ ] A press-tier `ReferenceFigure` is refused
+- [x] `3.2 Mrd` vs `3.25 Mrd` is **not** a contradiction; `3.2 vs 4.1` is —
+  `tests/unit/claim-validation/tolerance` and `real-contradiction`
+- [x] A causal claim is never marked verified; a qualitative claim is recorded unverifiable, not
+  dropped — `tests/unit/claim-validation/causal-never-verified` + `unverifiable-retained`
+- [x] A press-tier `ReferenceFigure` is refused —
+  `tests/unit/claim-validation/reference-provenance`
 - [ ] Every LLM call writes exactly one `agent_invocation` row with model, `prompt@version`, tokens, cost
 - [ ] Exceeding the run budget pauses the run (`RunBudgetExhausted`) without persisting a partial argument
 - [ ] "Dr. Müller sagte…" never returns `accept` from the guard

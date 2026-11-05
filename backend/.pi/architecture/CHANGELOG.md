@@ -48,6 +48,29 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ClaimValidation architecture readiness (issue #181)
+
+### Changed
+- Added `docs/runbook-claim-validation.md` and `docs/dr-plan-claim-validation.md`, linked from the
+  shared indexes.
+- `/readyz` reports `claim_validation` and `claim_validation_persistence`; boot logs
+  `claim_validation_wired`.
+- Ticked the ClaimValidation-related Phase 3 ACs; documented the verification marker.
+- README status/section and migration chain updated for `0301_claim_validation`.
+
+### Impact Analysis
+- Files affected: `src/shared/http/health.py`, `src/claim_validation/composition.py`, docs, roadmap
+- Canonical refs: module doc, ADR-012
+- Validators: readiness 9/9, architecture, canonical, operations
+
+### Status
+- [x] Runbook and DR plan
+- [x] Observability fields
+- [x] Roadmap ACs recorded
+- [x] Readiness green
+
+---
+
 ## [2026-11-06] - ClaimValidation runtime integration (issue #179)
 
 ### Changed

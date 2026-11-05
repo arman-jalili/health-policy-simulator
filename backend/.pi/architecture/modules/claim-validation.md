@@ -404,6 +404,10 @@ class ReferenceFigureRepository(Protocol):
 | 10 | Measure identity | `Wartezeit` and `Wartezeit auf Facharzttermin` do not collapse into one measure | unit |
 | 11 | Wiring | Router registered; empty `ReferenceFigure` table yields `ambiguous`, never `supported`; verdict port refuses contradicted claims downstream | integration |
 
+**Verified:** 2026-11-06. AC 1–11 pass; public API and restart proofs:
+`tests/integration/test_claim_validation_wiring.py`,
+`tests/integration/test_claim_validation_persistence.py`.
+
 ## Modeling Depth Note (ADR-008)
 
 Tactical depth because a wrong verdict silently discredits a correct argument. The **tolerance band**

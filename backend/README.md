@@ -3,9 +3,9 @@
 Institutional negotiation simulator for Austrian healthcare policy: nine grounded agents argue a
 policy question on citation-grade evidence, and the result is an auditable decision brief.
 
-**Status:** Phase 2 — shared kernel, EvidenceCorpus, EvidenceRetrieval, IdentityAccess and
-StakeholderModel are implemented and mounted. StakeholderModel currently keeps mutable profiles,
-history and bindings in process memory; durable persistence is the next deployment step. See
+**Status:** Phase 3 in progress — shared kernel, EvidenceCorpus, EvidenceRetrieval, IdentityAccess,
+StakeholderModel and ClaimValidation are implemented and mounted. StakeholderModel still keeps
+mutable profiles/history/bindings in memory; ClaimValidation is durable via migration `0301`. See
 [`.pi/architecture/implementation-roadmap.md`](.pi/architecture/implementation-roadmap.md).
 
 ## Stack
@@ -142,6 +142,16 @@ allowlist is the GovernanceCompliance guard's source of truth. `/readyz` reports
 `docs/runbook-stakeholder-model.md`; recovery: `docs/dr-plan-stakeholder-model.md`. Contract
 proofing: `bash .pi/scripts/ci/check_stakeholder-model_contracts.sh`.
 
+## Claim validation
+
+`/api/v1/claims*` verifies claims by type: quantitative against authoritative `ReferenceFigure`s with
+a ±2% tolerance, legal against provisions, causal via constrained appraisal (never `VERIFIED`), and
+qualitative as explicitly unverifiable. Contradiction findings, escalation/review and unsupported
+retention are first-class. Reference figures are durable in PostgreSQL (migration `0301`) and refuse
+press tiers. Empty reference data yields `AMBIGUOUS`, never `VERIFIED`. Operations:
+`docs/runbook-claim-validation.md`; recovery: `docs/dr-plan-claim-validation.md`. Contract proofing:
+`bash .pi/scripts/ci/check_claim-validation_contracts.sh`.
+
 ## Evidence retrieval
 
 The current StakeholderModel runtime is explicitly transient: restart reseeds the 9 personas but
@@ -160,7 +170,8 @@ proofing: `bash .pi/scripts/ci/check_evidence-retrieval_contracts.sh`.
   `evidence_corpus_document`, …, per ADR-002) so ownership is visible at a glance.
 - `0000_bootstrap` enables `pgvector` + `pg_trgm` and creates the shared outbox and audit tables.
 - `0101` owns document/publication/article/passage, `0102` the search index, `0103` snapshots and
-  ingestion runs, `0104` identity-access keys, `0201` frozen evidence packs. Revision identifiers
+  ingestion runs, `0104` identity-access keys, `0201` frozen evidence packs, `0301` claim
+  verification and reference figures. Revision identifiers
   keep their roadmap names; the chain order is authoritative.
 - The downgrade drops tables but keeps the extensions: later revisions depend on them and dropping
   `vector` requires superuser rights on managed databases.
