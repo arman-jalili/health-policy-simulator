@@ -38,6 +38,14 @@ from shared.app import create_app
 from shared.config import Settings
 from shared.db import Database
 from shared.enums import Persistence
+from shared.errors import (
+    STATUS_CODE_TO_ERROR,
+    AppError,
+    BadRequestError,
+    ForbiddenError,
+    RateLimitedError,
+    UnauthorizedError,
+)
 
 DATABASE_URL = "postgresql+asyncpg://hps:hps@localhost:5433/health_policy"
 SRC = Path(__file__).resolve().parents[3] / "src"
@@ -126,9 +134,53 @@ def test_router_contains_no_residue_of_the_frozen_stub() -> None:
     composition = (SRC / "evidence_corpus/composition.py").read_text()
 
     assert "_not_implemented" not in source
-    assert "EndpointNotImplementedError" not in source
     assert "not wired yet" not in source
     assert "_not_implemented" not in composition
+
+
+# These four are constructed only by the HTTP-status translation layer in shared/http/errors.py,
+# from a Starlette HTTPException. They have no literal `raise` site of their own.
+_STATUS_TRANSLATED_ERRORS = {
+    BadRequestError,
+    UnauthorizedError,
+    ForbiddenError,
+    RateLimitedError,
+}
+
+
+def _app_error_taxonomy() -> list[type[AppError]]:
+    found: list[type[AppError]] = []
+    pending: list[type[AppError]] = [AppError]
+    while pending:
+        current = pending.pop()
+        for child in current.__subclasses__():
+            if child not in found:
+                found.append(child)
+                pending.append(child)
+    return found
+
+
+def test_no_app_error_subclass_is_an_unraisable_orphan() -> None:
+    """A class that nothing raises is residue, not a contract (issue #28)."""
+    # The definition file and the OpenAPI re-export file are exactly where dead classes hide:
+    # being named there proves nothing about reachability.
+    sources = [
+        path.read_text()
+        for path in SRC.rglob("*.py")
+        if path not in {SRC / "shared/errors.py", SRC / "shared/http/schemas.py"}
+    ]
+
+    orphans = [
+        cls.__name__
+        for cls in _app_error_taxonomy()
+        if cls.__module__ == "shared.errors"
+        and cls not in _STATUS_TRANSLATED_ERRORS
+        and not any(cls.__name__ in source for source in sources)
+    ]
+
+    assert orphans == []
+    assert set(STATUS_CODE_TO_ERROR.values()) >= _STATUS_TRANSLATED_ERRORS
+    assert 501 not in STATUS_CODE_TO_ERROR
 
 
 def test_domain_layer_never_imports_infrastructure() -> None:

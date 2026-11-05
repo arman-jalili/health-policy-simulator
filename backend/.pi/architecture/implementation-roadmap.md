@@ -256,7 +256,7 @@ Bootstrap only — no bounded contexts.
 ## Cross-Cutting: Wiring Definition of Done
 
 A module is **not complete** when its tests pass. It is complete when it is reachable from
-`shared/app.py` and its data survives a restart. Every module doc carries a `## Wiring Contract`
+`src/shared/app.py` and its data survives a restart. Every module doc carries a `## Wiring Contract`
 section; this is the phase-level checklist that applies to each `### Modules` row.
 
 | # | Gate | Fails when |
@@ -269,9 +269,17 @@ section; this is the phase-level checklist that applies to each `### Modules` ro
 | W6 | Missing upstream dependency fails closed | a guard/gate silently degrades to permissive |
 | W7 | Boot test asserts registration + adapter selection | deleting a router registration leaves CI green |
 
-**Known debt this gate exposes:** `EvidenceCorpus` is wired at HTTP level only — persistence,
-outbox and migrations `0101`/`0103` are missing (issue #26). Every later phase inherits that debt, so
-Phase 1 is not closed until W1–W7 pass for both EvidenceCorpus and IdentityAccess.
+**EvidenceCorpus — W1–W7 evidence (276c4cc):**
+
+- [x] W1 router registered in `src/shared/app.py` — `tests/unit/evidence_corpus/test_wiring.py::test_app_registers_every_corpus_route`
+- [x] W2 composition selects adapters by settings — `test_memory_settings_select_the_in_memory_family` and `test_postgres_settings_select_the_sqlalchemy_family`
+- [x] W3 migration for every queried table; upgrade head on an empty DB — `tests/integration/test_corpus_persistence.py::test_alembic_round_trip_creates_every_repository_table`
+- [x] W4 events via `shared_event_outbox` in the aggregate transaction — `test_aggregate_write_and_outbox_event_roll_back_together`
+- [x] W5 no cross-context repository/table access — `test_domain_layer_never_imports_infrastructure` plus the published-language port review
+- [x] W6 missing dependency fails closed — `test_postgres_without_a_database_is_refused`
+- [x] W7 restart round-trip proven by an integration test — `test_boot_wiring_and_restart_round_trip` (also `test_outbox_relay_dispatches_each_row_once`, `test_snapshot_manifest_survives_a_second_ingestion`)
+
+Phase 1 is not closed until W1–W7 also pass for IdentityAccess.
 
 **Definition of Done template (append to each issue)**
 

@@ -52,13 +52,31 @@ fi
 echo ""
 echo "--- Integration Tests ---"
 if [ -d "tests/integration" ] && command -v pytest &>/dev/null; then
-    if PYTHONPATH=src pytest tests/integration -q 2>/dev/null; then
-        pass "Integration tests passed"
+    INTEGRATION_OUTPUT=""
+    if INTEGRATION_OUTPUT=$(PYTHONPATH=src pytest tests/integration -q -rs 2>&1); then
+        SKIPPED_COUNT=$(printf '%s\n' "$INTEGRATION_OUTPUT" \
+            | grep -Eo '[0-9]+ skipped' \
+            | awk '{total += $1} END {print total + 0}' || true)
+        if [ "${SKIPPED_COUNT:-0}" -gt 0 ]; then
+            if [ "${CI:-}" = "true" ]; then
+                echo "$INTEGRATION_OUTPUT"
+                fail "Integration tests skipped (${SKIPPED_COUNT}) under CI=true; is DATABASE_URL set?"
+            else
+                warn "Integration tests skipped (${SKIPPED_COUNT}) — set DATABASE_URL to run them (SKIP, not PASS)"
+            fi
+        else
+            pass "Integration tests passed"
+        fi
     else
+        echo "$INTEGRATION_OUTPUT"
         fail "Integration tests failed"
     fi
 else
-    pass "No integration tests (skipped)"
+    if [ "${CI:-}" = "true" ]; then
+        fail "No integration tests ran under CI=true"
+    else
+        warn "No integration tests (skipped)"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

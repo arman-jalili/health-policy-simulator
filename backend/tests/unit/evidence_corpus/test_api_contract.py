@@ -1,9 +1,8 @@
 """Contract freeze: the HTTP surface of EvidenceCorpus (ADR-004).
 
 All eight documented endpoints must appear in the generated OpenAPI document, declare their
-required scope, and use the uniform error envelope. Handlers are deliberately not wired yet: until
-the implementation issues land they answer `501` with a machine-readable code, which is itself part
-of the contract (a freeze must not pretend to work).
+required scope, and use the uniform error envelope. The handlers are wired; expected failures use
+stable machine codes and the same envelope.
 """
 
 from __future__ import annotations
@@ -133,10 +132,10 @@ class TestErrorEnvelope:
         ],
     )
     async def test_read_endpoints_are_wired(self, client: httpx.AsyncClient, path: str) -> None:
-        """No documented read route may still answer 501 after the API contract issue."""
+        """A missing resource is a 404 with the envelope, never a stub status."""
         response = await client.get(path)
 
-        assert response.status_code != 501
+        assert response.status_code == 404
         assert "code" in response.json()
 
     async def test_error_envelope_carries_the_request_trace_id(
@@ -154,7 +153,7 @@ class TestErrorEnvelope:
     ) -> None:
         response = await client.get("/api/v1/documents/doc_doesnotexist")
 
-        assert response.status_code in {404, 501}
+        assert response.status_code == 404
         assert set(response.json()) == {"code", "message", "details", "trace_id"}
 
     def test_documented_error_responses_are_declared(self, openapi: dict[str, Any]) -> None:

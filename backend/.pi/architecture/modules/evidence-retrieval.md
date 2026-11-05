@@ -328,7 +328,7 @@ application, query rewriting — these fail all three triage questions and remai
 
 | Wiring point | Requirement | Proof |
 |---|---|---|
-| Router | `app.include_router(evidence_retrieval_router)` in `shared/app.py` | boot test asserting registration |
+| Router | `app.include_router(evidence_retrieval_router)` in `src/shared/app.py` | boot test asserting registration |
 | Composition | `build_container(settings)` wires real `pgvector`/`tsvector` adapters, embedding client and reranker from settings | integration test: pack assembled against a real snapshot |
 | Upstream port | `PassageSearchPort` adapter bound to EvidenceCorpus' published language; **no direct read of `evidence_corpus_*` tables** | architecture test forbidding cross-context repository imports |
 | Persistence | Migration `0201` (pack, candidate, retrieval_trace, passage_embedding) is applied before the router is exposed | `alembic upgrade head` + pack persists across restart |
