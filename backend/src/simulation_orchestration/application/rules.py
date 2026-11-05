@@ -6,9 +6,12 @@ their implementation issues land; the signatures and return types are frozen now
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 
+from shared.ids import new_id
 from simulation_orchestration.application.events import RunBudgetExhausted
 from simulation_orchestration.application.values import (
     BudgetDecision,
@@ -17,6 +20,7 @@ from simulation_orchestration.application.values import (
     GraphState,
     PauseAction,
     PauseDecision,
+    PromptId,
     PromptTemplate,
     RunBudget,
     RunId,
@@ -139,4 +143,23 @@ class PromptVersioning:
     def next_version(
         self, *, existing: Sequence[PromptTemplate], name: str, body: str
     ) -> PromptTemplate:
-        raise NotImplementedError("PromptVersioning is implemented by issue #214")
+        if not name.strip():
+            raise ValueError("prompt name must not be empty")
+        if not body.strip():
+            raise ValueError("prompt body must not be empty")
+        checksum = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        if existing:
+            latest = max(existing, key=lambda item: item.version)
+            if latest.body == body:
+                return latest
+            version = latest.version + 1
+        else:
+            version = 1
+        return PromptTemplate(
+            id=PromptId(new_id("prm")),
+            name=name,
+            version=version,
+            body=body,
+            checksum=checksum,
+            created_at=datetime.now(tz=UTC),
+        )

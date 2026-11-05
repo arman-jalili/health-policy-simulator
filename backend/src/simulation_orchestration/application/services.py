@@ -37,6 +37,7 @@ from simulation_orchestration.application.dto import (
 )
 from simulation_orchestration.application.errors import (
     InvalidJobTransition,
+    PromptNotFound,
     SimulationRunNotFound,
 )
 from simulation_orchestration.application.events import RunPaused, RunResumed, SimulationEvent
@@ -271,7 +272,19 @@ class RegisterPromptTemplate:
         self._clock = clock
 
     async def execute(self, request: RegisterPromptTemplateRequest) -> PromptTemplateResult:
-        raise NotImplementedError("RegisterPromptTemplate is implemented by issue #214")
+        existing = await self._registry.list_versions(request.name)
+        template = self._versioning.next_version(
+            existing=existing, name=request.name, body=request.body
+        )
+        await self._registry.save(template)
+        return PromptTemplateResult(
+            id=str(template.id),
+            name=template.name,
+            version=template.version,
+            body=template.body,
+            checksum=template.checksum,
+            created_at=template.created_at,
+        )
 
 
 class ResolvePromptTemplate:
@@ -279,4 +292,17 @@ class ResolvePromptTemplate:
         self._registry = registry
 
     async def execute(self, request: ResolvePromptTemplateRequest) -> PromptTemplateResult:
-        raise NotImplementedError("ResolvePromptTemplate is implemented by issue #214")
+        if request.version is None:
+            template = await self._registry.latest(request.name)
+        else:
+            template = await self._registry.get(request.name, request.version)
+        if template is None:
+            raise PromptNotFound(f"no prompt {request.name!r} at {request.version or 'latest'}")
+        return PromptTemplateResult(
+            id=str(template.id),
+            name=template.name,
+            version=template.version,
+            body=template.body,
+            checksum=template.checksum,
+            created_at=template.created_at,
+        )

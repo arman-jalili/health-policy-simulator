@@ -14,7 +14,8 @@ from simulation_orchestration.application.dto import (
     StakeholderUsage,
     UsageAggregate,
 )
-from simulation_orchestration.application.values import JobId, JobStatus, RunId
+from simulation_orchestration.application.rules import PromptVersioning
+from simulation_orchestration.application.values import JobId, JobStatus, PromptTemplate, RunId
 
 
 class InMemoryInvocationStore:
@@ -147,3 +148,33 @@ class InMemoryProgressStore:
                 if event.event_id == event_id:
                     return event
         return None
+
+
+class InMemoryPromptRegistry:
+    """Append-only prompt versions; name+version is unique."""
+
+    def __init__(self, versioning: PromptVersioning | None = None) -> None:
+        self._versioning = versioning or PromptVersioning()
+        self._templates: dict[tuple[str, int], PromptTemplate] = {}
+
+    async def register(self, name: str, body: str) -> PromptTemplate:
+        existing = await self.list_versions(name)
+        template = self._versioning.next_version(existing=existing, name=name, body=body)
+        await self.save(template)
+        return template
+
+    async def save(self, template: PromptTemplate) -> None:
+        self._templates[(template.name, template.version)] = template
+
+    async def get(self, name: str, version: int) -> PromptTemplate | None:
+        return self._templates.get((name, version))
+
+    async def latest(self, name: str) -> PromptTemplate | None:
+        versions = await self.list_versions(name)
+        return max(versions, key=lambda item: item.version) if versions else None
+
+    async def list_versions(self, name: str) -> list[PromptTemplate]:
+        return sorted(
+            (item for (item_name, _), item in self._templates.items() if item_name == name),
+            key=lambda item: item.version,
+        )
