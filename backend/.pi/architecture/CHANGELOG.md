@@ -48,6 +48,31 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Readiness env rule (issue #239)
+
+### Changed
+- Replaced “every value must differ from `.env.example`” with a secret-only rule:
+  non-secret defaults may match; secret-shaped variables must be rotated and must not remain
+  placeholders.
+- Failures now name the offending variable.
+- Added `docs/configuration.md` and linked it from the runbook/README.
+- Added unit tests for copied examples, placeholder secrets, unchanged secrets and non-secret defaults.
+
+### Impact Analysis
+- Files affected: `.pi/scripts/ci/check_architecture_conformance.sh`,
+  `check_env_placeholders.sh`, docs, tests
+- Canonical refs: `docs/configuration.md`
+- Validators: architecture readiness, CI, tests
+
+### Status
+- [x] `cp .env.example .env` passes with the documented local Postgres
+- [x] Placeholder secret fails and names the variable
+- [x] Changing `DATABASE_URL` is no longer required
+- [x] Rule documented
+- [x] Readiness names the variable, not just a count
+
+---
+
 ## [2026-11-06] - SimulationOrchestration progress sequence allocation (issue #238)
 
 ### Changed

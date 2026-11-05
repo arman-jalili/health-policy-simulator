@@ -119,6 +119,7 @@ for test in test_graph_purity.py test_graph_state.py test_invocation_envelope.py
 done
 require_file "tests/integration/test_simulation_orchestration_wiring.py" "public-API wiring proof"
 require_file "tests/integration/test_simulation_orchestration_persistence.py" "restart persistence proof"
+require_file "tests/unit/tooling/test_env_placeholders.py" "readiness env-rule proof"
 require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_start_emits_progress_without_manual_worker_step" "start-to-progress E2E"
 require_literal "tests/integration/test_simulation_orchestration_wiring.py" "test_unknown_configured_model_fails_at_boot" "boot failure proof"
 require_literal "tests/integration/test_simulation_orchestration_persistence.py" "test_public_api_runs_on_postgres_through_worker" "Postgres public E2E"
