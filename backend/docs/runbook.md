@@ -106,3 +106,28 @@ Never roll back a published brief: briefs are attributed artefacts. Withdraw wit
 - API keys, `DATABASE_URL` and any `password`/`token`/`authorization` field are redacted by the
   logging processor (`***`). A leaked credential in logs is a bug — open an issue with the trace id.
 - Never log request bodies at INFO; they contain corpus text and query parameters.
+
+## Evidence corpus operations
+
+The corpus context exposes eight endpoints under `/api/v1` (documents, ingestion runs, passages,
+snapshots, authority rules). Persistence is in-memory in the current prototype; the search index
+(`evidence_corpus_indexed_passage`) is the only PostgreSQL-backed corpus table.
+
+| Symptom | Meaning | Action |
+|---|---|---|
+| `EXTRACTION_FAILED` on ingest | PDF unreadable/encrypted, or scan without OCR stack | verify the file, check that Tesseract is installed for scans |
+| ingest returns `citable: false` | quality gate quarantined the document | inspect `quality.confidence`/`missing_glyph_rate`; re-scan the source |
+| `DOCUMENT_NOT_CITABLE` on segmentation | document not extracted or quarantined | extract first, fix the source quality |
+| `SOURCE_TYPE_UNKNOWN` on classification | operator did not declare a source type | re-ingest with an explicit `source_type` |
+| `RUN_NOT_FOUND` | wrong run id | use the id returned by `POST /corpus/ingestion-runs` |
+| duplicate coverage inflating support | syndicated copies not linked | run `LinkCanonicalArticle` for the copy's article |
+
+Recovery of the search index:
+
+1. `uv run alembic current` — must be `0102_evidence_corpus_index`.
+2. Re-index the affected documents (`IndexIngestedPassages` is idempotent per document).
+3. Verify: `select count(*) from evidence_corpus_indexed_passage where document_id = '...'`.
+
+Contract regressions are caught mechanically: `python3 .pi/scripts/ci/check_evidence_corpus_contract.py`
+verifies the route inventory, enum vocabulary, authority rubric, event payloads, error codes, port
+implementations and the absence of contract stubs in the domain/application layers.

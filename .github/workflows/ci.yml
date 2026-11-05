@@ -56,6 +56,8 @@ jobs:
         run: bash .pi/scripts/ci/check_ddd_structure.sh
       - name: ADR-008 modeling depth
         run: python3 .pi/scripts/ci/check_modeling_depth.py
+      - name: EvidenceCorpus contract proofing
+        run: python3 .pi/scripts/ci/check_evidence_corpus_contract.py
       - name: Canonical references
         run: bash .pi/scripts/validate-canonical.sh
 

@@ -322,3 +322,39 @@ class TestWiredEndpoints:
         assert body["document_id"] == document_id
         assert body["source_type"] == "legislation"
         assert body["citable"] is True
+
+
+class TestContractProofing:
+    """The proofing script must pass on the implementation and detect a broken contract."""
+
+    def test_proofing_script_passes_on_the_repository(self) -> None:
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, ".pi/scripts/ci/check_evidence_corpus_contract.py"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parents[3],
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    def test_proofing_detects_a_missing_endpoint(self) -> None:
+        import importlib.util
+
+        script = (
+            Path(__file__).resolve().parents[3] / ".pi/scripts/ci/check_evidence_corpus_contract.py"
+        )
+        spec = importlib.util.spec_from_file_location("hps_contract_proofs", script)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        from fastapi import FastAPI
+
+        errors = module.check_endpoints(FastAPI())
+
+        assert any("endpoint missing" in error for error in errors)

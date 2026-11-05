@@ -172,6 +172,11 @@ run_stage "1" "docs_policy" \
     "${SCRIPTS_DIR}/stage_docs_policy.sh" \
     "always"
 
+# Stage 2b: EvidenceCorpus contract proofing
+run_stage "2b" "contract_proofing" \
+    "${SCRIPTS_DIR}/stage_contract_proofing.sh" \
+    "always"
+
 # Stage 2: Architecture Conformance
 run_stage "2" "architecture_conformance" \
     "${SCRIPTS_DIR}/check_architecture_conformance.sh" \
