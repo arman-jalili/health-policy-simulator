@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 from evidence_corpus.application.commands import ExtractDocumentTextRequest
 from evidence_corpus.application.dto import ExtractionOutcome
 from evidence_corpus.application.services import ExtractDocumentText
@@ -24,7 +26,12 @@ from evidence_corpus.domain.events import (
     DocumentIngested,
     DocumentQuarantined,
 )
-from evidence_corpus.domain.values import ExtractionMethod, ExtractionQuality
+from evidence_corpus.domain.values import (
+    AuthorityTier,
+    ExtractionMethod,
+    ExtractionQuality,
+    SourceType,
+)
 
 from .contract_helpers import field_names, parameter_names
 
@@ -128,3 +135,71 @@ def test_conflict_codes_are_unique_across_the_module() -> None:
 
     assert len(set(codes)) == len(codes)
     assert all(code.isupper() for code in codes)
+
+
+def _document() -> Document:
+    from datetime import date
+
+    from evidence_corpus.domain.entities import Publication
+    from evidence_corpus.domain.values import LanguageTag
+
+    return Document.register(
+        source_uri="s3://corpus/std.pdf",
+        content_hash="sha256:abc",
+        publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+        source_type=SourceType.PRESS_REPORT,
+        language=LanguageTag("de-AT"),
+    )
+
+
+GOOD_QUALITY = ExtractionQuality(ExtractionMethod.NATIVE, 0.97, 0.0)
+POOR_QUALITY = ExtractionQuality(ExtractionMethod.OCR, 0.35, 0.6)
+
+
+class TestExtractionStateIsAssignedOnce:
+    """Invariant 2: extraction outcome and authority are assigned at ingestion and immutable."""
+
+    def test_reclassification_attempt_leaves_tier_and_quality_unchanged(self) -> None:
+        document = _document()
+        document.record_extraction("Text", GOOD_QUALITY)
+        document.classify(AuthorityTier.PRESS_REPORT)
+
+        with pytest.raises(AlreadyExtracted):
+            document.record_extraction("Anderer Text", POOR_QUALITY)
+        with pytest.raises(AuthorityAlreadyAssigned):
+            document.classify(AuthorityTier.LEGISLATION)
+
+        assert document.quality is GOOD_QUALITY
+        assert document.extracted_text == "Text"
+        assert document.tier is AuthorityTier.PRESS_REPORT
+
+    def test_quarantined_document_keeps_the_text_for_diagnostics(self) -> None:
+        document = _document()
+
+        document.record_extraction("garbled text", POOR_QUALITY)
+
+        assert document.extracted_text == "garbled text"
+        assert document.is_citable() is False
+        with pytest.raises(DocumentNotCitable):
+            document.add_article("headline", "body", 1, 1)
+
+    def test_events_are_drained_once(self) -> None:
+        document = _document()
+        document.record_extraction("Text", GOOD_QUALITY)
+
+        first = document.drain_events()
+        second = document.drain_events()
+
+        assert len(first) == 1
+        assert second == []
+
+    def test_accepted_extraction_emits_ingested_not_quarantined(self) -> None:
+        document = _document()
+
+        document.record_extraction("Text", GOOD_QUALITY)
+
+        event = document.drain_events()[0]
+        assert isinstance(event, DocumentIngested)
+        assert event.document_id == document.id
+        assert event.source_uri == document.source_uri
+        assert event.content_hash == document.content_hash
