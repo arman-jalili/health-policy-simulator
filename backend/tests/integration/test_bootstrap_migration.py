@@ -18,13 +18,18 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from shared.config import get_settings
 from shared.outbox import OutboxWriter
 
-pytestmark = pytest.mark.integration
-
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("HPS_TEST_DATABASE_URL")
 EXPECTED_TABLES = {"shared_event_outbox", "shared_audit"}
 
-if not DATABASE_URL:
-    pytest.skip("DATABASE_URL is not set", allow_module_level=True)
+# Collected and skipped rather than skipped at collection time: a collection-time skip makes
+# pytest exit with code 5 ("no tests ran"), which validators report as a test failure.
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not DATABASE_URL,
+        reason="DATABASE_URL is not set (start compose.yaml and export it)",
+    ),
+]
 
 
 @pytest.fixture
