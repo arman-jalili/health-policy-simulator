@@ -2,8 +2,8 @@
 
 Canonical: .pi/architecture/modules/evidence-retrieval.md
 
-CONTRACT FREEZE — aggregate boundary, fields and method signatures are frozen; behaviour is a stub
-raising ``NotImplementedError`` until the aggregate implementation issue lands.
+Aggregate boundary, fields and method signatures are frozen; behaviour enforces the invariants
+below.
 
 Invariants:
 1. a pack records search coverage and an absence finding for any stance with no result;

@@ -2,9 +2,8 @@
 
 Canonical: .pi/architecture/modules/evidence-retrieval.md
 
-CONTRACT FREEZE — service names, layers and signatures are frozen; behaviour is a stub raising
-``NotImplementedError`` until the owning implementation issue lands. These services are pure: no
-I/O, no ORM, no vendor types.
+Service names, layers and signatures are frozen. These services are pure: no I/O, no ORM, no
+vendor types.
 """
 
 from __future__ import annotations

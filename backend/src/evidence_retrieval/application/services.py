@@ -2,8 +2,8 @@
 
 Canonical: .pi/architecture/modules/evidence-retrieval.md
 
-CONTRACT FREEZE — constructors, service names and ``execute`` signatures are frozen; behaviour is
-a stub raising ``NotImplementedError`` until the owning implementation issue lands.
+Constructors, service names and ``execute`` signatures are frozen; the behaviour is implemented
+against the domain contract and wired by the composition root.
 """
 
 from __future__ import annotations
