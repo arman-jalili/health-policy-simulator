@@ -48,6 +48,31 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - Phase 1 acceptance evidence recorded
+
+### Changed
+- Roadmap: all six Phase 1 acceptance criteria ticked with test references
+- Test: the corpus restart round-trip now compares the passage text to the extracted source slice
+  (`source_text[start:end]`), not a hand-written string
+- Test: the OCR route assertion now also requires `ExtractionQuality.is_acceptable()`
+
+### Impact Analysis
+- Files affected: `.pi/architecture/implementation-roadmap.md`,
+  `tests/integration/test_corpus_persistence.py`,
+  `tests/unit/evidence_corpus/test_extract_document_text.py`
+- Canonical refs to update: `.pi/architecture/modules/evidence-corpus.md`
+- Validators required: tests, canonical, architecture
+
+### Migration Steps
+1. None — evidence and test strengthening only.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation unchanged
+- [x] Canonical refs unchanged
+- [x] Validators run
+
 ## [2026-11-05] - IdentityAccess implemented and wired (epic #30, issues #31-#44)
 
 ### Changed

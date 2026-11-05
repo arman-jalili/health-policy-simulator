@@ -166,6 +166,7 @@ class TestExtractDocumentTextHandler:
 
         assert outcome is ocr_outcome
         assert outcome.quality.method is ExtractionMethod.OCR
+        assert outcome.quality.is_acceptable()
         assert ocr.calls == 1
         assert extraction.calls == 0
         stored = repository._documents[document.id]

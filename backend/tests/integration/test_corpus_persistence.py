@@ -208,9 +208,13 @@ def test_boot_wiring_and_restart_round_trip(tmp_path: Path) -> None:
                 document = await container.documents.get(document_id)
                 assert document is not None
                 assert document.articles == []
-                article = document.add_article("Kassenstellen", BODY, 1, 1)
+                source_text = document.extracted_text
+                assert source_text is not None
+                assert len(source_text) > 40
+                article = document.add_article("Kassenstellen", source_text, 1, 1)
+                passage_text = source_text[:40]
                 passage = article.add_passage(
-                    text=BODY[:40],
+                    text=passage_text,
                     offsets=Offsets(0, 40),
                     speaker_kind=SpeakerKind.INSTITUTION,
                 )
@@ -238,7 +242,8 @@ def test_boot_wiring_and_restart_round_trip(tmp_path: Path) -> None:
 
                 assert passage_response.status_code == 200, passage_response.text
                 passage_body = passage_response.json()
-                assert passage_body["text"] == BODY[:40]
+                assert passage_body["text"] == passage_text
+                assert passage_body["text"] == source_text[0:40]
                 assert passage_body["provenance"]["offsets"] == {"start": 0, "end": 40}
                 assert passage_body["provenance"]["page_from"] == 1
                 assert passage_body["provenance"]["outlet"] == "Der Standard"
