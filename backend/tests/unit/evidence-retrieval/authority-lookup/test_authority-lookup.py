@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
 from tests.unit.evidence_retrieval_contract_helpers import (
     SRC,
     method_names,
     parameter_names,
 )
 
-from evidence_corpus.domain.values import AuthorityTier, ClaimType
+from evidence_corpus.domain.values import AuthorityTier, ClaimType, SourceType, authority_rule
 from evidence_retrieval.application.ports import QueryRewritePort
 from evidence_retrieval.domain.repositories import PassageSearchPort
 from evidence_retrieval.domain.values import AuthorityWeight
@@ -47,3 +48,31 @@ def test_retrieval_does_not_store_its_own_rubric() -> None:
 def test_claim_type_is_the_corpus_published_vocabulary() -> None:
     assert ClaimType.QUANTITATIVE.value == "quantitative"
     assert hasattr(QueryRewritePort, "rewrite")
+
+
+def test_weight_is_derived_from_the_corpus_rule_for_the_claim_type() -> None:
+    legal = authority_rule(ClaimType.LEGAL)
+    quantitative = authority_rule(ClaimType.QUANTITATIVE)
+
+    legal_legislation = AuthorityWeight.from_rule(legal, AuthorityTier.LEGISLATION)
+    legal_press = AuthorityWeight.from_rule(legal, AuthorityTier.PRESS_REPORT)
+    quantitative_statistics = AuthorityWeight.from_rule(
+        quantitative, AuthorityTier.OFFICIAL_STATISTICS
+    )
+
+    assert legal_legislation.weight == 1.0
+    assert legal_press.weight < legal_legislation.weight
+    assert quantitative_statistics.weight == 1.0
+    assert legal_legislation.tier is AuthorityTier.LEGISLATION
+
+
+def test_weight_refuses_a_tier_outside_the_corpus_rule() -> None:
+    from evidence_corpus.domain.values import AuthorityRule
+
+    narrow = AuthorityRule(
+        claim_type=ClaimType.LEGAL,
+        ordered_source_types=(SourceType.LEGISLATION,),
+    )
+
+    with pytest.raises(ValueError, match="not in the corpus rule"):
+        AuthorityWeight.from_rule(narrow, AuthorityTier.PRESS_REPORT)
