@@ -17,6 +17,7 @@ from evidence_corpus.domain.events import (
 )
 from evidence_corpus.domain.values import (
     CITABLE_SPEAKER_KINDS,
+    ArticleSection,
     Offsets,
     QuotationBlock,
     SpeakerKind,
@@ -81,3 +82,81 @@ class TestAggregateGate:
 
     def test_article_retains_quotation_blocks_for_audit(self) -> None:
         assert "quotation_blocks" in field_names(Article)
+
+
+class TestSpeakerClassification:
+    """Invariant 5 at the aggregate boundary: people are never quoted as evidence."""
+
+    def _article(self) -> Article:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+            SourceType,
+        )
+
+        document = Document.register(
+            source_uri="s3://corpus/std.pdf",
+            content_hash="sha256:abc",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction("Text", ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0))
+        return document.add_article(
+            "Kassenstellen",
+            "HV: wir stocken auf. Mueller: das ist falsch. Anonym: keine Angabe.",
+            1,
+            1,
+        )
+
+    def test_institution_attributed_statement_is_citable_and_attributed(self) -> None:
+        article = self._article()
+        article.events.clear()
+
+        passage = article.add_passage(
+            text="HV: wir stocken auf.",
+            offsets=Offsets(0, 20),
+            speaker_kind=SpeakerKind.INSTITUTION,
+            section=ArticleSection.QUOTATION,
+        )
+
+        assert passage.citable is True
+        assert [type(event) for event in article.events] == [
+            QuotationBlockDetected,
+            InstitutionalStatementAttributed,
+        ]
+
+    def test_person_attributed_quotation_is_excluded_with_its_span(self) -> None:
+        article = self._article()
+        article.events.clear()
+
+        passage = article.add_passage(
+            text="Mueller: das ist falsch.",
+            offsets=Offsets(21, 46),
+            speaker_kind=SpeakerKind.PERSON,
+            section=ArticleSection.QUOTATION,
+        )
+
+        exclusion = article.events[-1]
+        assert isinstance(exclusion, PersonalQuotationExcluded)
+        assert exclusion.span == (21, 46)
+        assert passage.citable is False
+        assert passage not in article.publishable_passages()
+
+    def test_anonymous_attribution_is_treated_as_non_citable(self) -> None:
+        assert SpeakerKind.ANONYMOUS not in CITABLE_SPEAKER_KINDS
+
+    def test_speaker_kind_is_assigned_at_segmentation_not_derived_later(self) -> None:
+        article = self._article()
+        passage = article.add_passage(
+            text="HV: wir stocken auf.",
+            offsets=Offsets(0, 20),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+
+        assert passage.speaker_kind is SpeakerKind.INSTITUTION
+        assert passage.citable is True
