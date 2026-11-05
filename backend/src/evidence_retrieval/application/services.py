@@ -8,6 +8,7 @@ a stub raising ``NotImplementedError`` until the owning implementation issue lan
 
 from __future__ import annotations
 
+from evidence_corpus.domain.values import AuthorityTier
 from evidence_retrieval.application.commands import (
     ApplyRecencyPolicyRequest,
     AssembleEvidencePackRequest,
@@ -16,6 +17,7 @@ from evidence_retrieval.application.commands import (
     SearchEvidenceCandidatesRequest,
 )
 from evidence_retrieval.application.dto import (
+    CandidateResult,
     EvidencePackResult,
     ScoreBreakdownResult,
     SearchCandidatesResult,
@@ -27,6 +29,12 @@ from evidence_retrieval.domain.services import (
     ReciprocalRankFusion,
     ScoreEvidenceCandidates,
     StanceClassifier,
+)
+from evidence_retrieval.domain.values import (
+    AuthorityWeight,
+    ClaimText,
+    PassageId,
+    SnapshotId,
 )
 
 
@@ -50,7 +58,28 @@ class SearchEvidenceCandidates:
 
     async def execute(self, request: SearchEvidenceCandidatesRequest) -> SearchCandidatesResult:
         """Return scored candidates with stance and provenance for one claim."""
-        raise NotImplementedError("SearchEvidenceCandidates.execute is a frozen stub")
+        rewrite = self._query_rewrite.rewrite(request.claim)
+        rule = await self._search_port.authority_rule(request.claim_type)
+        authority = AuthorityWeight.from_rule(rule, AuthorityTier.OTHER)
+        passages = await self._search_port.search(
+            rewrite.expanded, SnapshotId(request.snapshot_id), request.limit
+        )
+        candidates = [
+            CandidateResult(
+                passage_id=PassageId(passage.passage_id),
+                stance=await self._stance_classifier.classify(ClaimText(request.claim), passage),
+                score=self._scorer.score(
+                    authority=authority,
+                    lexical=1.0,
+                    semantic=1.0,
+                    recency=1.0,
+                    directness=1.0,
+                ),
+                provenance=passage.provenance,
+            )
+            for passage in passages
+        ]
+        return SearchCandidatesResult(candidates=candidates)
 
 
 class AssembleEvidencePack:
