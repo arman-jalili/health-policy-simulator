@@ -47,6 +47,7 @@ from evidence_retrieval.domain.values import (
     StanceLabel,
 )
 from shared.ids import new_id
+from shared.metrics import METRICS
 
 
 class SearchEvidenceCandidates:
@@ -90,6 +91,15 @@ class SearchEvidenceCandidates:
             )
             for passage in passages
         ]
+        METRICS.increment(
+            "evidence_retrieval_searches_total",
+            {"claim_type": request.claim_type.value},
+        )
+        METRICS.increment(
+            "evidence_retrieval_candidates_total",
+            {"claim_type": request.claim_type.value},
+            len(candidates),
+        )
         return SearchCandidatesResult(candidates=candidates)
 
 
@@ -146,6 +156,10 @@ class AssembleEvidencePack:
             pack.record_absence([request.claim], "no contradicting passage above threshold")
         pack.freeze()
         await self._packs.save(pack)
+        METRICS.increment(
+            "evidence_retrieval_packs_total",
+            {"has_absence": str(pack.absence is not None).lower()},
+        )
         return _pack_result(pack)
 
 
@@ -292,4 +306,5 @@ class ReweightEvidencePack:
             rewritten.record_absence(list(stored.absence.queries), stored.absence.reason)
         rewritten.freeze()
         await self._packs.save(rewritten)
+        METRICS.increment("evidence_retrieval_reweights_total")
         return _pack_result(rewritten)

@@ -48,6 +48,35 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - EvidenceRetrieval architecture readiness (issue #79)
+
+### Changed
+- Module: evidence-retrieval
+  - Runbook and DR plan added for pack lifecycle, readiness triage and restore.
+  - Metrics: searches, candidates, packs and reweights are exposed on `/metrics`.
+  - Module status moved to Implemented; runtime integration section records the entry path,
+    corpus boundary, E2E proof and ADR-010.
+  - README and generic runbook/DR docs link the retrieval operations.
+
+### Impact Analysis
+- Files affected:
+  - `docs/runbook-evidence-retrieval.md`, `docs/dr-plan-evidence-retrieval.md`
+  - `docs/runbook.md`, `docs/dr-plan.md`, `README.md`
+  - `src/evidence_retrieval/application/services.py`
+  - `.pi/architecture/modules/evidence-retrieval.md`
+- Canonical refs: module doc and ADR-010
+- Validators: readiness, canonical, architecture, operations, ci, tests, security
+
+### Migration Steps
+1. None beyond `0201_evidence_retrieval` from the wiring issue.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-05] - EvidenceRetrieval runtime integration (issue #77)
 
 ### Changed

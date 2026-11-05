@@ -129,13 +129,22 @@ Keys are stored as salted SHA-256 hashes; revocation takes effect on the next re
 `docs/runbook-identity-access.md`; recovery: `docs/dr-plan-identity-access.md`. Contract proofing:
 `bash .pi/scripts/ci/check_identity-access_contracts.sh`.
 
+## Evidence retrieval
+
+`/api/v1/evidence/*` searches a pinned corpus snapshot, classifies stance, scores with an
+inspectable breakdown, and freezes balanced packs with truthful absence. `/readyz` reports
+`evidence_retrieval` and turns red when embeddings or the reranker are unreachable. Operations:
+`docs/runbook-evidence-retrieval.md`; recovery: `docs/dr-plan-evidence-retrieval.md`. Contract
+proofing: `bash .pi/scripts/ci/check_evidence-retrieval_contracts.sh`.
+
 ## Migration policy
 
 - One revision chain, table names prefixed with the owning context (`shared_event_outbox`,
   `evidence_corpus_document`, …, per ADR-002) so ownership is visible at a glance.
 - `0000_bootstrap` enables `pgvector` + `pg_trgm` and creates the shared outbox and audit tables.
 - `0101` owns document/publication/article/passage, `0102` the search index, `0103` snapshots and
-  ingestion runs. Revision identifiers keep their roadmap names; the chain order is authoritative.
+  ingestion runs, `0104` identity-access keys, `0201` frozen evidence packs. Revision identifiers
+  keep their roadmap names; the chain order is authoritative.
 - The downgrade drops tables but keeps the extensions: later revisions depend on them and dropping
   `vector` requires superuser rights on managed databases.
 
