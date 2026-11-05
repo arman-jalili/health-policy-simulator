@@ -13,6 +13,7 @@ import pytest
 from evidence_corpus.application.commands import SegmentArticleRequest
 from evidence_corpus.application.dto import SegmentationResult
 from evidence_corpus.application.services import SegmentArticle
+from evidence_corpus.domain.entities import Document, Publication
 from evidence_corpus.domain.events import ArticleSegmented
 from evidence_corpus.domain.services import ArticleBoundaryStrategy
 from evidence_corpus.domain.values import ArticleDraft
@@ -61,8 +62,21 @@ class TestSegmentationVariants:
     def test_digest_variant_emits_one_draft_per_clipping(self) -> None:
         from evidence_corpus.domain.strategies import ClippingDigestStrategy
 
-        with pytest.raises(NotImplementedError):
-            ClippingDigestStrategy().segment("digest text", None)  # type: ignore[arg-type]
+        digest = (
+            "Kassenstellen aufgestockt\nDie Kassenstellen werden aufgestockt.\n"
+            "---\n"
+            "Spitalsreform beschlossen\nDie Spitalsreform ist beschlossen.\n"
+            "---\n"
+            "Budget verabschiedet\nDas Budget wurde verabschiedet."
+        )
+
+        drafts = ClippingDigestStrategy().segment(digest, None)  # type: ignore[arg-type]
+
+        assert [draft.headline for draft in drafts] == [
+            "Kassenstellen aufgestockt",
+            "Spitalsreform beschlossen",
+            "Budget verabschiedet",
+        ]
 
 
 class TestSegmentArticleUseCase:
@@ -76,3 +90,138 @@ class TestSegmentArticleUseCase:
     def test_segmentation_event_records_passage_count(self) -> None:
         assert field_names(ArticleSegmented) == ["document_id", "article_id", "passage_count"]
         assert ArticleSegmented.name == "ArticleSegmented"
+
+
+class TestSegmentationStrategies:
+    def _publication(self) -> Publication:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Publication
+
+        return Publication("Der Standard", date(2026, 10, 1), "print")
+
+    def test_single_article_strategy_uses_first_line_as_headline(self) -> None:
+        from evidence_corpus.domain.strategies import SingleArticleStrategy
+
+        text = "Kassenstellen aufgestockt\nDie Kassenstellen werden aufgestockt.\fFortsetzung."
+
+        draft = SingleArticleStrategy().segment(text, self._publication())[0]
+
+        assert draft.headline == "Kassenstellen aufgestockt"
+        assert "aufgestockt" in draft.body
+        assert (draft.page_from, draft.page_to) == (1, 2)
+
+    def test_clipping_digest_assigns_distinct_page_ranges(self) -> None:
+        from evidence_corpus.domain.strategies import ClippingDigestStrategy
+
+        digest = (
+            "Erste Meldung\nDie Kassenstellen werden aufgestockt.\n---\n"
+            "Zweite Meldung\nDie Spitalsreform ist beschlossen.\n---\n"
+            "Dritte Meldung\nDas Budget wurde verabschiedet."
+        )
+
+        drafts = ClippingDigestStrategy().segment(digest, self._publication())
+
+        assert len(drafts) == 3
+        assert {draft.headline for draft in drafts} == {
+            "Erste Meldung",
+            "Zweite Meldung",
+            "Dritte Meldung",
+        }
+        assert [draft.page_from for draft in drafts] == [1, 2, 3]
+        assert all(draft.page_from == draft.page_to for draft in drafts)
+
+    def test_strategy_is_selected_from_document_markers(self) -> None:
+        from evidence_corpus.domain.strategies import (
+            ClippingDigestStrategy,
+            SingleArticleStrategy,
+            select_strategy,
+        )
+
+        assert isinstance(select_strategy("Headline\nBody"), SingleArticleStrategy)
+        assert isinstance(select_strategy("A\nB\n---\nC\nD"), ClippingDigestStrategy)
+
+    @pytest.mark.parametrize("text", ["", "   ", "\f"])
+    def test_empty_documents_cannot_be_segmented(self, text: str) -> None:
+        from evidence_corpus.domain.strategies import SingleArticleStrategy
+
+        with pytest.raises(ValueError, match="empty document"):
+            SingleArticleStrategy().segment(text, self._publication())
+
+
+class TestSegmentArticleHandler:
+    def _document(self) -> Document:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+            SourceType,
+        )
+
+        document = Document.register(
+            source_uri="s3://corpus/digest.pdf",
+            content_hash="sha256:digest",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction(
+            "Erste Meldung\nKassenstellen aufgestockt.\n---\n"
+            "Zweite Meldung\nSpitalsreform beschlossen.\n---\n"
+            "Dritte Meldung\nBudget verabschiedet.",
+            ExtractionQuality(ExtractionMethod.NATIVE, 0.98, 0.0),
+        )
+        document.drain_events()
+        return document
+
+    async def test_three_clipping_digest_yields_three_articles(self) -> None:
+        from evidence_corpus.application.segmentation_handler import SegmentArticleHandler
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import InMemoryDocumentRepository
+
+        repository = InMemoryDocumentRepository()
+        document = self._document()
+        await repository.save(document)
+        publisher = RecordingEventPublisher()
+
+        result = await SegmentArticleHandler(repository, publisher).execute(
+            SegmentArticleRequest(document_id=document.id)
+        )
+
+        assert len(result.articles) == 3
+        assert {article.headline for article in result.articles} == {
+            "Erste Meldung",
+            "Zweite Meldung",
+            "Dritte Meldung",
+        }
+        assert [article.page_from for article in result.articles] == [1, 2, 3]
+        from evidence_corpus.domain.events import ArticleSegmented
+
+        assert all(isinstance(event, ArticleSegmented) for event in publisher.events)
+
+    async def test_unsegmented_document_is_refused(self) -> None:
+        from datetime import date
+
+        from evidence_corpus.application.segmentation_handler import SegmentArticleHandler
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.errors import DocumentNotCitable
+        from evidence_corpus.domain.values import LanguageTag, SourceType
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.memory import InMemoryDocumentRepository
+
+        repository = InMemoryDocumentRepository()
+        document = Document.register(
+            source_uri="s3://corpus/raw.pdf",
+            content_hash="sha256:raw",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        await repository.save(document)
+
+        handler = SegmentArticleHandler(repository, RecordingEventPublisher())
+        with pytest.raises(DocumentNotCitable):
+            await handler.execute(SegmentArticleRequest(document_id=document.id))
