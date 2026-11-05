@@ -15,8 +15,11 @@ dependencies = [
     "alembic>=1.14",
     "asyncpg>=0.30",
     "fastapi>=0.115",
+    "pillow>=13.0.0",
     "pydantic>=2.10",
     "pydantic-settings>=2.6",
+    "pymupdf>=1.24,<2",
+    "pytesseract>=0.3.13",
     "sqlalchemy[asyncio]>=2.0.36",
     "structlog>=24.4",
     "uvicorn[standard]>=0.32",
@@ -100,3 +103,7 @@ branch = true
 
 [tool.coverage.report]
 exclude_lines = ["if TYPE_CHECKING:", "raise NotImplementedError", "if __name__ == .__main__.:"]
+
+[[tool.mypy.overrides]]
+module = ["pytesseract.*", "pymupdf.*"]
+ignore_missing_imports = true

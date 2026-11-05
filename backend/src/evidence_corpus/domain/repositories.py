@@ -15,6 +15,7 @@ from evidence_corpus.domain.entities import (
     Article,
     CorpusSnapshot,
     Document,
+    IndexManifest,
     IngestionRun,
 )
 from evidence_corpus.domain.published import PassageView
@@ -76,6 +77,8 @@ class CorpusSnapshotRepository(Protocol):
     async def save(self, snapshot: CorpusSnapshot) -> None: ...
 
     async def list_document_ids(self, snapshot_id: str) -> list[str]: ...
+
+    async def current_index_manifest(self) -> IndexManifest: ...
 
 
 @runtime_checkable
