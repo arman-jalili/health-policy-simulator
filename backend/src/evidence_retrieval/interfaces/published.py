@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from evidence_corpus.domain.published import ProvenanceView
+from evidence_retrieval.application.dto import EvidencePackResult, ScoreBreakdownResult
 from evidence_retrieval.domain.values import StanceLabel
 
 
@@ -86,3 +87,87 @@ class ScoreBreakdownView:
 
     pack_id: str
     candidates: list[CandidateScoreView]
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimEvidenceRef:
+    """The only shape NegotiationSession receives: a passage reference, never raw hits."""
+
+    passage_id: str
+    stance: StanceLabel
+    provenance: ProvenanceView | None
+
+
+def to_published_pack(result: EvidencePackResult) -> EvidencePackView:
+    """Map an application result to the vector-free published language."""
+    return EvidencePackView(
+        pack_id=result.pack_id,
+        claim=result.claim,
+        snapshot_id=result.snapshot_id,
+        index_version=result.index_version,
+        candidates=[
+            EvidenceCandidateView(
+                passage_id=candidate.passage_id,
+                stance=candidate.stance,
+                score=ScoreView(
+                    authority=candidate.score.authority,
+                    lexical=candidate.score.lexical,
+                    semantic=candidate.score.semantic,
+                    recency=candidate.score.recency,
+                    directness=candidate.score.directness,
+                    final=candidate.score.final,
+                ),
+                provenance=candidate.provenance,
+            )
+            for candidate in result.candidates
+        ],
+        absence=(
+            AbsenceView(
+                queries=result.absence.queries,
+                snapshot_id=result.absence.snapshot_id,
+                reason=result.absence.reason,
+            )
+            if result.absence is not None
+            else None
+        ),
+        trace=RetrievalTraceView(
+            embedding_model=result.trace.embedding_model,
+            reranker_model=result.trace.reranker_model,
+            query_rewrite=result.trace.query_rewrite,
+            stance_counts=result.trace.stance_counts,
+        ),
+        frozen_at=result.frozen_at,
+    )
+
+
+def to_claim_evidence_refs(view: EvidencePackView) -> list[ClaimEvidenceRef]:
+    """Drop scores and text for the downstream ACL; keep the resolvable reference."""
+    return [
+        ClaimEvidenceRef(
+            passage_id=candidate.passage_id,
+            stance=candidate.stance,
+            provenance=candidate.provenance,
+        )
+        for candidate in view.candidates
+    ]
+
+
+def to_published_breakdown(result: ScoreBreakdownResult) -> ScoreBreakdownView:
+    """Map a score result without exposing vectors or ORM rows."""
+    return ScoreBreakdownView(
+        pack_id=result.pack_id,
+        candidates=[
+            CandidateScoreView(
+                passage_id=candidate.passage_id,
+                score=ScoreView(
+                    authority=candidate.score.authority,
+                    lexical=candidate.score.lexical,
+                    semantic=candidate.score.semantic,
+                    recency=candidate.score.recency,
+                    directness=candidate.score.directness,
+                    final=candidate.score.final,
+                ),
+            )
+            for candidate in result.candidates
+        ],
+    )
