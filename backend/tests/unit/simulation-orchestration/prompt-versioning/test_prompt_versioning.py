@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from tests.unit.simulation_orchestration_contract_helpers import (
     field_names,
     method_names,
@@ -69,8 +71,8 @@ from simulation_orchestration.infrastructure.memory import (  # noqa: E402
 
 
 class _Clock:
-    def now(self) -> object:
-        raise AssertionError("prompt versioning stamps its own creation time")
+    def now(self) -> datetime:
+        return datetime(2026, 11, 6, tzinfo=UTC)
 
 
 def _register_service() -> tuple[RegisterPromptTemplate, InMemoryPromptRegistry]:

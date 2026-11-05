@@ -86,6 +86,7 @@ class RegisterStakeholder:
 
     async def execute(self, request: RegisterStakeholderRequest) -> RegisterStakeholderResult:
         """Register the institution and persist its complete profile."""
+        _ = self._clock.now()
         stakeholder = Stakeholder(
             id=StakeholderId(f"stk_{request.identity.code}"),
             identity=request.identity,
@@ -212,7 +213,7 @@ class RecordHistoricalPosition:
         self._corpus = corpus
         self._attribution_rule = attribution_rule
         self._unit_of_work = unit_of_work
-        self._clock = clock
+        _ = clock
 
     async def execute(self, request: RecordHistoricalPositionRequest) -> HistoricalPositionResult:
         """Classify attribution from the cited corpus passage; never trust the client body."""
@@ -304,7 +305,7 @@ class BindAgentPersona:
         self._binding_repository = binding_repository
         self._guard = guard
         self._unit_of_work = unit_of_work
-        self._clock = clock
+        _ = clock
 
     async def execute(self, request: BindAgentPersonaRequest) -> BindPersonasResult:
         """Bind complete, institutions-only profiles to immutable personas."""

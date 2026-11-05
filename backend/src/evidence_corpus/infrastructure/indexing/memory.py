@@ -56,13 +56,15 @@ class InMemoryIndexWriter:
         ]
 
     def search(self, query: str) -> list[PassageView]:
-        terms = query_terms(query)
+        terms = tuple(term for term in query_terms(query) if term not in self.german_stopwords)
         if not terms:
             return []
         require_all = not is_disjunctive(query)
         matches: list[PassageView] = []
         for passage in self._rows.values():
-            tokens = text_tokens(passage.text)
+            tokens = tuple(
+                token for token in text_tokens(passage.text) if token not in self.german_stopwords
+            )
             results = [term_prefix_matches(term, tokens) for term in terms]
             if all(results) if require_all else any(results):
                 matches.append(passage)

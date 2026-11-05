@@ -318,9 +318,15 @@ class SqlAlchemyAuthorityRuleRepository:
         self._uow = unit_of_work
 
     async def for_claim_type(self, claim_type: ClaimType) -> AuthorityRule:
+        if self._uow is not None:
+            async with self._uow.session():
+                return authority_rule(claim_type)
         return authority_rule(claim_type)
 
     async def list_all(self) -> list[AuthorityRule]:
+        if self._uow is not None:
+            async with self._uow.session():
+                return [authority_rule(claim_type) for claim_type in ClaimType]
         return [authority_rule(claim_type) for claim_type in ClaimType]
 
 
