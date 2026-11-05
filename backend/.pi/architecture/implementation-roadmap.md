@@ -99,13 +99,23 @@ Bootstrap only — no bounded contexts.
 
 ### Acceptance Criteria
 
-- [ ] A real press PDF is ingested end-to-end and `GET /api/v1/passages/{id}` returns text whose
-      offsets reproduce the exact slice from the source file
-- [ ] A scanned document without a text layer routes to OCR and yields acceptable quality
-- [ ] Person-attributed quotations are excluded; institution-attributed statements remain citable
-- [ ] Unknown source types cannot be promoted to authoritative
-- [ ] Snapshot pinning: re-ingesting afterwards does not change passages visible through the old snapshot
+- [x] A press-style PDF with a native text layer is ingested end-to-end and
+      `GET /api/v1/passages/{id}` returns text whose offsets reproduce the exact source slice —
+      `tests/integration/test_corpus_persistence.py::test_boot_wiring_and_restart_round_trip`
+      (passage text equals `source_text[start:end]` after a restart)
+- [x] A scanned document without a text layer routes to OCR and yields acceptable quality —
+      `test_scanned_pdf_without_text_layer_probes_as_ocr_candidate` and
+      `test_scanned_document_routes_to_ocr_and_labels_the_quality` (asserts `is_acceptable()`)
+- [x] Person-attributed quotations are excluded; institution-attributed statements remain citable —
+      `test_person_attributed_quotation_is_excluded_with_its_span` and
+      `test_institution_attributed_statement_is_citable_and_attributed`
+- [x] Unknown source types cannot be promoted to authoritative —
+      `test_classify_source_authority.py::test_unknown_source_type_is_refused` (domain + handler)
+- [x] Snapshot pinning: re-ingesting afterwards does not change passages visible through the old
+      snapshot — `test_snapshot_manifest_survives_a_second_ingestion` and
+      `test_pin_corpus_snapshot.py::test_reingestion_does_not_change_the_pinned_snapshot`
 - [x] Anonymous mutating requests return `401` in strict mode; analyst key is refused `corpus:write`
+      — `tests/unit/identity-access/anonymous-rejection` and `scope-enforcement`
 
 ---
 
