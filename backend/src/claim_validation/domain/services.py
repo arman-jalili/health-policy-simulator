@@ -1,4 +1,4 @@
-"""Domain services of ClaimValidation (contract frozen, issue #164)."""
+"""Domain services of ClaimValidation (issue #165)."""
 
 from __future__ import annotations
 
@@ -29,23 +29,34 @@ class FigureComparison:
         reference: Decimal,
         band: ToleranceBand,
     ) -> tuple[bool, Decimal]:
-        raise NotImplementedError("implemented by issue #171")
+        delta = abs(asserted - reference)
+        return band.contains(asserted, reference), delta
 
 
 class ContradictionDetector:
     """Detect incompatible figures for the same measure and period."""
 
     def is_contradiction(self, a: Decimal, b: Decimal, band: ToleranceBand) -> bool:
-        raise NotImplementedError("implemented by issue #172")
+        return not band.contains(a, b)
 
 
 class CausalAppraiser:
     """Appraise causal support; the result never becomes a verified fact."""
 
-    def appraise(self, support: CausalSupport) -> CausalSupport:
-        raise NotImplementedError("implemented by issue #169")
+    def appraise(self, support: CausalSupport | None) -> CausalSupport:
+        if support is None:
+            return CausalSupport.UNADDRESSED
+        return support
+
+
+_PATH_BY_TYPE = {
+    ClaimType.QUANTITATIVE: VerificationPath.QUANTITATIVE,
+    ClaimType.LEGAL: VerificationPath.LEGAL,
+    ClaimType.CAUSAL: VerificationPath.CAUSAL,
+    ClaimType.QUALITATIVE: VerificationPath.QUALITATIVE,
+}
 
 
 def path_for(claim_type: ClaimType) -> VerificationPath:
     """Select the only legal path for a claim type."""
-    raise NotImplementedError("implemented by issue #168")
+    return _PATH_BY_TYPE[claim_type]

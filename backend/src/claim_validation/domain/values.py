@@ -72,7 +72,10 @@ class ToleranceBand:
     relative: Decimal = Decimal("0.02")
 
     def contains(self, asserted: Decimal, reference: Decimal) -> bool:
-        raise NotImplementedError("implemented by issue #171")
+        """Return whether the asserted value is within the relative band."""
+        if reference == 0:
+            return asserted == 0
+        return abs(asserted - reference) <= abs(reference) * self.relative
 
 
 @dataclass(frozen=True, slots=True)
