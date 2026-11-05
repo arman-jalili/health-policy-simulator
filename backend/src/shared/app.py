@@ -22,6 +22,9 @@ from evidence_corpus.composition import build_container
 from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
 from evidence_retrieval.composition import build_container as build_retrieval_container
 from evidence_retrieval.interfaces.http.router import router as evidence_retrieval_router
+from governance_compliance.composition import build_container as build_governance_container
+from governance_compliance.infrastructure.allowlist import StaticAllowlistSource, from_published
+from governance_compliance.interfaces.http.router import router as governance_compliance_router
 from identity_access.composition import build_identity_access_container
 from identity_access.interfaces.http.router import router as identity_access_router
 from shared.config import Settings, get_settings
@@ -115,6 +118,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.stakeholder_model = build_stakeholder_container(app_settings, database)
     app.state.claim_validation = build_claim_validation_container(app_settings, database)
     app.state.simulation_orchestration = build_simulation_container(app_settings, database)
+    app.state.governance_compliance = build_governance_container(
+        app_settings,
+        database,
+        allowlist_source=StaticAllowlistSource(
+            from_published(app.state.stakeholder_model.allowlist)
+        ),
+    )
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -136,6 +146,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(stakeholder_model_router)
     app.include_router(claim_validation_router)
     app.include_router(simulation_orchestration_router)
+    app.include_router(governance_compliance_router)
     return app
 
 

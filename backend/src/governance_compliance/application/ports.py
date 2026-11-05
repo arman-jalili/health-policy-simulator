@@ -53,7 +53,7 @@ class FigureVerdictLookup(Protocol):
 class AllowlistSource(Protocol):
     """Boot-time source of the canonical institutions-only allowlist."""
 
-    async def load(self) -> InstitutionalAllowlist: ...
+    def load(self) -> InstitutionalAllowlist: ...
 
 
 @runtime_checkable
