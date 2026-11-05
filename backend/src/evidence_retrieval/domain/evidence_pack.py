@@ -18,16 +18,28 @@ Invariants:
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 from evidence_retrieval.domain.entities import EvidenceCandidate, RetrievalTrace
-from evidence_retrieval.domain.events import DomainEvent
+from evidence_retrieval.domain.errors import (
+    AbsenceWithContradiction,
+    CandidateWithoutProvenance,
+    PackFrozen,
+)
+from evidence_retrieval.domain.events import (
+    ContradictingEvidenceSurfaced,
+    DomainEvent,
+    EvidenceAbsenceRecorded,
+    EvidencePackAssembled,
+)
 from evidence_retrieval.domain.values import (
     AbsenceFinding,
     ClaimText,
     PackId,
     SnapshotId,
+    StanceLabel,
 )
 
 
@@ -48,18 +60,71 @@ class EvidencePack:
 
     def add_candidate(self, candidate: EvidenceCandidate) -> None:
         """Append a candidate; refused after ``freeze()`` with :class:`PackFrozen`."""
-        raise NotImplementedError("EvidencePack.add_candidate is a frozen stub")
+        if self.frozen:
+            raise PackFrozen(str(self.id))
+        self.candidates.append(candidate)
+        if candidate.stance is StanceLabel.CONTRADICTING:
+            self.events.append(
+                ContradictingEvidenceSurfaced(
+                    pack_id=str(self.id),
+                    passage_id=str(candidate.passage_id),
+                    stance=candidate.stance,
+                )
+            )
 
     def record_absence(self, queries: list[str], reason: str) -> None:
         """Record a truthful negative result; refused when contradiction is already present."""
-        raise NotImplementedError("EvidencePack.record_absence is a frozen stub")
+        if self.frozen:
+            raise PackFrozen(str(self.id))
+        if any(c.stance is StanceLabel.CONTRADICTING for c in self.candidates):
+            raise AbsenceWithContradiction(str(self.id))
+        self.absence = AbsenceFinding(
+            queries=tuple(queries),
+            snapshot_id=self.snapshot_id,
+            reason=reason,
+        )
+        self.events.append(
+            EvidenceAbsenceRecorded(
+                pack_id=str(self.id),
+                queries=tuple(queries),
+                snapshot_id=str(self.snapshot_id),
+                reason=reason,
+            )
+        )
 
     def freeze(self) -> None:
         """Assert provenance and make the pack immutable, emitting the assembled event."""
-        raise NotImplementedError("EvidencePack.freeze is a frozen stub")
+        if self.frozen:
+            raise PackFrozen(str(self.id))
+        self.assert_every_candidate_has_provenance()
+        self.frozen = True
+        self.frozen_at = datetime.now(tz=UTC)
+        self.events.append(
+            EvidencePackAssembled(
+                pack_id=str(self.id),
+                claim_hash=_claim_hash(self.claim),
+                candidate_count=len(self.candidates),
+                has_absence=self.absence is not None,
+                index_version=self.index_version,
+            )
+        )
 
     def assert_every_candidate_has_provenance(self) -> None:
         """Raise :class:`CandidateWithoutProvenance` when any candidate lacks provenance."""
-        raise NotImplementedError(
-            "EvidencePack.assert_every_candidate_has_provenance is a frozen stub"
-        )
+        missing = [
+            str(candidate.passage_id)
+            for candidate in self.candidates
+            if candidate.provenance is None
+        ]
+        if missing:
+            raise CandidateWithoutProvenance(missing)
+
+    @property
+    def candidate_ids(self) -> tuple[str, ...]:
+        """Candidate identities in insertion order; stable for the same search result."""
+        return tuple(str(candidate.passage_id) for candidate in self.candidates)
+
+
+def _claim_hash(claim: ClaimText) -> str:
+    """Hash the claim for the event payload without publishing raw claim text."""
+    return hashlib.sha256(str(claim).encode("utf-8")).hexdigest()
