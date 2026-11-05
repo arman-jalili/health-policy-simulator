@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -11,6 +13,7 @@ from shared.app import create_app
 from shared.config import Settings
 from shared.enums import AuthMode, Persistence
 from simulation_orchestration.application.errors import UnknownModel
+from simulation_orchestration.application.values import GraphState, RunPhase
 from tests.conftest import TEST_DATABASE_URL
 
 
@@ -65,6 +68,72 @@ async def test_start_emits_progress_without_manual_worker_step() -> None:
         replay = await client.get("/api/v1/runs/run_1/stream", headers={"Last-Event-ID": last_id})
         assert replay.status_code == 200, replay.text
         assert replay.text == ""
+
+
+class _GatedGraph:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    def next_node(self, state: GraphState) -> str | None:
+        if state.phase is RunPhase.MANDATE:
+            return "first"
+        if state.phase is RunPhase.ROUNDS:
+            return "second"
+        return None
+
+    async def step(self, node_name: str, state: GraphState) -> GraphState:
+        if node_name == "first":
+            self.started.set()
+            await self.release.wait()
+            return replace(state, phase=RunPhase.ROUNDS, round=state.round + 1)
+        return replace(state, phase=RunPhase.DONE, round=state.round + 1)
+
+
+async def test_pause_and_resume_through_the_public_api() -> None:
+    app = create_app(_settings())
+    graph = _GatedGraph()
+    cast(Any, app.state.simulation_orchestration.run_simulation_job)._graph = graph
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+    ):
+        started = await client.post("/api/v1/runs/run_pause:start", json={})
+        assert started.status_code == 202, started.text
+        job_id = started.json()["job_id"]
+        await asyncio.wait_for(graph.started.wait(), timeout=2)
+
+        paused = await client.post(
+            "/api/v1/runs/run_pause:pause", json={"action": "pause", "reason": "operator"}
+        )
+        assert paused.status_code == 202, paused.text
+        assert paused.json()["status"] == "paused"
+        graph.release.set()
+
+        for _ in range(100):
+            job = (await client.get(f"/api/v1/jobs/{job_id}")).json()
+            if job["status"] == "paused":
+                break
+            await asyncio.sleep(0.02)
+        assert job["status"] == "paused"
+        assert job["checkpoint"]["phase"] == "rounds"
+
+        resumed = await client.post("/api/v1/runs/run_pause:resume", json={"action": "resume"})
+        assert resumed.status_code == 202, resumed.text
+        assert resumed.json()["status"] == "queued"
+
+        for _ in range(100):
+            job = (await client.get(f"/api/v1/jobs/{job_id}")).json()
+            if job["status"] == "completed":
+                break
+            await asyncio.sleep(0.02)
+        assert job["status"] == "completed"
+
+        stream = await client.get("/api/v1/runs/run_pause/stream")
+        assert "event: run.paused" in stream.text
+        assert "event: run.resumed" in stream.text
+        assert stream.text.index("event: run.paused") < stream.text.index("event: run.resumed")
 
 
 async def test_usage_endpoint_returns_zero_usage_for_bootstrap_run() -> None:

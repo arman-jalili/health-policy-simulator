@@ -102,6 +102,7 @@ def _job_from(row: JobRow) -> JobRecord:
         updated_at=row.updated_at,
         budget=_budget_from(row.budget),
         lease_expires_at=row.lease_expires_at,
+        pause_reason=row.pause_reason,
     )
 
 
@@ -117,6 +118,7 @@ def _job_row(job: JobRecord) -> JobRow:
         error=job.error,
         claimed_by=job.claimed_by,
         lease_expires_at=job.lease_expires_at,
+        pause_reason=job.pause_reason,
         created_at=job.created_at,
         updated_at=job.updated_at,
     )

@@ -113,7 +113,7 @@ async def test_resume_preserves_round_phase_budget_and_clears_worker_claim() -> 
 
     job = await jobs.get_by_run(RunId("run_1"))
     assert job is not None
-    assert job.status is JobStatus.RUNNING
+    assert job.status is JobStatus.QUEUED
     assert job.checkpoint == _checkpoint()
     assert job.budget_used == BudgetUsage(invocations=8, tokens=4096, cost=Decimal("0.42"))
     assert job.claimed_by is None
@@ -136,10 +136,21 @@ async def test_completed_job_cannot_resume() -> None:
         )
 
 
-async def test_paused_job_is_visible_to_worker_resume_scan() -> None:
+async def test_resumed_job_is_claimable_by_the_worker() -> None:
     jobs = InMemoryJobStore()
     await jobs.add(_job(JobStatus.PAUSED))
+    service = PauseOrResumeSimulation(
+        jobs=jobs,
+        progress=InMemoryProgressStore(),
+        clock=_Clock(),
+        uow=cast(Any, object()),
+    )
+    await service.execute(
+        PauseOrResumeSimulationRequest(run_id=RunId("run_1"), action=PauseAction.RESUME)
+    )
 
-    resumable = await jobs.list_resumable()
+    claimed = await jobs.claim_next("worker-1", datetime(2026, 11, 6, 13, 0, tzinfo=UTC))
 
-    assert [item.job_id for item in resumable] == ["job_1"]
+    assert claimed is not None
+    assert claimed.job_id == "job_1"
+    assert claimed.status is JobStatus.RUNNING

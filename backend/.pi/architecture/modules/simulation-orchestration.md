@@ -75,6 +75,7 @@ the rule and persists. The graph is a sequencer, not a model.
 | ADR-006 Cost Tracking | `AgentInvocation` is owned here and is the reproducibility record |
 | ADR-008 Proportional Modeling Depth | Service depth: no domain model, persistence contract only |
 | ADR-013 SimulationOrchestration Runtime Integration | Router+worker wiring; durable `0302` stores; boot-time model failure |
+| Issue #236 pause/resume runtime | Loop re-reads status each node; resume re-queues rather than setting RUNNING |
 
 ## Diagrams
 
@@ -142,8 +143,8 @@ classDiagram
 stateDiagram-v2
     [*] --> Queued
     Queued --> Running : worker picks up
-    Running --> Paused : pause requested
-    Paused --> Running : resume
+    Running --> Paused : pause requested; in-flight turn commits, next node does not start
+    Paused --> Queued : resume; worker claims and continues from the persisted checkpoint
     Running --> Completed : stopping condition met
     Running --> Failed : unrecoverable error
     Running --> BudgetExhausted : budget breach
@@ -299,7 +300,8 @@ replay and audit depend on framework internals, and it was rejected in ADR-003.
 
 **Runtime (ADR-013):** the router is mounted in `shared/app.py`, the background worker is started by
 the lifespan, and `build_container` selects the scripted provider. `PERSISTENCE=postgres` uses the
-`0302_simulation_orchestration` tables through SQLAlchemy adapters; jobs, invocation envelopes,
+`0302_simulation_orchestration` tables (plus `0303_simulation_lease` and
+`0304_simulation_pause_reason`) through SQLAlchemy adapters; jobs, invocation envelopes,
 progress events and prompt versions survive restart. Until the NegotiationSession Phase 4 graph
 lands, a deterministic bootstrap node closes the run so `POST :start` produces
 `run.started` → `run.completed` without a manual step.

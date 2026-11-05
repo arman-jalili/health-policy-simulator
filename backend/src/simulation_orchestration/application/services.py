@@ -72,6 +72,7 @@ from simulation_orchestration.application.rules import (
 )
 from simulation_orchestration.application.state import initial_state
 from simulation_orchestration.application.values import (
+    GraphState,
     JobId,
     JobStatus,
     PauseAction,
@@ -154,7 +155,17 @@ class RunSimulationJob:
                 ProgressKind.STARTED,
                 RunStarted(job_id=job.job_id, run_id=job.run_id),
             )
-        while job.status is JobStatus.RUNNING:
+        while True:
+            current = await self._jobs.get(job.job_id)
+            if current is None:
+                raise SimulationJobNotFound(f"no simulation job {job.job_id!r}")
+            job = current
+            if job.status is not JobStatus.RUNNING:
+                if job.status is JobStatus.PAUSED and job.pause_reason is not None:
+                    await self._publish_paused(job, job.pause_reason, job.checkpoint)
+                    job = replace(job, pause_reason=None)
+                    await self._jobs.save(job)
+                break
             node = self._graph.next_node(job.checkpoint)
             if node is None:
                 job = replace(
@@ -174,6 +185,18 @@ class RunSimulationJob:
                 )
                 break
             next_state = await self._graph.step(node, job.checkpoint)
+            latest = await self._jobs.get(job.job_id)
+            if latest is not None and latest.status is JobStatus.PAUSED:
+                reason = latest.pause_reason or "pause_requested"
+                job = replace(
+                    latest,
+                    checkpoint=next_state,
+                    pause_reason=None,
+                    updated_at=self._clock.now(),
+                )
+                await self._jobs.save(job)
+                await self._publish_paused(job, reason, next_state)
+                break
             job = replace(job, checkpoint=next_state, updated_at=self._clock.now())
             await self._jobs.save(job)
             if next_state.phase is RunPhase.DONE:
@@ -216,6 +239,13 @@ class RunSimulationJob:
                 RunFailed(run_id=updated.run_id, error=error, attempts=updated.attempts),
             )
         return await self._snapshot(updated)
+
+    async def _publish_paused(self, job: JobRecord, reason: str, checkpoint: GraphState) -> None:
+        await self._publish(
+            job.run_id,
+            ProgressKind.PAUSED,
+            RunPaused(run_id=job.run_id, reason=reason, checkpoint=checkpoint),
+        )
 
     async def _snapshot(self, job: JobRecord) -> JobSnapshotResult:
         sequence = await self._progress.latest_sequence(job.run_id)
@@ -289,18 +319,29 @@ class PauseOrResumeSimulation:
             if job.status not in {JobStatus.QUEUED, JobStatus.RUNNING}:
                 raise InvalidJobTransition(f"cannot pause a {job.status.value} job")
             decision = PauseBoundary().resolve(
-                action=request.action, state=job.checkpoint, turn_committed=True
+                action=request.action,
+                state=job.checkpoint,
+                turn_committed=job.claimed_by is None,
             )
             if not decision.accepted:
                 raise InvalidJobTransition(decision.reason or "pause boundary rejected")
-            paused = replace(job, status=JobStatus.PAUSED)
-            await self._jobs.save(paused)
-            paused_event = RunPaused(
-                run_id=job.run_id,
-                reason=request.reason,
-                checkpoint=job.checkpoint,
+            in_flight = job.status is JobStatus.RUNNING and job.claimed_by is not None
+            paused = replace(
+                job,
+                status=JobStatus.PAUSED,
+                claimed_by=None,
+                lease_expires_at=None,
+                pause_reason=request.reason if in_flight else None,
+                updated_at=self._clock.now(),
             )
-            await self._publish(job.run_id, ProgressKind.PAUSED, paused_event)
+            await self._jobs.save(paused)
+            if not in_flight:
+                paused_event = RunPaused(
+                    run_id=job.run_id,
+                    reason=request.reason,
+                    checkpoint=job.checkpoint,
+                )
+                await self._publish(job.run_id, ProgressKind.PAUSED, paused_event)
             return PauseResumeResult(
                 run_id=job.run_id, status=JobStatus.PAUSED, checkpoint=job.checkpoint
             )
@@ -308,15 +349,18 @@ class PauseOrResumeSimulation:
             raise InvalidJobTransition(f"cannot resume a {job.status.value} job")
         resumed = replace(
             job,
-            status=JobStatus.RUNNING,
+            status=JobStatus.QUEUED,
             claimed_by=None,
+            lease_expires_at=None,
+            pause_reason=None,
+            error=None,
             updated_at=self._clock.now(),
         )
         await self._jobs.save(resumed)
         resumed_event = RunResumed(run_id=job.run_id, checkpoint=job.checkpoint)
         await self._publish(job.run_id, ProgressKind.RESUMED, resumed_event)
         return PauseResumeResult(
-            run_id=job.run_id, status=JobStatus.RUNNING, checkpoint=job.checkpoint
+            run_id=job.run_id, status=JobStatus.QUEUED, checkpoint=job.checkpoint
         )
 
     async def _publish(self, run_id: RunId, kind: ProgressKind, event: SimulationEvent) -> None:
