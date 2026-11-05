@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, NewType
 
-from evidence_corpus.domain.values import AuthorityTier, ClaimType, SourceType
+from evidence_corpus.domain.values import AuthorityRule, AuthorityTier, ClaimType, SourceType
 
 PackId = NewType("PackId", str)
 """Identity of one frozen evidence pack (``evp_...``)."""
@@ -100,6 +100,22 @@ class AuthorityWeight:
     def __post_init__(self) -> None:
         if not 0.0 <= self.weight <= 1.0:
             raise ValueError("AuthorityWeight.weight must be within [0, 1]")
+
+    @classmethod
+    def from_rule(cls, rule: AuthorityRule, tier: AuthorityTier) -> AuthorityWeight:
+        """Derive the weight from the corpus rule; retrieval never owns a rubric.
+
+        The tier is mapped to the corpus source-type vocabulary and positioned in the rule's
+        ordering. The top source gets ``1.0``; lower positions decay linearly.
+        """
+        source_type = SourceType(tier.value)
+        if source_type not in rule.ordered_source_types:
+            raise ValueError(f"tier {tier.value!r} is not in the corpus rule")
+        position = rule.ordered_source_types.index(source_type)
+        return cls(
+            tier=tier,
+            weight=(len(rule.ordered_source_types) - position) / len(rule.ordered_source_types),
+        )
 
 
 @dataclass(frozen=True, slots=True)
