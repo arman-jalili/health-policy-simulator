@@ -10,9 +10,8 @@ remove a frozen member without a new freeze entry.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from dataclasses import asdict, replace
+from dataclasses import replace
 from decimal import Decimal
-from typing import Any, cast
 
 from shared.ids import new_id
 from simulation_orchestration.application.commands import (
@@ -28,6 +27,7 @@ from simulation_orchestration.application.commands import (
 from simulation_orchestration.application.dto import (
     InvocationEnvelope,
     InvocationRecordResult,
+    JobRecord,
     JobSnapshotResult,
     PauseResumeResult,
     ProgressEventView,
@@ -38,9 +38,17 @@ from simulation_orchestration.application.dto import (
 from simulation_orchestration.application.errors import (
     InvalidJobTransition,
     PromptNotFound,
+    SimulationJobNotFound,
     SimulationRunNotFound,
 )
-from simulation_orchestration.application.events import RunPaused, RunResumed, SimulationEvent
+from simulation_orchestration.application.events import (
+    RunCompleted,
+    RunPaused,
+    RunQueued,
+    RunResumed,
+    RunStarted,
+    SimulationEvent,
+)
 from simulation_orchestration.application.ports import (
     Clock,
     NegotiationGateway,
@@ -48,6 +56,7 @@ from simulation_orchestration.application.ports import (
     UnitOfWork,
     WorkflowGraph,
 )
+from simulation_orchestration.application.progress import ProgressPublisher
 from simulation_orchestration.application.repositories import (
     InvocationStore,
     JobStore,
@@ -60,11 +69,14 @@ from simulation_orchestration.application.rules import (
     PauseBoundary,
     PromptVersioning,
 )
+from simulation_orchestration.application.state import initial_state
 from simulation_orchestration.application.values import (
+    JobId,
     JobStatus,
     PauseAction,
     ProgressKind,
     RunId,
+    RunPhase,
 )
 
 
@@ -95,10 +107,98 @@ class RunSimulationJob:
         self._uow = uow
 
     async def execute(self, request: StartSimulationRequest) -> StartSimulationResult:
-        raise NotImplementedError("RunSimulationJob is implemented by issue #212")
+        now = self._clock.now()
+        state = initial_state(request.run_id)
+        job = JobRecord(
+            job_id=JobId(new_id("job")),
+            run_id=request.run_id,
+            status=JobStatus.QUEUED,
+            attempts=0,
+            checkpoint=state,
+            budget_used=state.budget_used,
+            error=None,
+            claimed_by=None,
+            created_at=now,
+            updated_at=now,
+            budget=request.budget,
+        )
+        await self._jobs.add(job)
+        await self._publish(
+            request.run_id,
+            ProgressKind.QUEUED,
+            RunQueued(job_id=job.job_id, run_id=request.run_id),
+        )
+        return StartSimulationResult(
+            job_id=job.job_id, run_id=request.run_id, status=JobStatus.QUEUED
+        )
 
     async def run(self, job_id: str) -> JobSnapshotResult:
-        raise NotImplementedError("RunSimulationJob worker path is implemented by issue #212")
+        job = await self._jobs.get(JobId(job_id))
+        if job is None:
+            raise SimulationJobNotFound(f"no simulation job {job_id!r}")
+        if job.status is JobStatus.PAUSED:
+            return await self._snapshot(job)
+        now = self._clock.now()
+        if job.status is not JobStatus.RUNNING:
+            job = replace(job, status=JobStatus.RUNNING, updated_at=now)
+            await self._jobs.save(job)
+        already_started = any(
+            event.kind is ProgressKind.STARTED
+            for event in await self._progress.list_after(job.run_id, 0, 1000)
+        )
+        if not already_started:
+            await self._publish(
+                job.run_id,
+                ProgressKind.STARTED,
+                RunStarted(job_id=job.job_id, run_id=job.run_id),
+            )
+        while job.status is JobStatus.RUNNING:
+            node = self._graph.next_node(job.checkpoint)
+            if node is None:
+                job = replace(
+                    job,
+                    status=JobStatus.COMPLETED,
+                    checkpoint=replace(job.checkpoint, phase=RunPhase.DONE),
+                    updated_at=self._clock.now(),
+                )
+                await self._jobs.save(job)
+                await self._publish(
+                    job.run_id,
+                    ProgressKind.COMPLETED,
+                    RunCompleted(run_id=job.run_id, rounds=job.checkpoint.round),
+                )
+                break
+            next_state = await self._graph.step(node, job.checkpoint)
+            job = replace(job, checkpoint=next_state, updated_at=self._clock.now())
+            await self._jobs.save(job)
+            if next_state.phase is RunPhase.DONE:
+                job = replace(job, status=JobStatus.COMPLETED)
+                await self._jobs.save(job)
+                await self._publish(
+                    job.run_id,
+                    ProgressKind.COMPLETED,
+                    RunCompleted(run_id=job.run_id, rounds=next_state.round),
+                )
+                break
+        return await self._snapshot(job)
+
+    async def _snapshot(self, job: JobRecord) -> JobSnapshotResult:
+        sequence = await self._progress.latest_sequence(job.run_id)
+        return JobSnapshotResult(
+            job_id=job.job_id,
+            run_id=job.run_id,
+            status=job.status,
+            attempts=job.attempts,
+            checkpoint=job.checkpoint,
+            budget_used=job.budget_used,
+            error=job.error,
+            progress_sequence=sequence,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
+
+    async def _publish(self, run_id: RunId, kind: ProgressKind, event: SimulationEvent) -> None:
+        await ProgressPublisher(self._progress, self._clock).publish(run_id, kind, event)
 
 
 class StreamSimulationProgress:
@@ -185,17 +285,7 @@ class PauseOrResumeSimulation:
         )
 
     async def _publish(self, run_id: RunId, kind: ProgressKind, event: SimulationEvent) -> None:
-        sequence = await self._progress.latest_sequence(run_id) + 1
-        await self._progress.append(
-            ProgressEventView(
-                event_id=new_id("evt"),
-                run_id=run_id,
-                sequence=sequence,
-                kind=kind,
-                payload=asdict(cast(Any, event)),
-                created_at=self._clock.now(),
-            )
-        )
+        await ProgressPublisher(self._progress, self._clock).publish(run_id, kind, event)
 
 
 class RecordAgentInvocation:
@@ -248,7 +338,21 @@ class GetJob:
         self._progress = progress
 
     async def execute(self, request: GetJobRequest) -> JobSnapshotResult:
-        raise NotImplementedError("GetJob is implemented by issue #216")
+        job = await self._jobs.get(request.job_id)
+        if job is None:
+            raise SimulationJobNotFound(f"no simulation job {request.job_id!r}")
+        return JobSnapshotResult(
+            job_id=job.job_id,
+            run_id=job.run_id,
+            status=job.status,
+            attempts=job.attempts,
+            checkpoint=job.checkpoint,
+            budget_used=job.budget_used,
+            error=job.error,
+            progress_sequence=await self._progress.latest_sequence(job.run_id),
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
 
 
 class CollectUsageReport:
@@ -256,7 +360,16 @@ class CollectUsageReport:
         self._invocations = invocations
 
     async def execute(self, request: CollectUsageReportRequest) -> UsageReportResult:
-        raise NotImplementedError("CollectUsageReport is implemented by issue #216")
+        usage = await self._invocations.usage_for_run(request.run_id)
+        return UsageReportResult(
+            run_id=request.run_id,
+            total_invocations=usage.invocations,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cost=usage.cost,
+            by_stakeholder=usage.by_stakeholder,
+            by_round=usage.by_round,
+        )
 
 
 class RegisterPromptTemplate:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -17,6 +17,7 @@ from simulation_orchestration.application.values import (
     JobStatus,
     ProgressKind,
     PromptRef,
+    RunBudget,
     RunId,
 )
 
@@ -139,6 +140,7 @@ class JobRecord:
     claimed_by: str | None
     created_at: datetime
     updated_at: datetime
+    budget: RunBudget = field(default_factory=RunBudget)
 
 
 @dataclass(frozen=True, slots=True)

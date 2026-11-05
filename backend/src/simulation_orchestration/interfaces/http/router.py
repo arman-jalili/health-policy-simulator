@@ -6,6 +6,8 @@ The router is concrete by design: there is no separate HTTP interface. It is mou
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, status
@@ -20,15 +22,23 @@ from simulation_orchestration.application.commands import (
     StartSimulationRequest,
     StreamSimulationProgressRequest,
 )
+from simulation_orchestration.application.dto import (
+    JobSnapshotResult,
+    PauseResumeResult,
+    ProgressEventView,
+)
 from simulation_orchestration.application.values import JobId, PauseAction, RunBudget, RunId
 from simulation_orchestration.interfaces.http.deps import (
     SimulationOrchestrationContainer,
     get_container,
 )
 from simulation_orchestration.interfaces.http.schemas import (
+    GraphStateBody,
     JobResponse,
     PauseResumeBody,
     PauseResumeResponse,
+    RoundUsageItem,
+    StakeholderUsageItem,
     StartBody,
     StartResponse,
     UsageResponse,
@@ -68,10 +78,12 @@ async def run_simulation_job(
     body: StartBody,
     container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
 ) -> StartResponse:
-    await container.run_simulation_job.execute(
+    result = await container.run_simulation_job.execute(
         StartSimulationRequest(run_id=RunId(run_id), budget=_budget(body))
     )
-    raise NotImplementedError("simulation-orchestration router is wired by issue #216")
+    return StartResponse(
+        job_id=str(result.job_id), run_id=str(result.run_id), status=result.status.value
+    )
 
 
 @router.get(
@@ -88,10 +100,14 @@ async def stream_simulation_progress(
     container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
     last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
 ) -> StreamingResponse:
-    container.stream_simulation_progress.execute(
+    events = container.stream_simulation_progress.execute(
         StreamSimulationProgressRequest(run_id=RunId(run_id), last_event_id=last_event_id)
     )
-    raise NotImplementedError("simulation-orchestration router is wired by issue #216")
+    return StreamingResponse(
+        _sse(events),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post(
@@ -108,7 +124,7 @@ async def pause_or_resume_simulation(
     container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
 ) -> PauseResumeResponse:
     action = PauseAction(body.action)
-    await container.pause_or_resume_simulation.execute(
+    result = await container.pause_or_resume_simulation.execute(
         PauseOrResumeSimulationRequest(
             run_id=RunId(run_id),
             action=action,
@@ -116,7 +132,7 @@ async def pause_or_resume_simulation(
             budget=_budget(body) if body.budget is not None else None,
         )
     )
-    raise NotImplementedError("simulation-orchestration router is wired by issue #216")
+    return _pause_response(result)
 
 
 @router.post(
@@ -132,7 +148,7 @@ async def resume_simulation(
     body: PauseResumeBody,
     container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
 ) -> PauseResumeResponse:
-    await container.pause_or_resume_simulation.execute(
+    result = await container.pause_or_resume_simulation.execute(
         PauseOrResumeSimulationRequest(
             run_id=RunId(run_id),
             action=PauseAction.RESUME,
@@ -140,7 +156,7 @@ async def resume_simulation(
             budget=_budget(body) if body.budget is not None else None,
         )
     )
-    raise NotImplementedError("simulation-orchestration router is wired by issue #216")
+    return _pause_response(result)
 
 
 @router.get(
@@ -154,8 +170,36 @@ async def collect_usage_report(
     run_id: str,
     container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
 ) -> UsageResponse:
-    await container.collect_usage_report.execute(CollectUsageReportRequest(run_id=RunId(run_id)))
-    raise NotImplementedError("simulation-orchestration router is wired by issue #216")
+    result = await container.collect_usage_report.execute(
+        CollectUsageReportRequest(run_id=RunId(run_id))
+    )
+    return UsageResponse(
+        run_id=str(result.run_id),
+        total_invocations=result.total_invocations,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        cost=result.cost,
+        by_stakeholder=[
+            StakeholderUsageItem(
+                stakeholder=item.stakeholder,
+                invocations=item.invocations,
+                input_tokens=item.input_tokens,
+                output_tokens=item.output_tokens,
+                cost=item.cost,
+            )
+            for item in result.by_stakeholder
+        ],
+        by_round=[
+            RoundUsageItem(
+                round=item.round,
+                invocations=item.invocations,
+                input_tokens=item.input_tokens,
+                output_tokens=item.output_tokens,
+                cost=item.cost,
+            )
+            for item in result.by_round
+        ],
+    )
 
 
 @router.get(
@@ -169,5 +213,51 @@ async def get_job(
     job_id: str,
     container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
 ) -> JobResponse:
-    await container.get_job.execute(GetJobRequest(job_id=JobId(job_id)))
-    raise NotImplementedError("simulation-orchestration router is wired by issue #216")
+    result = await container.get_job.execute(GetJobRequest(job_id=JobId(job_id)))
+    return _job_response(result)
+
+
+def _pause_response(result: PauseResumeResult) -> PauseResumeResponse:
+    checkpoint = result.checkpoint
+    return PauseResumeResponse(
+        run_id=str(result.run_id),
+        status=result.status.value,
+        checkpoint_round=checkpoint.round if checkpoint else None,
+        checkpoint_phase=checkpoint.phase.value if checkpoint else None,
+    )
+
+
+def _job_response(result: JobSnapshotResult) -> JobResponse:
+    state = result.checkpoint
+    return JobResponse(
+        job_id=str(result.job_id),
+        run_id=str(result.run_id),
+        status=result.status.value,
+        attempts=result.attempts,
+        checkpoint=GraphStateBody(
+            run_id=str(state.run_id),
+            round=state.round,
+            phase=state.phase.value,
+            next_actor=state.next_actor,
+            budget_used_invocations=state.budget_used.invocations,
+            budget_used_tokens=state.budget_used.tokens,
+            budget_used_cost=state.budget_used.cost,
+        ),
+        error=result.error,
+        progress_sequence=result.progress_sequence,
+    )
+
+
+async def _sse(events: AsyncIterator[ProgressEventView]) -> AsyncIterator[str]:
+    async for event in events:
+        data = json.dumps(
+            {
+                "event_id": event.event_id,
+                "run_id": str(event.run_id),
+                "sequence": event.sequence,
+                "kind": event.kind.value,
+                "payload": event.payload,
+            },
+            default=str,
+        )
+        yield f"id: {event.event_id}\nevent: {event.kind.value}\ndata: {data}\n\n"

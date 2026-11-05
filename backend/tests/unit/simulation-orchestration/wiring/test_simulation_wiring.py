@@ -64,6 +64,7 @@ def test_container_and_factory_are_frozen() -> None:
         "collect_usage_report",
         "register_prompt_template",
         "resolve_prompt_template",
+        "worker",
     ]
     assert parameter_names(build_container) == ["settings", "database", "negotiation"]
     assert annotation_names(HttpContainer) == [
