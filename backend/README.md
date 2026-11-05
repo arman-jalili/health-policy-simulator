@@ -96,6 +96,39 @@ Three boot-time guards are deliberate:
 - `AUTH_MODE=demo` with `ENV=production` is refused (ADR-005);
 - `PERSISTENCE=memory` outside `ENV=local` is refused: restart would silently destroy the corpus.
 
+## Authentication
+
+`AUTH_MODE=strict` requires `X-API-Key` on every `/api/v1` route; `/healthz` and `/readyz` stay
+auth-free. Roles map to scopes: analyst (runs/briefs read+write), operator (+ corpus read/write and
+briefs publish), admin (wildcard). Demo mode is loopback-only and refused when `ENV=production`.
+
+Bootstrap the first admin key once against the configured database (plaintext is printed once):
+
+```bash
+uv run python - <<'PY'
+import asyncio
+from identity_access.interfaces.dto import CreateApiKeyCommand
+from identity_access.interfaces.types import Role
+from shared.app import create_app
+from shared.config import get_settings
+
+async def main() -> None:
+    app = create_app(get_settings())
+    issued = await app.state.identity_access.api_key_admin.create_key(
+        CreateApiKeyCommand(label="bootstrap-admin", role=Role.ADMIN)
+    )
+    print(issued.key)
+    await app.state.db.dispose()
+
+asyncio.run(main())
+PY
+```
+
+Then use that key against `POST/GET /api/v1/admin/keys` and `DELETE /api/v1/admin/keys/{key_id}`.
+Keys are stored as salted SHA-256 hashes; revocation takes effect on the next request. Operations:
+`docs/runbook-identity-access.md`; recovery: `docs/dr-plan-identity-access.md`. Contract proofing:
+`bash .pi/scripts/ci/check_identity-access_contracts.sh`.
+
 ## Migration policy
 
 - One revision chain, table names prefixed with the owning context (`shared_event_outbox`,

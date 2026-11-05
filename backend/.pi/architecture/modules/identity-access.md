@@ -256,6 +256,12 @@ and the admin router is mounted in the same shell. The pre-wiring `501` stub and
 set are deleted; there is no parallel auth path left. E2E proof:
 `tests/integration/test_identity_access_e2e.py` (ADR-009).
 
+## Operations
+
+- Runbook: `docs/runbook-identity-access.md`
+- Disaster recovery: `docs/dr-plan-identity-access.md`
+- Contract proofing: `.pi/scripts/ci/check_identity-access_contracts.sh`
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |

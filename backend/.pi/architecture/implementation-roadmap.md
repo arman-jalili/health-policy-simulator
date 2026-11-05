@@ -105,7 +105,7 @@ Bootstrap only — no bounded contexts.
 - [ ] Person-attributed quotations are excluded; institution-attributed statements remain citable
 - [ ] Unknown source types cannot be promoted to authoritative
 - [ ] Snapshot pinning: re-ingesting afterwards does not change passages visible through the old snapshot
-- [ ] Anonymous mutating requests return `401` in strict mode; analyst key is refused `corpus:write`
+- [x] Anonymous mutating requests return `401` in strict mode; analyst key is refused `corpus:write`
 
 ---
 
@@ -279,7 +279,17 @@ section; this is the phase-level checklist that applies to each `### Modules` ro
 - [x] W6 missing dependency fails closed — `test_postgres_without_a_database_is_refused`
 - [x] W7 restart round-trip proven by an integration test — `test_boot_wiring_and_restart_round_trip` (also `test_outbox_relay_dispatches_each_row_once`, `test_snapshot_manifest_survives_a_second_ingestion`)
 
-Phase 1 is not closed until W1–W7 also pass for IdentityAccess.
+**IdentityAccess — W1–W7 evidence (epic #30):**
+
+- [x] W1 router registered in `src/shared/app.py` — `tests/unit/identity-access/wiring/test_wiring.py::test_app_exposes_the_container_and_admin_routes`
+- [x] W2 composition selects adapters by settings — memory/postgres container tests in `test_wiring.py`
+- [x] W3 migration for every queried table; upgrade head on an empty DB — `tests/integration/test_identity_access_e2e.py` (migrated fixture) and `test_identity_access_keys.py`
+- [x] W4 events via `shared_event_outbox` in the aggregate transaction — `tests/integration/test_identity_access_attribution.py` asserts the actor on outbox rows
+- [x] W5 no cross-context repository/table access — `tests/unit/identity-access/acl-isolation/test_acl-isolation.py` (repo-wide AST check)
+- [x] W6 missing dependency fails closed — `test_postgres_without_a_database_is_refused`; admin store missing → `503 KEY_STORE_UNAVAILABLE`
+- [x] W7 runtime round-trip proven — `test_wired_identity_access_runs_end_to_end` (issue → read → revoke → 401); `validate-runtime-wiring.sh` exit 0
+
+Phase 1's W1–W7 pass for both EvidenceCorpus and IdentityAccess.
 
 **Definition of Done template (append to each issue)**
 
