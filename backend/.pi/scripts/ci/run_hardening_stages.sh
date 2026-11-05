@@ -250,6 +250,10 @@ run_stage "15" "simulation_orchestration_proofing" \
     "${SCRIPTS_DIR}/stage_simulation-orchestration_proofing.sh" \
     "always"
 
+run_stage "16" "governance_compliance_proofing" \
+    "${SCRIPTS_DIR}/stage_governance-compliance_proofing.sh" \
+    "always"
+
 # ── Summary ──
 
 echo ""

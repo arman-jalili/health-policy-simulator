@@ -76,6 +76,8 @@ jobs:
         run: bash .pi/scripts/ci/check_stakeholder-model_contracts.sh
       - name: ClaimValidation contract proofing
         run: bash .pi/scripts/ci/check_claim-validation_contracts.sh
+      - name: GovernanceCompliance contract proofing
+        run: bash .pi/scripts/ci/check_governance-compliance_contracts.sh
 
   migrations:
     name: Migrations (PostgreSQL 16 + pgvector)
