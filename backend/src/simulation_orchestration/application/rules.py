@@ -75,10 +75,12 @@ class CheckpointPolicy:
     """Decide which states are safe to persist for resume/crash recovery."""
 
     def is_safe_boundary(self, state: GraphState) -> bool:
-        raise NotImplementedError("CheckpointPolicy is implemented by issue #212")
+        return state.phase is not RunPhase.DONE
 
     def checkpoint(self, state: GraphState) -> GraphState:
-        raise NotImplementedError("CheckpointPolicy is implemented by issue #212")
+        if not self.is_safe_boundary(state):
+            raise ValueError("cannot checkpoint a terminal graph state")
+        return state
 
 
 class PauseBoundary:
@@ -110,11 +112,25 @@ class PauseBoundary:
 class RetryPolicy:
     """Bounded exponential backoff and dead-letter decision."""
 
+    def __init__(
+        self, *, max_attempts: int = 3, base_delay_s: float = 1.0, max_delay_s: float = 30.0
+    ) -> None:
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+        if base_delay_s <= 0 or max_delay_s <= 0:
+            raise ValueError("retry delays must be positive")
+        self._max_attempts = max_attempts
+        self._base_delay_s = base_delay_s
+        self._max_delay_s = max_delay_s
+
     def should_retry(self, *, attempts: int, error: str) -> bool:
-        raise NotImplementedError("RetryPolicy is implemented by issue #212")
+        return attempts < self._max_attempts and bool(error.strip())
 
     def delay_seconds(self, attempts: int) -> float:
-        raise NotImplementedError("RetryPolicy is implemented by issue #212")
+        if attempts < 1:
+            raise ValueError("attempts must be at least 1")
+        delay = self._base_delay_s * (2 ** (attempts - 1))
+        return float(min(delay, self._max_delay_s))
 
 
 class PromptVersioning:
