@@ -110,6 +110,8 @@ Never roll back a published brief: briefs are attributed artefacts. Withdraw wit
 Authentication operations: `docs/runbook-identity-access.md` (key bootstrap, 401/403 triage,
 revocation, credential compromise).
 
+Stakeholder model operations: `docs/runbook-stakeholder-model.md` (persona cards, allowlist, selection/binding).
+
 Evidence retrieval operations: `docs/runbook-evidence-retrieval.md` (pack lifecycle, hybrid-search
 triage, retrieval readiness and reweighting).
 

@@ -3,8 +3,9 @@
 Institutional negotiation simulator for Austrian healthcare policy: nine grounded agents argue a
 policy question on citation-grade evidence, and the result is an auditable decision brief.
 
-**Status:** Phase 0 (bootstrap) — shared kernel, configuration, migrations and health probes only.
-No bounded context is implemented yet. See
+**Status:** Phase 2 — shared kernel, EvidenceCorpus, EvidenceRetrieval, IdentityAccess and
+StakeholderModel are implemented and mounted. StakeholderModel currently keeps mutable profiles,
+history and bindings in process memory; durable persistence is the next deployment step. See
 [`.pi/architecture/implementation-roadmap.md`](.pi/architecture/implementation-roadmap.md).
 
 ## Stack
@@ -60,6 +61,7 @@ OpenAPI is served at `/docs` and `/openapi.json`.
 ## Layout
 
 ```
+config/personas/          # 9 validated institutional persona cards (stakeholder-model)
 src/
   shared/                 # shared kernel — no domain vocabulary
     app.py                # composition root (create_app, console entrypoint)
@@ -80,7 +82,8 @@ tests/
   integration/            # requires PostgreSQL (marker: integration)
 ```
 
-Bounded contexts are added in Phase 1 as `src/<context>/{domain,application,infrastructure,interfaces}/`.
+Bounded contexts live under `src/<context>/{domain,application,infrastructure,interfaces}/`.
+Implemented: `evidence_corpus`, `evidence_retrieval`, `identity_access`, `stakeholder_model`.
 `shared/` is the only exempt directory; every other top-level package must be a context.
 
 ## Configuration
@@ -129,7 +132,20 @@ Keys are stored as salted SHA-256 hashes; revocation takes effect on the next re
 `docs/runbook-identity-access.md`; recovery: `docs/dr-plan-identity-access.md`. Contract proofing:
 `bash .pi/scripts/ci/check_identity-access_contracts.sh`.
 
+## Stakeholder model
+
+`/api/v1/stakeholders*` owns institutional identity: 9 grounded personas, interests, constraints,
+mandates, veto classes, historical attribution, materiality selection and immutable run bindings.
+Boot loads and validates `backend/config/personas/`; an invalid card aborts startup. The published
+allowlist is the GovernanceCompliance guard's source of truth. `/readyz` reports
+`stakeholder_model` and `stakeholder_institutions`. Operations:
+`docs/runbook-stakeholder-model.md`; recovery: `docs/dr-plan-stakeholder-model.md`. Contract
+proofing: `bash .pi/scripts/ci/check_stakeholder-model_contracts.sh`.
+
 ## Evidence retrieval
+
+The current StakeholderModel runtime is explicitly transient: restart reseeds the 9 personas but
+loses API-registered profile/history/binding changes. Do not use it as durable profile storage.
 
 `/api/v1/evidence/*` runs lexical + dense retrieval over a pinned corpus snapshot, fuses the
 rankings, reranks, classifies stance and derives every score component per candidate. Dense uses a

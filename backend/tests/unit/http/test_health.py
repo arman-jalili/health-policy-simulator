@@ -40,6 +40,8 @@ async def test_readyz_reports_ready_when_database_answers(
         "evidence_retrieval_detail": (
             "lexical+dense (hashing-char3gram-v1); reranker overlap-reranker-v1"
         ),
+        "stakeholder_model": "ok",
+        "stakeholder_institutions": "9",
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1
