@@ -110,6 +110,9 @@ Never roll back a published brief: briefs are attributed artefacts. Withdraw wit
 Authentication operations: `docs/runbook-identity-access.md` (key bootstrap, 401/403 triage,
 revocation, credential compromise).
 
+Evidence retrieval operations: `docs/runbook-evidence-retrieval.md` (pack lifecycle, hybrid-search
+triage, retrieval readiness and reweighting).
+
 ## Evidence corpus operations
 
 The corpus context exposes eight endpoints under `/api/v1` (documents, ingestion runs, passages,

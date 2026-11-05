@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Contract frozen (implementation pending)
+**Status:** Implemented (2026-11-05)
 **Depends:** EvidenceCorpus (open-host — `PassageView`, `ProvenanceView`, `AuthorityTier` rubric, index manifest version)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -46,6 +46,25 @@ passage text or vectors; `PassageSearchPort` is the only corpus access. The tact
 
 **Not mounted yet:** the router is concrete but is not included in `shared.app` until the wiring
 issue; a TODO body must never answer a real request.
+
+## Runtime Integration
+
+**Entry path:** `shared.app.create_app` builds the EvidenceCorpus container, then
+`evidence_retrieval.composition.build_container(settings, database, corpus=...)`, then mounts
+`evidence_retrieval.interfaces.http.router`. The only public path is `/api/v1/evidence/*`.
+
+**Corpus boundary:** `CorpusPassageSearch` consumes EvidenceCorpus' published ports only (index
+writer, passage repository, snapshot repository, authority-rule repository). It never reads
+`evidence_corpus_*` tables or imports corpus infrastructure.
+
+**Proof:** `tests/integration/test_evidence_retrieval_e2e.py` indexes a passage, pins a snapshot,
+searches candidates, assembles/reads/scores/reweights a pack through the public API.
+`validate-runtime-wiring.sh` reports zero unwired services.
+
+**Readiness:** `/readyz` reports `evidence_retrieval`; embeddings or reranker unreachable returns
+`503 NOT_READY`. **Legacy path:** none existed; pre-wiring stubs were TODO-only and are retired.
+
+**Decision:** ADR-010 (Accepted).
 
 ## Architecture
 
