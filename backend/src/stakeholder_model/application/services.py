@@ -27,6 +27,7 @@ from stakeholder_model.application.dto import (
     InstitutionalAllowlistResult,
     PersonaCardResult,
     RegisterStakeholderResult,
+    SelectionResult,
     SelectStakeholdersResult,
     StakeholderProfileResult,
     StakeholderSummaryResult,
@@ -137,8 +138,24 @@ class SelectRelevantStakeholders:
         self._scorer = scorer
 
     async def execute(self, request: SelectRelevantStakeholdersRequest) -> SelectStakeholdersResult:
-        """Select material institutions; implemented by issue #116."""
-        raise NotImplementedError("SelectRelevantStakeholders.execute is implemented by issue #116")
+        """Select registered institutions with non-zero materiality, best first."""
+        stakeholders = await self._repository.all_registered()
+        selections = [
+            SelectionResult(
+                stakeholder_id=stakeholder.id,
+                materiality=self._scorer.score(stakeholder.profile, request.mandate),
+            )
+            for stakeholder in stakeholders
+        ]
+        material = sorted(
+            (selection for selection in selections if selection.materiality.value > 0.0),
+            key=lambda selection: (-selection.materiality.value, selection.stakeholder_id),
+        )
+        return SelectStakeholdersResult(
+            run_id=request.run_id,
+            mandate=request.mandate,
+            selections=tuple(material),
+        )
 
 
 class BindAgentPersona:
