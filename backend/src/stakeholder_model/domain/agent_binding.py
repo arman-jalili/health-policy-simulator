@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from evidence_corpus.domain.values import AuthorityTier
+from stakeholder_model.domain.errors import BindingIncomplete
 from stakeholder_model.domain.values import (
     BindingId,
     PersonaVersion,
@@ -28,5 +29,6 @@ class AgentBinding:
     red_lines: tuple[str, ...]
 
     def assert_institution_only(self) -> None:
-        """Refuse an incomplete binding; implemented by issue #112."""
-        raise NotImplementedError("assert_institution_only is implemented by issue #112")
+        """Refuse a binding that lacks the persona or institutional identity."""
+        if not self.persona_version.strip() or not self.stakeholder_id.strip():
+            raise BindingIncomplete(f"binding {self.id} lacks a persona version or stakeholder id")
