@@ -21,6 +21,7 @@
 #   11. identity_access_proofing — Contract implementation + real coverage gate
 #   12. evidence_retrieval_proofing — Contract implementation + real coverage gate
 #   13. stakeholder_model_proofing — Contract implementation + real coverage gate
+#   14. claim_validation_proofing — Contract implementation + real coverage gate
 
 set -euo pipefail
 
@@ -238,6 +239,11 @@ run_stage "12" "evidence_retrieval_proofing" \
 # Stage 13: StakeholderModel contract proofing + coverage gate
 run_stage "13" "stakeholder_model_proofing" \
     "${SCRIPTS_DIR}/stage_stakeholder-model_proofing.sh" \
+    "always"
+
+# Stage 14: ClaimValidation contract proofing + coverage gate
+run_stage "14" "claim_validation_proofing" \
+    "${SCRIPTS_DIR}/stage_claim-validation_proofing.sh" \
     "always"
 
 # ── Summary ──
