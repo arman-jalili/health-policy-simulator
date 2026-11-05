@@ -43,6 +43,7 @@ from simulation_orchestration.application.errors import (
 )
 from simulation_orchestration.application.events import (
     RunCompleted,
+    RunFailed,
     RunPaused,
     RunQueued,
     RunResumed,
@@ -160,6 +161,8 @@ class RunSimulationJob:
                     job,
                     status=JobStatus.COMPLETED,
                     checkpoint=replace(job.checkpoint, phase=RunPhase.DONE),
+                    claimed_by=None,
+                    lease_expires_at=None,
                     updated_at=self._clock.now(),
                 )
                 await self._jobs.save(job)
@@ -174,7 +177,12 @@ class RunSimulationJob:
             job = replace(job, checkpoint=next_state, updated_at=self._clock.now())
             await self._jobs.save(job)
             if next_state.phase is RunPhase.DONE:
-                job = replace(job, status=JobStatus.COMPLETED)
+                job = replace(
+                    job,
+                    status=JobStatus.COMPLETED,
+                    claimed_by=None,
+                    lease_expires_at=None,
+                )
                 await self._jobs.save(job)
                 METRICS.increment("simulation_jobs_completed_total")
                 await self._publish(
@@ -184,6 +192,30 @@ class RunSimulationJob:
                 )
                 break
         return await self._snapshot(job)
+
+    async def record_failure(
+        self, job_id: str, error: str, *, status: JobStatus
+    ) -> JobSnapshotResult:
+        """Persist a failed attempt: retryable jobs return to the queue, poisoned jobs stop."""
+        job = await self._jobs.get(JobId(job_id))
+        if job is None:
+            raise SimulationJobNotFound(f"no simulation job {job_id!r}")
+        updated = replace(
+            job,
+            status=status,
+            error=error,
+            claimed_by=None,
+            lease_expires_at=None,
+            updated_at=self._clock.now(),
+        )
+        await self._jobs.save(updated)
+        if status in {JobStatus.FAILED, JobStatus.DEAD_LETTER}:
+            await self._publish(
+                updated.run_id,
+                ProgressKind.FAILED,
+                RunFailed(run_id=updated.run_id, error=error, attempts=updated.attempts),
+            )
+        return await self._snapshot(updated)
 
     async def _snapshot(self, job: JobRecord) -> JobSnapshotResult:
         sequence = await self._progress.latest_sequence(job.run_id)

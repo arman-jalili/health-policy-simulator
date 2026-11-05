@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from simulation_orchestration.application.dto import (
@@ -72,10 +72,11 @@ def _round_usage(round_no: int, items: list[InvocationEnvelope]) -> RoundUsage:
 
 
 class InMemoryJobStore:
-    """Job store with optimistic save; one claim per queued job."""
+    """Job store with optimistic save; one claim per queued/expired-lease job."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, lease_seconds: int = 60) -> None:
         self._jobs: dict[str, JobRecord] = {}
+        self._lease_seconds = lease_seconds
 
     async def add(self, job: JobRecord) -> None:
         self._jobs.setdefault(str(job.job_id), job)
@@ -94,12 +95,14 @@ class InMemoryJobStore:
 
     async def claim_next(self, worker_id: str, now: datetime) -> JobRecord | None:
         for job in self._jobs.values():
-            if job.status is JobStatus.QUEUED:
+            expired = job.lease_expires_at is None or job.lease_expires_at < now
+            if job.status is JobStatus.QUEUED or (job.status is JobStatus.RUNNING and expired):
                 claimed = replace(
                     job,
                     status=JobStatus.RUNNING,
                     attempts=job.attempts + 1,
                     claimed_by=worker_id,
+                    lease_expires_at=now + timedelta(seconds=self._lease_seconds),
                     updated_at=now,
                 )
                 self._jobs[str(job.job_id)] = claimed

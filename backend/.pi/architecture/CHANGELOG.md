@@ -48,6 +48,30 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - SimulationOrchestration lifecycle hardening (issue #235)
+
+### Changed
+- Worker isolates per-job failures, applies `RetryPolicy`, publishes `run.failed` and ends poisoned
+  jobs in `dead_letter` (or `failed` for a non-retryable error).
+- Added a 60 s job lease (`0303_simulation_lease`); expired RUNNING jobs are
+  reclaimable, and boot recovery re-queues RUNNING jobs left by a dead worker.
+- `/readyz` reports `simulation_worker: ok|dead|not_started`; a dead task makes readiness 503.
+- Supervised worker restarts increment `simulation_worker_restarts_total`; per-job failures increment
+  `simulation_job_failures_total`.
+
+### Impact Analysis
+- Files affected: worker, job store adapters, health probe, app lifespan, migration 0303
+- Canonical refs: module doc, runbook, DR plan
+- Validators: architecture, canonical, operations, runtime wiring, readiness
+
+### Status
+- [x] Per-job failure isolation
+- [x] Bounded retries + dead letter
+- [x] Lease reclaim + boot recovery
+- [x] Readiness and metrics
+
+---
+
 ## [2026-11-06] - SimulationOrchestration architecture readiness (issue #219)
 
 ### Changed

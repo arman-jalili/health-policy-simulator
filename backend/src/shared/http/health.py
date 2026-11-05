@@ -117,9 +117,22 @@ async def readyz(request: Request) -> JSONResponse:
 
     simulation = getattr(request.app.state, "simulation_orchestration", None)
     if simulation is not None:
+        worker_task = getattr(request.app.state, "simulation_worker_task", None)
+        worker_alive = worker_task is not None and not worker_task.done()
         checks["simulation_orchestration"] = "ok"
         checks["simulation_orchestration_persistence"] = str(settings.persistence)
         checks["simulation_model"] = settings.simulation_model_id
+        checks["simulation_worker"] = (
+            "not_started" if worker_task is None else ("ok" if worker_alive else "dead")
+        )
+        if worker_task is not None and not worker_alive:
+            failures.append(
+                ErrorDetail(
+                    message="simulation worker task is not running",
+                    field="simulation_worker",
+                    code="dead",
+                )
+            )
 
     if failures:
         raise ServiceUnavailableError(

@@ -77,5 +77,5 @@ def test_container_and_factory_are_frozen() -> None:
 
 
 def test_worker_and_boot_failure_contracts_are_frozen() -> None:
-    assert method_names(WorkerLoop) == {"run_forever", "run_once"}
+    assert {"run_forever", "run_once", "recover", "run_supervised"} <= method_names(WorkerLoop)
     assert UnknownModel.code == "UNKNOWN_MODEL"

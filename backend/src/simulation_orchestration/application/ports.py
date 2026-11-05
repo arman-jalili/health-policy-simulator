@@ -89,7 +89,15 @@ class WorkerLoop(Protocol):
 
     async def run_forever(self, stop: asyncio.Event) -> None: ...
 
+    async def run_supervised(self, stop: asyncio.Event) -> None:
+        """Keep the loop alive across unexpected infrastructure failures."""
+        ...
+
     async def run_once(self) -> bool: ...
+
+    async def recover(self) -> int:
+        """Re-queue RUNNING jobs left behind by a dead worker; return the resumable count."""
+        ...
 
 
 @runtime_checkable

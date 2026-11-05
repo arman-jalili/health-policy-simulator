@@ -74,10 +74,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             relay = OutboxRelay(database.session_factory, poll_interval_s=5.0)
             relay.subscribe(WILDCARD, _log_dispatched_event)
             relay_task = asyncio.create_task(relay.run(), name="outbox-relay")
+        worker = app.state.simulation_orchestration.worker
+        try:
+            resumable = await worker.recover()
+            logger.info("simulation_worker_boot_recovery", resumable=resumable)
+        except Exception as error:
+            logger.warning("simulation_worker_recovery_failed", error=str(error))
         worker_task = asyncio.create_task(
-            app.state.simulation_orchestration.worker.run_forever(worker_stop),
+            worker.run_supervised(worker_stop),
             name="simulation-worker",
         )
+        app.state.simulation_worker_task = worker_task
         try:
             yield
         finally:

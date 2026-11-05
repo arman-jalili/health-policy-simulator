@@ -20,6 +20,7 @@ def test_job_lifecycle_has_a_paused_state() -> None:
         "paused",
         "completed",
         "failed",
+        "dead_letter",
         "budget_exhausted",
     }
 
