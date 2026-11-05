@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     persistence: Persistence = Persistence.POSTGRES
 
     database_url: Annotated[PostgresDsn, Field(repr=False)]
+    # Optional LLM health endpoint; unset means "not configured" in /readyz, never a failure.
+    llm_health_url: str | None = None
     db_echo: bool = False
     db_pool_size: Annotated[int, Field(ge=1, le=50)] = 5
     db_max_overflow: Annotated[int, Field(ge=0, le=50)] = 5

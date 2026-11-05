@@ -5,8 +5,11 @@ from __future__ import annotations
 import httpx
 from fastapi import FastAPI
 
+from shared.app import create_app
+from shared.config import Settings
+from shared.enums import Persistence
 from shared.http.middleware import REQUEST_ID_HEADER, TRACE_ID_HEADER
-from tests.conftest import StubDatabase
+from tests.conftest import TEST_DATABASE_URL, StubDatabase
 
 
 async def test_healthz_reports_ok_without_touching_the_database(
@@ -29,7 +32,10 @@ async def test_readyz_reports_ready_when_database_answers(
     response = await client.get("/readyz")
 
     assert response.status_code == 200
-    assert response.json()["checks"] == {"database": "ok"}
+    assert response.json()["checks"] == {
+        "database": "ok",
+        "llm": "not_configured",
+    }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1
 
@@ -42,7 +48,7 @@ async def test_readyz_returns_envelope_when_database_is_down(
     assert response.status_code == 503
     body = response.json()
     assert body["code"] == "NOT_READY"
-    assert body["message"] == "Database is not reachable"
+    assert body["message"] == "A required dependency is unavailable"
     assert body["details"] == [
         {"message": "connectivity check failed", "field": "database", "code": "unavailable"}
     ]
@@ -86,3 +92,44 @@ async def test_domain_event_counter_is_exposed(client: httpx.AsyncClient, app: F
     response = await client.get("/metrics")
 
     assert 'domain_events_total{event="PassageRevertedFromIndex"} 1.0' in response.text
+
+
+async def test_readyz_reports_an_unreachable_llm() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=TEST_DATABASE_URL,
+        persistence=Persistence.MEMORY,
+        llm_health_url="http://127.0.0.1:1/health",
+    )
+    app = create_app(settings)
+    app.state.db = StubDatabase()
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/readyz")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "NOT_READY"
+    assert body["details"] == [
+        {"message": "LLM health check failed", "field": "llm", "code": "unreachable"}
+    ]
+
+
+async def test_healthz_never_probes_the_llm() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=TEST_DATABASE_URL,
+        persistence=Persistence.MEMORY,
+        llm_health_url="http://127.0.0.1:1/health",
+    )
+    app = create_app(settings)
+    stub = StubDatabase()
+    app.state.db = stub
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/healthz")
+
+    assert response.status_code == 200
+    assert stub.ping_count == 0

@@ -1,8 +1,9 @@
 """Liveness and readiness probes.
 
 ``/healthz`` is process liveness only — it must stay answerable while the database is down, so a
-restart loop never hides a dependency outage. ``/readyz`` checks database connectivity and returns
-``503`` with the standard envelope when the dependency is unavailable.
+restart loop never hides a dependency outage. ``/readyz`` checks database connectivity and, when
+configured, LLM reachability; it returns ``503`` with the standard envelope when any required
+dependency is unavailable.
 
 Canonical: .pi/architecture/implementation-roadmap.md (Phase 0 acceptance criteria)
 """
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -33,6 +35,21 @@ async def healthz(request: Request) -> dict[str, str]:
     }
 
 
+async def _check_llm(health_url: str | None, timeout_s: float) -> tuple[bool, str]:
+    """Return ``(ok, status)``; an unset URL is reported as not configured, not a failure."""
+    if not health_url:
+        return True, "not_configured"
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s) as client:
+            response = await client.get(health_url)
+    except Exception as error:
+        logger.warning("readiness_check_failed", check="llm", error=str(error))
+        return False, "unreachable"
+    if response.is_success:
+        return True, "ok"
+    return False, f"http_{response.status_code}"
+
+
 @router.get(
     "/readyz",
     summary="Readiness probe",
@@ -41,30 +58,48 @@ async def healthz(request: Request) -> dict[str, str]:
 async def readyz(request: Request) -> JSONResponse:
     settings = get_app_settings(request)
     database = get_database(request)
+    checks: dict[str, str] = {}
+    failures: list[ErrorDetail] = []
 
     try:
         async with asyncio.timeout(settings.db_connect_timeout_s):
             await database.ping()
+        checks["database"] = "ok"
     except Exception as error:
         logger.warning("readiness_check_failed", check="database", error=str(error))
+        checks["database"] = "unreachable"
+        failures.append(
+            ErrorDetail(
+                message="connectivity check failed",
+                field="database",
+                code="unavailable",
+            )
+        )
+
+    llm_ok, llm_status = await _check_llm(settings.llm_health_url, settings.db_connect_timeout_s)
+    checks["llm"] = llm_status
+    if not llm_ok:
+        failures.append(
+            ErrorDetail(
+                message="LLM health check failed",
+                field="llm",
+                code=llm_status,
+            )
+        )
+
+    if failures:
         raise ServiceUnavailableError(
-            "Database is not reachable",
+            "A required dependency is unavailable",
             code="NOT_READY",
-            details=[
-                ErrorDetail(
-                    message="connectivity check failed",
-                    field="database",
-                    code="unavailable",
-                )
-            ],
-        ) from error
+            details=failures,
+        )
 
     return JSONResponse(
         status_code=200,
         content={
             "status": "ready",
             "service": settings.service_name,
-            "checks": {"database": "ok"},
+            "checks": checks,
         },
         headers={"Cache-Control": "no-store"},
     )
