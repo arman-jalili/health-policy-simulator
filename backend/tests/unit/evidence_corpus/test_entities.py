@@ -474,3 +474,44 @@ class TestSnapshotAndIndexManifest:
         assert snapshot.id.startswith("snp_")
         assert snapshot.document_ids == ["doc_a", "doc_b"]
         assert snapshot.index_manifest.index_version == "idx-2026-11-05.1"
+
+
+class TestSnapshotImmutability:
+    """A pinned snapshot is a copy of the corpus manifest, not a live view of it."""
+
+    def test_pinning_does_not_alias_the_caller_document_set(self) -> None:
+        document_ids = ["doc_b", "doc_a"]
+        manifest = IndexManifest(
+            index_version="idx-1",
+            embedding_model="text-embedding-3-small",
+            searchable_since=datetime(2026, 11, 5, tzinfo=UTC),
+            passage_count=2,
+        )
+
+        snapshot = CorpusSnapshot.pin(
+            label="baseline",
+            document_ids=document_ids,
+            index_manifest=manifest,
+            pinned_at=datetime(2026, 11, 5, 9, 0, tzinfo=UTC),
+            manifest_hash="sha256:abc",
+        )
+        document_ids.append("doc_c")
+
+        assert snapshot.document_ids == ["doc_a", "doc_b"]
+
+    def test_pinned_index_version_is_part_of_the_manifest(self) -> None:
+        manifest = IndexManifest(
+            index_version="idx-1",
+            embedding_model="text-embedding-3-small",
+            searchable_since=datetime(2026, 11, 5, tzinfo=UTC),
+            passage_count=2,
+        )
+        snapshot = CorpusSnapshot.pin(
+            label="baseline",
+            document_ids=[],
+            index_manifest=manifest,
+            pinned_at=datetime(2026, 11, 5, 9, 0, tzinfo=UTC),
+            manifest_hash="sha256:abc",
+        )
+
+        assert snapshot.index_manifest is manifest
