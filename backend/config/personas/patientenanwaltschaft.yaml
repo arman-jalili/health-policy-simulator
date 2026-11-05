@@ -1,0 +1,43 @@
+code: patientenanwaltschaft
+persona_version: '2026.1'
+identity:
+  name: Österreichische Patientenanwaltschaft
+  short_name: Patientenanwaltschaft
+  category: patient_representation
+mandate_scope:
+  topics:
+  - waiting_times
+  - benefits
+  - patient_rights
+  description: Independent representation of patient interests and rights
+  source: &id001
+    kind: statutory
+    citation: Patientenverfügungsgesetz, § 1
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '12000000'
+  period: annual
+  tolerance: 0.0
+  source: *id001
+interests:
+- topic: waiting_times
+  goal: Guarantee maximum waiting-time standards
+  weight: 1.0
+- topic: patient_rights
+  goal: Strengthen complaint and redress pathways
+  weight: 0.9
+constraints:
+- statement: No co-payment increase for vulnerable groups
+  topic: benefits
+- statement: No reduction of independent patient advocacy
+  topic: patient_rights
+red_lines:
+- Abolition of independent patient advocacy
+priorities:
+- rank: 1
+  topic: waiting_times
+- rank: 2
+  topic: patient_rights
+veto_rights:
+- proposal_class: statutory_benefit_change
+  source: *id001

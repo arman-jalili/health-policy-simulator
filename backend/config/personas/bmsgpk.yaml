@@ -1,0 +1,43 @@
+code: bmsgpk
+persona_version: '2026.1'
+identity:
+  name: Bundesministerium für Soziales, Gesundheit, Pflege und Konsumentenschutz
+  short_name: BMSGPK
+  category: ministry
+mandate_scope:
+  topics:
+  - waiting_times
+  - hospital_plan
+  - public_health
+  description: Federal health policy, statutory planning and public-health oversight
+  source: &id001
+    kind: statutory
+    citation: Bundesministeriengesetz 1986, Anlage 2
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '2500000000'
+  period: annual
+  tolerance: 0.05
+  source: *id001
+interests:
+- topic: waiting_times
+  goal: Deliver a measurable reduction in care delays
+  weight: 1.0
+- topic: public_health
+  goal: Strengthen prevention and pandemic readiness
+  weight: 0.8
+constraints:
+- statement: No breach of the federal budget framework
+  topic: budget_frame
+- statement: No constitutional amendment without a two-thirds majority
+  topic: public_health
+red_lines:
+- Fragmentation of federal health-planning authority
+priorities:
+- rank: 1
+  topic: waiting_times
+- rank: 2
+  topic: public_health
+veto_rights:
+- proposal_class: hospital_plan
+  source: *id001

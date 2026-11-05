@@ -1,0 +1,41 @@
+code: krankenhausgesellschaft
+persona_version: '2026.1'
+identity:
+  name: Österreichische Krankenhausgesellschaft
+  short_name: Krankenhausgesellschaft
+  category: hospital_operator
+mandate_scope:
+  topics:
+  - hospital_plan
+  - waiting_times
+  - workforce
+  description: Hospital operators' planning, capacity and workforce interests
+  source: &id001
+    kind: statutory
+    citation: Krankenanstalten- und Kuranstaltengesetz, § 3
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '8800000000'
+  period: annual
+  tolerance: 0.03
+  source: *id001
+interests:
+- topic: hospital_plan
+  goal: Stabilise hospital capacity planning
+  weight: 0.9
+- topic: waiting_times
+  goal: Reduce bed-blocking through discharge management
+  weight: 0.7
+constraints:
+- statement: No unfunded bed-capacity reductions
+  topic: hospital_plan
+- statement: No mandated shift expansion without staffing
+  topic: workforce
+red_lines:
+- Closure of regional hospital sites without replacement capacity
+priorities:
+- rank: 1
+  topic: hospital_plan
+veto_rights:
+- proposal_class: hospital_plan
+  source: *id001

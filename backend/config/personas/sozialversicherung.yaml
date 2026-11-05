@@ -1,0 +1,45 @@
+code: sozialversicherung
+persona_version: '2026.1'
+identity:
+  name: Dachverband der Sozialversicherungsträger
+  short_name: Dachverband
+  category: insurer_association
+mandate_scope:
+  topics:
+  - premiums
+  - benefits
+  - fee_schedule
+  description: Coordination of social-insurance financing and provider contracts
+  source: &id001
+    kind: statutory
+    citation: Sozialversicherungs-Organisationsgesetz, § 30
+    as_of: '2026-01-01'
+budget:
+  amount_eur: '14500000000'
+  period: annual
+  tolerance: 0.02
+  source: *id001
+interests:
+- topic: premiums
+  goal: Keep contribution growth below wage growth
+  weight: 1.0
+- topic: fee_schedule
+  goal: Tie fee growth to measured quality gains
+  weight: 0.8
+constraints:
+- statement: No deficit without a financing plan
+  topic: premiums
+- statement: No benefit expansion without a cost estimate
+  topic: benefits
+red_lines:
+- Unfunded benefit mandates
+priorities:
+- rank: 1
+  topic: premiums
+- rank: 2
+  topic: fee_schedule
+veto_rights:
+- proposal_class: fee_schedule
+  source: *id001
+- proposal_class: statutory_benefit_change
+  source: *id001
