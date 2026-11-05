@@ -116,6 +116,9 @@ def _require_unit_interval(value: float, field_name: str) -> None:
         raise ValueError(f"{field_name} must be within [0, 1]")
 
 
+_PERSON_HONORIFICS = ("Dr.", "Mag.", "Prof.", "DI ", "HR ")
+
+
 @dataclass(frozen=True, slots=True)
 class InstitutionIdentity:
     """Canonical institutional identity — never a natural person."""
@@ -133,8 +136,12 @@ class InstitutionIdentity:
 
     @property
     def is_person(self) -> bool:
-        """Return whether the identity was declared as a natural person."""
-        return self.is_natural_person
+        """Return whether the identity represents a natural person.
+
+        The explicit flag is authoritative. An honorific prefix is also refused so a persona
+        configuration cannot smuggle an individual in by omitting the flag.
+        """
+        return self.is_natural_person or self.name.strip().startswith(_PERSON_HONORIFICS)
 
 
 @dataclass(frozen=True, slots=True)
