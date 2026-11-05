@@ -70,6 +70,8 @@ jobs:
         run: bash .pi/scripts/validate-canonical.sh
       - name: IdentityAccess contract proofing
         run: bash .pi/scripts/ci/check_identity-access_contracts.sh
+      - name: StakeholderModel contract proofing
+        run: bash .pi/scripts/ci/check_stakeholder-model_contracts.sh
 
   migrations:
     name: Migrations (PostgreSQL 16 + pgvector)
