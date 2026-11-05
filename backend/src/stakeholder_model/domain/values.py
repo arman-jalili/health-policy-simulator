@@ -339,7 +339,16 @@ class HistoricalPosition:
         passage_id: PassageId,
     ) -> HistoricalPosition:
         """Create a position whose usability is derived from attribution strength."""
-        raise NotImplementedError("HistoricalPosition.new is implemented by issue #110")
+        from shared.ids import new_id
+
+        return cls(
+            id=PositionId(new_id("pos")),
+            stance=stance,
+            attribution=attribution,
+            stated_on=stated_on,
+            passage_id=passage_id,
+            usable=attribution.is_usable,
+        )
 
 
 @dataclass(frozen=True, slots=True)

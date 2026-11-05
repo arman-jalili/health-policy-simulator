@@ -51,24 +51,43 @@ class AttributionRule(Protocol):
 
 
 class ExplicitAttribution:
-    """The institution is named as the source of the statement."""
+    """The institution itself is named as the source of the statement."""
 
     def classify(self, speaker_kind: SpeakerKind, *, explicitly_named: bool) -> AttributionStrength:
-        raise NotImplementedError("ExplicitAttribution is implemented by issue #110")
+        """Return explicit only for a named institutional statement; otherwise mention."""
+        if speaker_kind is SpeakerKind.INSTITUTION and explicitly_named:
+            return AttributionStrength.EXPLICIT
+        return AttributionStrength.MENTION
 
 
 class ReportedAttribution:
     """The statement is reported second-hand by another actor."""
 
     def classify(self, speaker_kind: SpeakerKind, *, explicitly_named: bool) -> AttributionStrength:
-        raise NotImplementedError("ReportedAttribution is implemented by issue #110")
+        """Reported speech is second-hand; anonymous talk remains a mere mention."""
+        if speaker_kind is SpeakerKind.PERSON:
+            return AttributionStrength.REPORTED
+        return AttributionStrength.MENTION
 
 
 class MentionOnly:
     """The institution appears in passing without stating the position."""
 
     def classify(self, speaker_kind: SpeakerKind, *, explicitly_named: bool) -> AttributionStrength:
-        raise NotImplementedError("MentionOnly is implemented by issue #110")
+        """A passing reference never establishes a position."""
+        return AttributionStrength.MENTION
+
+
+class CorpusAttributionRule:
+    """Compose the three strategies from corpus speaker context."""
+
+    def classify(self, speaker_kind: SpeakerKind, *, explicitly_named: bool) -> AttributionStrength:
+        """Explicit institutional speech wins; otherwise reported/person or mention."""
+        if speaker_kind is SpeakerKind.INSTITUTION and explicitly_named:
+            return AttributionStrength.EXPLICIT
+        if speaker_kind is SpeakerKind.PERSON:
+            return AttributionStrength.REPORTED
+        return AttributionStrength.MENTION
 
 
 def select_current_position(
