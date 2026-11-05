@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from governance_compliance.application.errors import GuardUnavailable, GuardVerdictRequired
 from governance_compliance.application.ports import InstitutionGuard
 from governance_compliance.application.services import EnforceInstitutionOnlyOutput
-from governance_compliance.application.errors import GuardUnavailable, GuardVerdictRequired
 
 
 def test_guard_service_structurally_satisfies_the_blocking_port() -> None:
