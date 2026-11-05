@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from tests.unit.stakeholder_contract_helpers import field_names
 
 from shared.errors import AppError
@@ -13,8 +14,10 @@ from stakeholder_model.domain.stakeholder import Stakeholder, StakeholderProfile
 from stakeholder_model.domain.values import (
     BudgetLimit,
     BudgetPeriod,
+    Constraint,
     InstitutionCategory,
     InstitutionIdentity,
+    Interest,
     MandateScope,
     MandateSource,
     PowerSourceKind,
@@ -77,3 +80,73 @@ def test_activation_is_the_guard_boundary() -> None:
         ).code
         == "oegk"
     )
+
+
+def _stakeholder(profile: StakeholderProfile) -> Stakeholder:
+    return Stakeholder(
+        id=StakeholderId("stk_1"),
+        identity=InstitutionIdentity(
+            name="Österreichische Gesundheitskasse",
+            short_name="ÖGK",
+            category=InstitutionCategory.PAYER,
+            code="oegk",
+        ),
+        profile=profile,
+    )
+
+
+def _empty_profile() -> StakeholderProfile:
+    return StakeholderProfile(
+        mandate_scope=MandateScope(
+            topics=frozenset({"waiting_times"}),
+            description="Planning and funding of care capacity",
+            source=_source(),
+        ),
+        budget=BudgetLimit(
+            amount_eur=Decimal("100"),
+            period=BudgetPeriod.ANNUAL,
+            tolerance=0.0,
+            source=_source(),
+        ),
+    )
+
+
+def test_empty_profile_reports_both_missing_parts() -> None:
+    stakeholder = _stakeholder(_empty_profile())
+
+    with pytest.raises(IncompleteProfile) as caught:
+        stakeholder.activate()
+
+    assert caught.value.missing == ("interests", "constraints")
+    assert stakeholder.profile.is_complete() is False
+
+
+def test_profile_with_only_interest_is_incomplete() -> None:
+    profile = _empty_profile()
+    profile.add_interest(Interest(topic="waiting_times", goal="Reduce waits", weight=1.0))
+
+    with pytest.raises(IncompleteProfile) as caught:
+        _stakeholder(profile).activate()
+
+    assert caught.value.missing == ("constraints",)
+
+
+def test_profile_with_only_constraint_is_incomplete() -> None:
+    profile = _empty_profile()
+    profile.declare_constraint(Constraint(statement="No benefit cut", topic="benefits"))
+
+    with pytest.raises(IncompleteProfile) as caught:
+        _stakeholder(profile).activate()
+
+    assert caught.value.missing == ("interests",)
+
+
+def test_complete_profile_activates() -> None:
+    profile = _empty_profile()
+    profile.add_interest(Interest(topic="waiting_times", goal="Reduce waits", weight=1.0))
+    profile.declare_constraint(Constraint(statement="No benefit cut", topic="benefits"))
+    stakeholder = _stakeholder(profile)
+
+    stakeholder.activate()
+
+    assert stakeholder.profile.is_complete() is True
