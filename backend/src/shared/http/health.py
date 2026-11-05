@@ -87,6 +87,20 @@ async def readyz(request: Request) -> JSONResponse:
             )
         )
 
+    retrieval = getattr(request.app.state, "evidence_retrieval", None)
+    if retrieval is not None:
+        readiness = await retrieval.readiness.check()
+        retrieval_ok = readiness.embeddings_reachable and readiness.reranker_reachable
+        checks["evidence_retrieval"] = "ok" if retrieval_ok else "unreachable"
+        if not retrieval_ok:
+            failures.append(
+                ErrorDetail(
+                    message=readiness.detail or "retrieval dependency unreachable",
+                    field="evidence_retrieval",
+                    code="unavailable",
+                )
+            )
+
     if failures:
         raise ServiceUnavailableError(
             "A required dependency is unavailable",

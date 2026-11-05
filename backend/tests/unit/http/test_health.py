@@ -35,6 +35,7 @@ async def test_readyz_reports_ready_when_database_answers(
     assert response.json()["checks"] == {
         "database": "ok",
         "llm": "not_configured",
+        "evidence_retrieval": "ok",
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1
