@@ -40,7 +40,7 @@ jobs:
       - name: Type check
         run: uv run mypy
       - name: Unit tests
-        run: uv run pytest -m "not integration" --cov=src --cov-report=term-missing
+        run: uv run pytest -m "not integration" --cov=src --cov-report=term-missing --cov-fail-under=80
 
   architecture:
     name: Architecture validators
@@ -62,6 +62,8 @@ jobs:
         run: uv run python .pi/scripts/ci/check_evidence_corpus_contract.py
       - name: Canonical references
         run: bash .pi/scripts/validate-canonical.sh
+      - name: IdentityAccess contract proofing
+        run: bash .pi/scripts/ci/check_identity-access_contracts.sh
 
   migrations:
     name: Migrations (PostgreSQL 16 + pgvector)

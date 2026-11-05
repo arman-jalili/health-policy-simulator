@@ -34,7 +34,8 @@ def is_loopback_host(host: str | None) -> bool:
 def demo_principal() -> Principal:
     """The anonymous principal granted in demo mode.
 
-    TODO(issue #41): narrow the scopes to ADR-005's anonymous reads + ``runs:write`` once the
-    corpus contract tests present operator keys for writes.
+    Known limitation: the demo principal currently carries every scope so the local corpus demo
+    can write without provisioning a key. Narrowing to ADR-005's anonymous reads + ``runs:write``
+    is a follow-up once the demo UI and keyed corpus tests are in place.
     """
     return Principal(label="demo", role=Role.ANALYST, scopes=frozenset(Scope), is_demo=True)
