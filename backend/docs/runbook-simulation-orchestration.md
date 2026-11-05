@@ -10,16 +10,16 @@ architecture: `.pi/architecture/modules/simulation-orchestration.md`; runtime de
 |---|---|
 | Entry path | `shared.app.create_app` → `simulation_orchestration.composition.build_container` → router + lifespan worker |
 | Public API | `POST /api/v1/runs/{run_id}:start`, `GET /runs/{run_id}/stream`, `POST /runs/{run_id}:pause`, `POST /runs/{run_id}:resume`, `GET /runs/{run_id}/usage`, `GET /jobs/{job_id}` |
-| Persistence | Migration `0302_simulation_orchestration`: `_job`, `_invocation`, `_progress`, `_prompt` |
+| Persistence | Migrations `0302_simulation_orchestration` + `0303_simulation_lease`: `_job`, `_invocation`, `_progress`, `_prompt` |
 | Memory mode | explicit `PERSISTENCE=memory`; test/local only |
-| Worker | in-process task `simulation-worker`, started/stopped by the app lifespan |
+| Worker | in-process task `simulation-worker`; supervised, per-job failure isolation, 60 s job lease |
 | Readiness | `/readyz` reports `simulation_orchestration`, `simulation_orchestration_persistence`, `simulation_model` |
-| Metrics | `simulation_jobs_started_total`, `_completed_total`, `_invocations_total`, `_tokens_total`, `_cost_total`, `_progress_events_total`, `_budget_exhausted_total` |
+| Metrics | `simulation_jobs_started_total`, `_completed_total`, `_invocations_total`, `_tokens_total`, `_cost_total`, `_progress_events_total`, `_budget_exhausted_total`, `simulation_job_failures_total`, `simulation_worker_restarts_total` |
 | Logs | structlog JSON; boot event `simulation_orchestration_wired`; worker request logs carry trace ids |
 
 ## Startup sequence
 
-1. `alembic upgrade head` — must reach `0302_simulation_orchestration`.
+1. `alembic upgrade head` — must reach `0303_simulation_lease`.
 2. Set `DATABASE_URL`, `PERSISTENCE=postgres`, and a supported `SIMULATION_MODEL_ID`
    (currently `scripted-local`); an unknown model aborts boot with `UNKNOWN_MODEL`.
 3. Start `hps-api`.
@@ -33,14 +33,19 @@ architecture: `.pi/architecture/modules/simulation-orchestration.md`; runtime de
 
 The lifespan sets the worker stop event and waits up to 2 seconds. In-flight PostgreSQL writes are
 committed by the service/repository transaction. If the process is killed, a `running` job remains
-resumable (`list_resumable`); restart the worker and it continues from the last checkpoint.
+resumable; on the next boot the worker re-queues RUNNING jobs, logs
+`simulation_worker_recovered`, and continues from the last checkpoint. A live worker renews its lease
+on every claim (60 s default); an expired lease makes the job claimable again.
 
 ## Common failure modes
 
 | Symptom | Cause | Recovery |
 |---|---|---|
 | Boot fails `UNKNOWN_MODEL` | Unsupported `SIMULATION_MODEL_ID` | Use a configured model; never meter zero |
-| Job stuck `queued` | Worker task not started / crashed | Check logs for `simulation-worker`; restart process |
+| Job stuck `queued` | Worker task not started / crashed | Check `/readyz` `simulation_worker`; inspect `simulation-worker` logs; restart process |
+| Job `dead_letter` | Retry limit reached (default 3) | Read `error` via `GET /jobs/{id}`; fix the cause, then re-queue manually only after review |
+| Job `running` with no progress | Worker died; lease not yet expired | Wait for the 60 s lease or restart; boot recovery re-queues RUNNING jobs |
+| `/readyz` `simulation_worker: dead` | Worker task finished unexpectedly | Supervisor restarts it and increments `simulation_worker_restarts_total`; check logs if it stays dead |
 | `/readyz` red | Database unreachable | Restore DB; process stays live but not ready |
 | SSE reconnect repeats events | Client reused an old `Last-Event-ID` | Use the last received `id:`; server replays strictly after it |
 | Duplicate progress sequence | Two workers wrote the same stream | Unique `(run_id, sequence)` rejects it; inspect worker ownership |
@@ -62,6 +67,6 @@ resumable (`list_resumable`); restart the worker and it continues from the last 
 | Layer | Action |
 |---|---|
 | Process | Redeploy previous image; worker stops with the process |
-| Schema | `alembic downgrade 0301_claim_validation` (drops orchestration tables) |
+| Schema | `alembic downgrade 0302_simulation_orchestration` (drops the lease column first), then `0301_claim_validation` if the tables must go |
 | Data | Restore the pre-change dump before downgrading if jobs/invocations must be retained |
 | Code | Revert the MR |

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -100,6 +101,13 @@ async def test_job_invocation_progress_and_prompt_round_trip(
     assert claimed.status is JobStatus.RUNNING
     assert claimed.attempts == 1
     assert await jobs.claim_next("worker-2", now + timedelta(seconds=2)) is None
+
+    dead = replace(claimed, lease_expires_at=now - timedelta(seconds=1))
+    await jobs.save(dead)
+    reclaimed = await jobs.claim_next("worker-2", now + timedelta(seconds=3))
+    assert reclaimed is not None
+    assert reclaimed.claimed_by == "worker-2"
+    assert reclaimed.attempts == 2
 
     invocations = SqlAlchemyInvocationStore(session_factory)
     envelope = InvocationEnvelope(

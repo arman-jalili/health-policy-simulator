@@ -11,7 +11,7 @@ mode is non-durable and local/test only.
 
 | Scenario | RTO | RPO | Basis |
 |---|---|---|---|
-| API/worker process crash | 5 min | 0 | PostgreSQL commits; job checkpoint is resumable |
+| API/worker process crash | 5 min | 0 | PostgreSQL commits; boot recovery re-queues RUNNING jobs |
 | Bad deploy | 5 min | 0 | previous image + same schema |
 | Corrupt/missing orchestration tables | 30 min | ≤ 24 h | database backup/PITR |
 | Lost progress stream | 10 min | 0 | replay from `Last-Event-ID` / `_progress` |
@@ -33,7 +33,7 @@ mode is non-durable and local/test only.
 
 1. Restore the repository at the last known-good commit and deploy the previous image if needed.
 2. Restore the database from the latest dump/PITR target.
-3. `alembic upgrade head`; confirm `alembic current` reports `0302_simulation_orchestration`.
+3. `alembic upgrade head`; confirm `alembic current` reports `0303_simulation_lease`.
 4. Start one API instance; the lifespan worker starts automatically.
 5. `GET /healthz` → 200; `GET /readyz` → `simulation_orchestration=ok`,
    `simulation_orchestration_persistence` matches the configured family.
@@ -44,14 +44,16 @@ mode is non-durable and local/test only.
    select count(*) from simulation_orchestration_progress;
    select name, max(version) from simulation_orchestration_prompt group by name;
    ```
-7. Resume `running`/`paused` jobs from their checkpoint; never invent a checkpoint.
+7. Boot recovery re-queues `running` jobs and logs `simulation_worker_recovered`; resume `paused`
+   jobs explicitly. Never invent a checkpoint.
 8. Replay progress for one known run with `GET /runs/{id}/stream` and compare sequence continuity.
 9. Record achieved RTO/RPO and root cause.
 
 ## Failover
 
 Start a replacement API/worker against the same database. Job claims use
-`FOR UPDATE SKIP LOCKED`, so two workers cannot process the same queued job. If the database is
+`FOR UPDATE SKIP LOCKED` plus a 60 s lease, so two workers cannot process the same live job; an
+expired lease is reclaimable after a crash. If the database is
 unavailable, do **not** switch production to memory persistence: it is refused outside
 `ENV=local` and would silently lose jobs, progress and metering.
 
@@ -64,6 +66,8 @@ curl -s localhost:8000/api/v1/runs/$RUN_ID/stream | head
 ```
 
 - Every `completed` job must have a `run.completed` event at the final sequence.
+- No job is left `running` with an expired lease after boot recovery; terminal failures end in
+  `dead_letter` (or `failed`) with a non-empty `error`.
 - A `(run_id, sequence)` pair must be unique; duplicates indicate a broken restore.
 - Invocation ids must be unique; duplicates indicate a broken restore, not normal retry.
 - Prompt versions are append-only; an existing `name@version` must never change body.

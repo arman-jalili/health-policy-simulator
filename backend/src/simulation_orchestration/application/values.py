@@ -28,6 +28,7 @@ class JobStatus(StrEnum):
     PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
+    DEAD_LETTER = "dead_letter"
     BUDGET_EXHAUSTED = "budget_exhausted"
 
 

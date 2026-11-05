@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -101,6 +101,7 @@ def _job_from(row: JobRow) -> JobRecord:
         created_at=row.created_at,
         updated_at=row.updated_at,
         budget=_budget_from(row.budget),
+        lease_expires_at=row.lease_expires_at,
     )
 
 
@@ -115,14 +116,21 @@ def _job_row(job: JobRecord) -> JobRow:
         budget=_budget_payload(job.budget),
         error=job.error,
         claimed_by=job.claimed_by,
+        lease_expires_at=job.lease_expires_at,
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
 
 
 class SqlAlchemyJobStore:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        lease_seconds: int = 60,
+    ) -> None:
         self._session_factory = session_factory
+        self._lease_seconds = lease_seconds
 
     async def add(self, job: JobRecord) -> None:
         async with self._session_factory() as session, session.begin():
@@ -151,7 +159,18 @@ class SqlAlchemyJobStore:
         async with self._session_factory() as session, session.begin():
             row = await session.scalar(
                 select(JobRow)
-                .where(JobRow.status == JobStatus.QUEUED.value)
+                .where(
+                    or_(
+                        JobRow.status == JobStatus.QUEUED.value,
+                        (
+                            (JobRow.status == JobStatus.RUNNING.value)
+                            & (
+                                (JobRow.lease_expires_at.is_(None))
+                                | (JobRow.lease_expires_at < now)
+                            )
+                        ),
+                    )
+                )
                 .order_by(JobRow.created_at)
                 .limit(1)
                 .with_for_update(skip_locked=True)
@@ -161,6 +180,7 @@ class SqlAlchemyJobStore:
             row.status = JobStatus.RUNNING.value
             row.attempts += 1
             row.claimed_by = worker_id
+            row.lease_expires_at = now + timedelta(seconds=self._lease_seconds)
             row.updated_at = now
             await session.flush()
             return _job_from(row)

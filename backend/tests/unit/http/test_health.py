@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 from fastapi import FastAPI
 
@@ -47,9 +49,24 @@ async def test_readyz_reports_ready_when_database_answers(
         "simulation_orchestration": "ok",
         "simulation_orchestration_persistence": "memory",
         "simulation_model": "scripted-local",
+        "simulation_worker": "not_started",
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1
+
+
+async def test_readyz_reports_a_dead_worker(
+    client: httpx.AsyncClient, app: FastAPI, stub_database: StubDatabase
+) -> None:
+    dead = asyncio.create_task(asyncio.sleep(0))
+    await dead
+    app.state.simulation_worker_task = dead
+
+    response = await client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json()["details"][0]["field"] == "simulation_worker"
+    assert response.json()["details"][0]["code"] == "dead"
 
 
 async def test_readyz_returns_envelope_when_database_is_down(
