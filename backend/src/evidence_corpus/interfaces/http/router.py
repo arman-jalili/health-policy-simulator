@@ -14,9 +14,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
+from evidence_corpus.application.commands import GetDocumentRequest, ResolvePassageRequest
+from evidence_corpus.composition import CorpusContainer
 from evidence_corpus.domain.values import ClaimType
+from evidence_corpus.interfaces.http.deps import get_container
 from evidence_corpus.interfaces.http.schemas import (
     AuthorityRuleResponse,
     DocumentIngestionBody,
@@ -94,9 +97,11 @@ async def get_ingestion_run(
 )
 async def get_document(
     document_id: Annotated[str, Path(description="Prefixed ULID of the document")],
+    container: Annotated[CorpusContainer, Depends(get_container)],
 ) -> DocumentResponse:
     """Return publication, extraction quality, authority tier and segmented articles."""
-    raise _not_implemented("GET /api/v1/documents/{document_id}")
+    view = await container.get_document.execute(GetDocumentRequest(document_id=document_id))
+    return DocumentResponse.model_validate(view, from_attributes=True)
 
 
 @router.get(
@@ -108,9 +113,11 @@ async def get_document(
 )
 async def get_passage(
     passage_id: Annotated[str, Path(description="Prefixed ULID of the passage")],
+    container: Annotated[CorpusContainer, Depends(get_container)],
 ) -> PassageResponse:
     """Return text, offsets, page and outlet so the reader can verify the source slice."""
-    raise _not_implemented("GET /api/v1/passages/{passage_id}")
+    view = await container.resolve_passage.execute(ResolvePassageRequest(passage_id=passage_id))
+    return PassageResponse.model_validate(view, from_attributes=True)
 
 
 @router.post(

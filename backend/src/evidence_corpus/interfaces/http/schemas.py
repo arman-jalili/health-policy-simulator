@@ -11,7 +11,6 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 from evidence_corpus.domain.values import (
-    ArticleSection,
     AuthorityTier,
     ClaimType,
     ExtractionMethod,
@@ -111,7 +110,6 @@ class PassageResponse(BaseModel):
     provenance: ProvenanceBody
     speaker_kind: SpeakerKind
     citable: bool
-    section: ArticleSection
 
 
 class PinSnapshotBody(BaseModel):

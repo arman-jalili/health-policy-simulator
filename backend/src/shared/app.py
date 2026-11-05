@@ -15,6 +15,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from evidence_corpus.composition import build_container
 from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
 from shared.config import Settings, get_settings
 from shared.db import Database
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = app_settings
     app.state.db = database
+    app.state.corpus = build_container()
 
     if app_settings.cors_origins:
         app.add_middleware(

@@ -125,7 +125,7 @@ class TestErrorEnvelope:
     async def test_unwired_endpoint_answers_501_with_the_envelope(
         self, client: httpx.AsyncClient
     ) -> None:
-        response = await client.get("/api/v1/passages/psg_01J0000000000000000000000C")
+        response = await client.get("/api/v1/corpus/authority-rules")
 
         assert response.status_code == 501
         body = response.json()
