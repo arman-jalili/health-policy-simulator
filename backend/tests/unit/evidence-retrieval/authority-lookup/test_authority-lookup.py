@@ -76,3 +76,10 @@ def test_weight_refuses_a_tier_outside_the_corpus_rule() -> None:
 
     with pytest.raises(ValueError, match="not in the corpus rule"):
         AuthorityWeight.from_rule(narrow, AuthorityTier.PRESS_REPORT)
+
+
+def test_scoring_path_has_no_hardcoded_other_tier() -> None:
+    source = (SRC / "application/services.py").read_text(encoding="utf-8")
+
+    assert "AuthorityTier.OTHER" not in source
+    assert "authority=authority" in source

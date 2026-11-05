@@ -31,7 +31,7 @@ def test_case_carries_manual_labels_and_the_snapshot() -> None:
 def test_report_is_a_measurement_not_a_pass_fail_verdict() -> None:
     fields = field_names(RecallReport)
 
-    assert fields == ["case_count", "recall_at_k", "per_case_recall"]
+    assert fields == ["case_count", "recall_at_k", "per_case_recall", "retrieval_mode"]
     assert not any("threshold" in name or "passed" in name for name in fields)
 
 
@@ -83,11 +83,12 @@ async def test_fifty_labelled_claims_produce_a_recall_report() -> None:
         for index in range(50)
     ]
     search = _FakeSearch({case.claim: f"psg_{index}" for index, case in enumerate(cases)})
-    harness = EvaluationHarness(search)  # type: ignore[arg-type]
+    harness = EvaluationHarness(search, retrieval_mode="lexical")  # type: ignore[arg-type]
 
     report = await harness.run(cases, k=10)
 
     assert report.case_count == 50
+    assert report.retrieval_mode == "lexical"
     assert report.recall_at_k == 1.0
     assert len(report.per_case_recall) == 50
     assert not hasattr(report, "threshold")

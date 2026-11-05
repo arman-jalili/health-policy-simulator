@@ -2,15 +2,31 @@
 
 ## Module Status
 
-**Status:** Implemented (2026-11-05)
+**Status:** Implemented (2026-11-05) — lexical+dense; pgvector HNSW target-state
 **Depends:** EvidenceCorpus (open-host — `PassageView`, `ProvenanceView`, `AuthorityTier` rubric, index manifest version)
 **Last reviewed:** 2026-11-05
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description
 
-Turns a claim into a balanced, scored, inspectable evidence pack. Owns hybrid search, reranking,
-stance classification and recency weighting. Never owns the corpus itself.
+Turns a claim into a balanced, scored, inspectable evidence pack. Runs lexical + dense retrieval,
+reciprocal-rank fusion, an overlap reranker, stance classification and recency weighting. The dense
+adapter is a deterministic feature-hashing encoder; pgvector HNSW remains target-state. Never owns
+the corpus itself.
+
+### Capability truth (2026-11-05, issue #99)
+
+| Capability | Runs today | Not yet active |
+|---|---|---|
+| lexical retrieval | `tsvector`/in-memory term search | — |
+| dense retrieval | `hashing-char3gram-v1` over pinned snapshot passages | pgvector HNSW column/index |
+| fusion | `ReciprocalRankFusion` over lexical + dense rankings | — |
+| reranking | `overlap-reranker-v1` | trained cross-encoder |
+| scoring components | all five derived per candidate | — |
+| trace | mode, model ids and actual snapshot index version | — |
+
+The `/readyz` detail and `RetrievalTrace` state the same facts. A juror can call
+`GET /evidence/packs/{id}/scores` and see components that differ for a reason.
 
 **Modeling Depth:** tactical (core domain)
 **Subdomain Rationale:** Balanced supporting/contradicting evidence retrieval prevents one-sided argumentation.
@@ -36,7 +52,8 @@ below are the review baseline; implementation issues fill the TODO bodies withou
 | Evaluation | `src/evidence_retrieval/evaluation.py` | `EvaluationCase`, `RecallReport`, `EvaluationHarness` |
 | API | `src/evidence_retrieval/interfaces/http/router.py`, `src/evidence_retrieval/interfaces/http/schemas.py` | five `/api/v1/evidence/*` routes with declared scopes |
 | Published ACL | `src/evidence_retrieval/interfaces/published.py` | `EvidencePackView`, `EvidenceCandidateView`, `AbsenceView`, `RetrievalTraceView`, `ScoreBreakdownView` |
-| Composition | `src/evidence_retrieval/composition.py` | `EvidenceRetrievalContainer`, `build_container` (TODO until wiring) |
+| Composition | `src/evidence_retrieval/composition.py` | `EvidenceRetrievalContainer`, `build_container` |
+| Evaluation CLI | `scripts/evaluate_retrieval.py` | lexical vs hybrid recall on 50 claims; CI artifact |
 
 **Frozen decisions:** IDs are `NewType` strings; `StanceLabel` has exactly four members; every
 `EvidenceScore.final` equals the sum of its five components; `RecencyPolicy` defaults to a 365-day
@@ -44,8 +61,8 @@ half-life with legislation exempt; `EvidencePackView` carries references and pro
 passage text or vectors; `PassageSearchPort` is the only corpus access. The tactical layer keeps
 `domain/` and `application/` free of ORM, FastAPI and vendor imports.
 
-**Not mounted yet:** the router is concrete but is not included in `shared.app` until the wiring
-issue; a TODO body must never answer a real request.
+**Mounted:** `shared.app` includes the router and binds `app.state.evidence_retrieval`; a TODO body
+never answers a real request.
 
 ## Runtime Integration
 
@@ -61,8 +78,10 @@ writer, passage repository, snapshot repository, authority-rule repository). It 
 searches candidates, assembles/reads/scores/reweights a pack through the public API.
 `validate-runtime-wiring.sh` reports zero unwired services.
 
-**Readiness:** `/readyz` reports `evidence_retrieval`; embeddings or reranker unreachable returns
-`503 NOT_READY`. **Legacy path:** none existed; pre-wiring stubs were TODO-only and are retired.
+**Readiness:** `/readyz` reports `evidence_retrieval`, the active `evidence_retrieval_mode`, and a
+capability detail. It turns `503 NOT_READY` only when a configured dependency is unreachable; the
+local dense/reranker adapters are always reachable. **Legacy path:** none; pre-wiring stubs were
+TODO-only and are retired.
 
 **Decision:** ADR-010 (Accepted).
 
@@ -72,7 +91,7 @@ searches candidates, assembles/reads/scores/reweights a pack through the public 
 |-------|--------------|------|
 | **Domain** | `EvidencePack` aggregate, candidates, scoring, stance rules, repository interface | `src/evidence_retrieval/domain/` |
 | **Application** | `SearchEvidenceCandidates`, `AssembleEvidencePack`, `ApplyRecencyPolicy`, `ScoreEvidenceCandidates` | `src/evidence_retrieval/application/` |
-| **Infrastructure** | `tsvector` + pgvector adapters, reranker client, embedding client, SQLAlchemy repositories | `src/evidence_retrieval/infrastructure/` |
+| **Infrastructure** | `tsvector` lexical adapter, feature-hashing embedding, overlap reranker, SQLAlchemy repositories; pgvector HNSW target-state | `src/evidence_retrieval/infrastructure/` |
 | **Interfaces** | REST routers, `EvidencePackView` published to NegotiationSession | `src/evidence_retrieval/interfaces/` |
 
 ## Related ADRs
@@ -94,7 +113,7 @@ flowchart LR
     A[Claim text] --> B[QueryRewrite<br/>compounds, umlauts, synonyms]
     B --> C[SearchEvidenceCandidates]
     C --> D[lexical: tsvector]
-    C --> E[dense: pgvector HNSW]
+    C --> E[dense: hashing vectors<br/>pgvector HNSW target-state]
     D --> F[Reciprocal rank fusion]
     E --> F
     F --> G[Rerank top-k]
@@ -146,6 +165,8 @@ classDiagram
         +str reranker_model
         +str query_rewrite
         +dict stance_counts
+        +str retrieval_mode
+        +str index_version
     }
     EvidencePack "1" --> "*" EvidenceCandidate : contains
     EvidencePack "1" --> "0..1" AbsenceFinding : records
@@ -247,7 +268,7 @@ class EvidencePack:
 | 2 | Every candidate carries resolvable corpus `Provenance` | Unsourced evidence inside an argument |
 | 3 | A weight breakdown (authority, relevance, recency, directness) exists for every candidate | Opaque single-number scoring |
 | 4 | A frozen pack is immutable; re-retrieval creates a new version | Silent mutation of evidence after it justified an argument |
-| 5 | A pack references the `IndexManifest` version and reranker model that produced it | Irreproducible evidence after re-indexing |
+| 5 | A pack references the actual `IndexManifest` version, embedding/reranker model ids and retrieval mode; no `"configured"` placeholder | Irreproducible evidence after re-indexing, or a trace that describes a path that never ran |
 | 6 | Authority weight is looked up from the corpus rubric, never invented here | Two subsystems disagreeing about trust |
 | 7 | Recency weighting excludes non-perishable sources (legislation, foundational studies, reference figures) | A 1995 statute outranked by a recent press mention |
 | 8 | Absence must be truthful: it names the queries and snapshot searched | Padding with tangential material to appear balanced |
@@ -368,7 +389,7 @@ application, query rewriting — these fail all three triage questions and remai
 | Component | Pattern | Rationale |
 |---|---|---|
 | Fusion | **Strategy** (`ReciprocalRankFusion`, `WeightedFusion`) | Two known variants; benchmark decides |
-| Reranking | **Strategy** (`NoReranker`, `CrossEncoderReranker`) | Cheap mode for demos, quality mode for evaluation |
+| Reranking | **Strategy** (`NoopReranker`, `OverlapReranker`, future cross-encoder) | Cheap mode for demos, quality mode for evaluation |
 | Stance classification | **Strategy** + **Specification** | Lexical rule vs LLM-assisted; threshold as a spec |
 | `AssembleEvidencePack` | **Builder** | Pack is assembled incrementally (candidates, absence, trace) then frozen once |
 | Absence handling | **Null Object with evidence** | `AbsenceFinding` replaces an empty list so the client can display a truthful negative |
@@ -400,8 +421,8 @@ application, query rewriting — these fail all three triage questions and remai
 | 8 | Hybrid search | A German compound query (`Kassenstellen`) returns hits that a naive term query misses | integration |
 | 9 | Reproducibility | Re-freezing a pack for the same claim + snapshot yields identical candidate ids | integration |
 | 10 | ACL boundary | `EvidencePackView` contains no raw vectors; NegotiationSession receives `ClaimEvidence` refs only | architecture test |
-| 11 | Evaluation harness | A labelled set of ≥50 claims produces a recall report; no threshold asserted in code | manual + CI artifact |
-| 12 | Wiring | Router registered; `PassageSearchPort` bound to EvidenceCorpus published language (no cross-context table reads); readiness red when embeddings unreachable | integration |
+| 11 | Evaluation harness | 50 labelled claims produce lexical vs hybrid recall reports; no threshold asserted in code | `scripts/evaluate_retrieval.py` + CI artifact |
+| 12 | Wiring | Router registered; `PassageSearchPort` bound to EvidenceCorpus published language (no cross-context table reads); readiness reports the active mode and turns red when a configured dependency is unreachable | integration |
 
 ## Modeling Depth Note (ADR-008)
 

@@ -45,4 +45,5 @@ def passage_view(document: Document, article: Article, passage: Passage) -> Pass
         provenance=provenance_view(provenance),
         speaker_kind=passage.speaker_kind,
         citable=passage.citable,
+        source_type=document.source_type,
     )

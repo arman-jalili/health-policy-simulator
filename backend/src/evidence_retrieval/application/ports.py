@@ -22,12 +22,16 @@ from evidence_retrieval.domain.values import QueryRewrite
 class EmbeddingPort(Protocol):
     """Dense embedding client; metered like an LLM call (ADR-006)."""
 
+    model_id: str
+
     async def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
 
 @runtime_checkable
 class RerankerPort(Protocol):
     """Cross-encoder reranker; ``NoReranker`` is a valid cheap-mode adapter."""
+
+    model_id: str
 
     async def rerank(
         self, claim: str, passages: Sequence[PassageView], limit: int

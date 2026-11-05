@@ -61,6 +61,10 @@ change enum members, add rubric entries or alter route paths without re-opening 
 | Adapter stubs (persistence, extraction, index) | `src/evidence_corpus/infrastructure/` |
 | Executable contract tests | `tests/unit/evidence_corpus/` |
 
+`PassageView` also publishes the declared `SourceType` and `SnapshotIndexView` publishes the pinned
+index version/model, so EvidenceRetrieval can apply the corpus rubric without reading corpus tables
+(issue #99).
+
 Frozen behaviour decisions recorded in the contract:
 
 - `AUTHORITY_RULES` is data: press reporting ranks second-to-last for every claim type, and

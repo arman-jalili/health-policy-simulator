@@ -36,6 +36,10 @@ async def test_readyz_reports_ready_when_database_answers(
         "database": "ok",
         "llm": "not_configured",
         "evidence_retrieval": "ok",
+        "evidence_retrieval_mode": "lexical+dense",
+        "evidence_retrieval_detail": (
+            "lexical+dense (hashing-char3gram-v1); reranker overlap-reranker-v1"
+        ),
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1

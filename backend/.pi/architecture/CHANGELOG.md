@@ -48,6 +48,49 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-05] - EvidenceRetrieval scores, hybrid path and trace truthfulness (issue #99)
+
+### Changed
+- Module: evidence-retrieval
+  - Scoring: authority is resolved per candidate from the corpus rule and its source type;
+    recency is applied per candidate with exemptions; directness is derived from claim/passage
+    evidence; lexical is measured from query-term coverage; semantic is a real dense similarity.
+  - Hybrid: lexical + dense rankings are fused with `ReciprocalRankFusion`, then an overlap
+    reranker runs. Dense uses the vendor-free `hashing-char3gram-v1` adapter over the pinned
+    snapshot; pgvector HNSW remains target-state.
+  - Trace: `RetrievalTrace` records `retrieval_mode`, the actual embedding/reranker model ids and
+    the snapshot's real `index_version`; the `"configured"` placeholder is gone.
+  - Readiness: `/readyz` reports `evidence_retrieval_mode` and the capability detail.
+  - Evaluation: a 50-claim lexical-vs-hybrid recall report is produced by
+    `scripts/evaluate_retrieval.py` and uploaded by CI.
+- Module: evidence-corpus
+  - `PassageView` publishes the declared `source_type` so retrieval can look up the rubric.
+  - Index manifests name the hashing dense model used by retrieval.
+
+### Impact Analysis
+- Files affected:
+  - `src/evidence_retrieval/application/services.py`
+  - `src/evidence_retrieval/domain/{entities,values,services,repositories}.py`
+  - `src/evidence_retrieval/infrastructure/adapters.py`
+  - `src/evidence_retrieval/composition.py`
+  - `src/shared/text_embedding.py`
+  - `src/evidence_corpus/domain/published.py`
+  - `scripts/evaluate_retrieval.py`
+- Canonical refs: `.pi/architecture/modules/evidence-retrieval.md`, ADR-010
+- Validators: architecture, canonical, ci, tests, security, operations, readiness
+
+### Migration Steps
+1. No schema migration. Packs written before this change keep their recorded trace.
+2. Re-index a corpus if its manifest still says `embedding_model=none` and dense retrieval is
+   expected.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-05] - EvidenceRetrieval architecture readiness (issue #79)
 
 ### Changed

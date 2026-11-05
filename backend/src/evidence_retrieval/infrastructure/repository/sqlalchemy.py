@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from evidence_corpus.domain.published import ProvenanceView
-from evidence_corpus.domain.values import Offsets
+from evidence_corpus.domain.values import Offsets, SourceType
 from evidence_retrieval.domain.entities import EvidenceCandidate, RetrievalTrace
 from evidence_retrieval.domain.evidence_pack import EvidencePack
 from evidence_retrieval.domain.values import (
@@ -79,6 +79,7 @@ def _to_payload(pack: EvidencePack) -> dict[str, Any]:
             {
                 "passage_id": str(candidate.passage_id),
                 "stance": candidate.stance.value,
+                "source_type": candidate.source_type.value,
                 "score": {
                     "authority": candidate.score.authority,
                     "lexical": candidate.score.lexical,
@@ -125,6 +126,8 @@ def _to_payload(pack: EvidencePack) -> dict[str, Any]:
             "stance_counts": {
                 stance.value: count for stance, count in pack.trace.stance_counts.items()
             },
+            "retrieval_mode": pack.trace.retrieval_mode,
+            "index_version": pack.trace.index_version,
         },
         "frozen": pack.frozen,
         "frozen_at": pack.frozen_at.isoformat() if pack.frozen_at is not None else None,
@@ -146,6 +149,8 @@ def _from_payload(payload: dict[str, Any]) -> EvidencePack:
             stance_counts={
                 StanceLabel(stance): count for stance, count in trace["stance_counts"].items()
             },
+            retrieval_mode=trace.get("retrieval_mode", "lexical"),
+            index_version=trace.get("index_version", "unknown"),
         ),
         candidates=[
             EvidenceCandidate(
@@ -157,6 +162,7 @@ def _from_payload(payload: dict[str, Any]) -> EvidencePack:
                     if candidate["provenance"] is not None
                     else None
                 ),
+                source_type=SourceType(candidate.get("source_type", SourceType.OTHER.value)),
             )
             for candidate in payload["candidates"]
         ],

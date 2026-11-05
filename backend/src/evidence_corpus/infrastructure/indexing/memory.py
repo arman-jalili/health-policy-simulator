@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from evidence_corpus.application.dto import IndexManifestView
 from evidence_corpus.domain.published import PassageView
+from shared.text_embedding import MODEL_ID
 
 
 class InMemoryIndexWriter:
@@ -33,13 +34,20 @@ class InMemoryIndexWriter:
         index_version = "idx-" + hashlib.sha256("|".join(ordered).encode()).hexdigest()[:12]
         return IndexManifestView(
             index_version=index_version,
-            embedding_model="none",
+            embedding_model=MODEL_ID,
             searchable_since=datetime.now(tz=UTC),
             passage_count=len(self._rows),
         )
 
     async def revert_passage(self, passage_id: str, reason: str) -> None:
         self._rows.pop(passage_id, None)
+
+    def list_by_document(self, document_id: str) -> list[PassageView]:
+        """Read-through for the in-memory retrieval E2E path."""
+        return [
+            self._rows[passage_id]
+            for passage_id in sorted(self._passages_by_document.get(document_id, set()))
+        ]
 
     def search(self, query: str) -> list[PassageView]:
         if " OR " in query:

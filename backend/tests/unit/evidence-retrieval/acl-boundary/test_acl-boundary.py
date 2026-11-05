@@ -55,7 +55,14 @@ def test_published_candidate_is_a_reference_with_provenance_only() -> None:
 def test_trace_publishes_model_names_but_never_vectors() -> None:
     fields = field_names(RetrievalTraceView)
 
-    assert fields == ["embedding_model", "reranker_model", "query_rewrite", "stance_counts"]
+    assert fields == [
+        "embedding_model",
+        "reranker_model",
+        "query_rewrite",
+        "stance_counts",
+        "retrieval_mode",
+        "index_version",
+    ]
     assert "embedding" in fields[0]
     assert not any("vector" in name for name in fields)
 

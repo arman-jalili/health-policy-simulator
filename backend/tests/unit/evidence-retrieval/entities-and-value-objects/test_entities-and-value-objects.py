@@ -154,12 +154,15 @@ def test_candidate_and_trace_are_entities_with_stable_identity() -> None:
         "stance",
         "score",
         "provenance",
+        "source_type",
     ]
     assert field_names(RetrievalTrace) == [
         "embedding_model",
         "reranker_model",
         "query_rewrite",
         "stance_counts",
+        "retrieval_mode",
+        "index_version",
     ]
 
     candidate = EvidenceCandidate(

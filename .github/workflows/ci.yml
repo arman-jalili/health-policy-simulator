@@ -41,6 +41,12 @@ jobs:
         run: uv run mypy
       - name: Unit tests
         run: uv run pytest -m "not integration" --cov=src --cov-report=term-missing --cov-fail-under=80
+      - name: Retrieval recall evaluation
+        run: uv run python scripts/evaluate_retrieval.py > retrieval-recall.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-retrieval-recall
+          path: backend/retrieval-recall.json
 
   architecture:
     name: Architecture validators

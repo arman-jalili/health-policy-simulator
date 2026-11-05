@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from evidence_corpus.domain.published import PassageView, ProvenanceView
+from evidence_corpus.domain.published import (
+    PassageView,
+    ProvenanceView,
+    SnapshotIndexView,
+)
 from evidence_corpus.domain.values import (
     AuthorityRule,
     ClaimType,
@@ -40,6 +44,14 @@ class FixedSearch:
 
     async def authority_rule(self, claim_type: ClaimType) -> AuthorityRule:
         return authority_rule(claim_type)
+
+    async def snapshot_index(self, snapshot_id: SnapshotId) -> SnapshotIndexView:
+        return SnapshotIndexView(index_version="idx-test", embedding_model="none")
+
+    async def dense_search(
+        self, query: str, snapshot_id: SnapshotId, limit: int
+    ) -> list[tuple[PassageView, float]]:
+        return []
 
 
 class FixedStance:

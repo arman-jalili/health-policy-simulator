@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from evidence_corpus.domain.published import PassageView
+from evidence_corpus.domain.published import PassageView, SnapshotIndexView
 from evidence_corpus.domain.values import AuthorityRule, ClaimType
 from evidence_retrieval.domain.evidence_pack import EvidencePack
 from evidence_retrieval.domain.values import ClaimText, PackId, SnapshotId
@@ -36,3 +36,9 @@ class PassageSearchPort(Protocol):
     ) -> list[PassageView]: ...
 
     async def authority_rule(self, claim_type: ClaimType) -> AuthorityRule: ...
+
+    async def snapshot_index(self, snapshot_id: SnapshotId) -> SnapshotIndexView: ...
+
+    async def dense_search(
+        self, query: str, snapshot_id: SnapshotId, limit: int
+    ) -> list[tuple[PassageView, float]]: ...

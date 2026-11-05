@@ -67,6 +67,8 @@ class TraceBody(BaseModel):
     reranker_model: str
     query_rewrite: str
     stance_counts: dict[str, int]
+    retrieval_mode: str
+    index_version: str
 
 
 class AssemblePackBody(BaseModel):

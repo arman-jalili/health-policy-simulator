@@ -13,7 +13,7 @@ Operational procedures for the evidence-retrieval context. Canonical architectur
 | Scopes | `runs:read` for search/read, `runs:write` for assemble/reweight |
 | Persistence | `PERSISTENCE=memory` (explicit local/tests) or PostgreSQL pack table |
 | Migration | `0201_evidence_retrieval` |
-| Readiness | `GET /readyz` includes `evidence_retrieval` and reports embeddings/reranker reachability |
+| Readiness | `GET /readyz` includes `evidence_retrieval`, `evidence_retrieval_mode` and capability detail |
 | Logs | JSON with `trace_id`; every request has one access line |
 | Metrics | `evidence_retrieval_searches_total`, `_candidates_total`, `_packs_total`, `_reweights_total` |
 
@@ -37,7 +37,7 @@ The corpus container is built before retrieval; retrieval consumes only corpus p
 
 | Symptom | Likely cause | Recovery |
 |---|---|---|
-| `/readyz` 503 with `field=evidence_retrieval` | Embedding or reranker provider unreachable | Restore provider connectivity; do not silently serve lexical-only results as hybrid. Check `readiness_check_failed` logs by `trace_id`. |
+| `/readyz` 503 with `field=evidence_retrieval` | A configured dense/reranker dependency became unreachable | Restore provider connectivity; do not silently serve lexical-only results as hybrid. Check `readiness_check_failed` logs by `trace_id`. |
 | `POST /evidence/packs` 503 | Corpus snapshot/index unavailable | Verify corpus `/readyz`, snapshot exists, index manifest is current; re-pin if needed. |
 | `POST /evidence/packs` 409 `PACK_FROZEN` / 422 `CANDIDATE_WITHOUT_PROVENANCE` | Client tried to mutate a frozen pack or evidence lacked provenance | Create a new pack; investigate corpus provenance. |
 | `GET /packs/{id}` 404 `EVIDENCE_PACK_NOT_FOUND` | Wrong id or pack not persisted | Check `PERSISTENCE` and the `evidence_retrieval_pack` table. |
@@ -53,8 +53,9 @@ The corpus container is built before retrieval; retrieval consumes only corpus p
 | `AUTH_MODE` | `strict` requires `X-API-Key`; `demo` is loopback-only |
 | `LLM_HEALTH_URL` | Optional readiness probe; unset is `not_configured`, not a failure |
 
-Embedding/reranker provider settings are not yet exposed; the current composition reports lexical
-mode as reachable and keeps the adapter seam for a future provider.
+The prototype binds local `hashing-char3gram-v1` and `overlap-reranker-v1` adapters, so
+`/readyz` reports `lexical+dense` without an external provider. Replacing them with a vendor
+encoder keeps the same ports; update the readiness detail and index manifest model id together.
 
 ## Incident response and escalation
 

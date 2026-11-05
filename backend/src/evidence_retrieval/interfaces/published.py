@@ -57,6 +57,8 @@ class RetrievalTraceView:
     reranker_model: str
     query_rewrite: str
     stance_counts: Mapping[StanceLabel, int]
+    retrieval_mode: str
+    index_version: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +137,8 @@ def to_published_pack(result: EvidencePackResult) -> EvidencePackView:
             reranker_model=result.trace.reranker_model,
             query_rewrite=result.trace.query_rewrite,
             stance_counts=result.trace.stance_counts,
+            retrieval_mode=result.trace.retrieval_mode,
+            index_version=result.trace.index_version,
         ),
         frozen_at=result.frozen_at,
     )
