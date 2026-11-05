@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 # ``src/`` layout: make the shared kernel importable without installing the package.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from evidence_corpus.infrastructure.indexing import models as corpus_index_models  # noqa: F401
 from shared import audit, outbox  # noqa: F401  (imports register tables on Base.metadata)
 from shared.config import get_settings
 from shared.db import Base

@@ -16,8 +16,10 @@ from evidence_corpus.application.commands import IndexIngestedPassagesRequest
 from evidence_corpus.application.dto import IndexManifestView
 from evidence_corpus.application.ports import IndexWriterPort
 from evidence_corpus.application.services import IndexIngestedPassages
+from evidence_corpus.domain.entities import Document
 from evidence_corpus.domain.events import PassageRevertedFromIndex
 from evidence_corpus.domain.published import PassageView
+from evidence_corpus.domain.values import Offsets, SpeakerKind
 
 from .contract_helpers import field_names, method_names, parameter_names
 
@@ -95,3 +97,108 @@ class TestSearchableContract:
 
     def test_published_view_is_the_index_input(self) -> None:
         assert "text" in field_names(PassageView)
+
+
+class TestIndexingPassages:
+    def _document(self) -> Document:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.values import (
+            ExtractionMethod,
+            ExtractionQuality,
+            LanguageTag,
+            SourceType,
+        )
+
+        body = "Die Kassenstellen werden aufgestockt. Die Spitalsreform ist beschlossen."
+        document = Document.register(
+            source_uri="s3://corpus/std.pdf",
+            content_hash="sha256:abc",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction(body, ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0))
+        article = document.add_article("Kassenstellen", body, 1, 1)
+        article.add_passage(
+            text="Die Kassenstellen werden aufgestockt.",
+            offsets=Offsets(0, 36),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+        article.add_passage(
+            text=" Die Spitalsreform ist beschlossen.",
+            offsets=Offsets(36, len(body)),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+        document.drain_events()
+        return document
+
+    async def test_only_citable_passages_are_indexed_and_reindexing_is_idempotent(self) -> None:
+        from evidence_corpus.application.commands import IndexIngestedPassagesRequest
+        from evidence_corpus.application.indexing_handler import IndexIngestedPassagesHandler
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.indexing.memory import InMemoryIndexWriter
+        from evidence_corpus.infrastructure.memory import InMemoryDocumentRepository
+
+        documents = InMemoryDocumentRepository()
+        document = self._document()
+        await documents.save(document)
+        writer = InMemoryIndexWriter()
+        handler = IndexIngestedPassagesHandler(documents, writer, RecordingEventPublisher())
+
+        first = await handler.execute(IndexIngestedPassagesRequest(document_id=document.id))
+        second = await handler.execute(IndexIngestedPassagesRequest(document_id=document.id))
+
+        assert first.passage_count == 2
+        assert second.passage_count == 2
+        assert writer.search("Kassenstellen")
+        assert len(writer.search("aufgestockt")) == 1
+
+    async def test_non_citable_document_cannot_be_indexed(self) -> None:
+        from datetime import date
+
+        from evidence_corpus.application.commands import IndexIngestedPassagesRequest
+        from evidence_corpus.application.indexing_handler import IndexIngestedPassagesHandler
+        from evidence_corpus.domain.entities import Document, Publication
+        from evidence_corpus.domain.errors import DocumentNotCitable
+        from evidence_corpus.domain.values import LanguageTag, SourceType
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.indexing.memory import InMemoryIndexWriter
+        from evidence_corpus.infrastructure.memory import InMemoryDocumentRepository
+
+        documents = InMemoryDocumentRepository()
+        document = Document.register(
+            source_uri="s3://corpus/raw.pdf",
+            content_hash="sha256:raw",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        await documents.save(document)
+
+        handler = IndexIngestedPassagesHandler(
+            documents, InMemoryIndexWriter(), RecordingEventPublisher()
+        )
+        with pytest.raises(DocumentNotCitable):
+            await handler.execute(IndexIngestedPassagesRequest(document_id=document.id))
+
+    async def test_index_manifest_publication_is_emitted(self) -> None:
+        from evidence_corpus.application.commands import IndexIngestedPassagesRequest
+        from evidence_corpus.application.indexing_handler import IndexIngestedPassagesHandler
+        from evidence_corpus.domain.events import IndexManifestPublished
+        from evidence_corpus.infrastructure.events import RecordingEventPublisher
+        from evidence_corpus.infrastructure.indexing.memory import InMemoryIndexWriter
+        from evidence_corpus.infrastructure.memory import InMemoryDocumentRepository
+
+        documents = InMemoryDocumentRepository()
+        document = self._document()
+        await documents.save(document)
+        publisher = RecordingEventPublisher()
+
+        await IndexIngestedPassagesHandler(documents, InMemoryIndexWriter(), publisher).execute(
+            IndexIngestedPassagesRequest(document_id=document.id)
+        )
+
+        assert isinstance(publisher.events[0], IndexManifestPublished)
+        assert publisher.events[0].passage_count == 2
