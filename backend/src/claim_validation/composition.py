@@ -28,7 +28,14 @@ from claim_validation.infrastructure.repository.memory import (
     InMemoryContradictionRepository,
     InMemoryReferenceFigureRepository,
 )
+from claim_validation.infrastructure.repository.sqlalchemy import (
+    SqlAlchemyClaimRepository,
+    SqlAlchemyContradictionRepository,
+    SqlAlchemyReferenceFigureRepository,
+)
 from shared.config import Settings
+from shared.db import Database
+from shared.enums import Persistence
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,11 +57,26 @@ class ClaimValidationContainer:
         yield None
 
 
-def build_container(settings: Settings, database: object | None = None) -> ClaimValidationContainer:
-    """Wire the in-memory family until issue #179 adds durable PostgreSQL adapters."""
-    claims = InMemoryClaimRepository()
-    references = InMemoryReferenceFigureRepository()
-    contradictions = InMemoryContradictionRepository()
+def build_container(
+    settings: Settings, database: Database | None = None
+) -> ClaimValidationContainer:
+    """Select durable PostgreSQL adapters unless memory is explicitly configured."""
+    if settings.persistence is Persistence.POSTGRES:
+        if database is None:
+            raise ValueError(
+                "PERSISTENCE=postgres requires a Database; the application shell owns the engine"
+            )
+        claims: ClaimRepository = SqlAlchemyClaimRepository(database.session_factory)
+        references: ReferenceFigureRepository = SqlAlchemyReferenceFigureRepository(
+            database.session_factory
+        )
+        contradictions: ContradictionRepository = SqlAlchemyContradictionRepository(
+            database.session_factory
+        )
+    else:
+        claims = InMemoryClaimRepository()
+        references = InMemoryReferenceFigureRepository()
+        contradictions = InMemoryContradictionRepository()
     parser = GermanNumberParser()
     evidence = EmptyEvidence()
     return ClaimValidationContainer(

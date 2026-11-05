@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Contract frozen (2026-11-06) — implementation follows issues #165–#181
+**Status:** Implemented (2026-11-06) — runtime integration via ADR-012
 **Depends:** EvidenceCorpus (authoritative passages, source tiers), EvidenceRetrieval (candidate passages for verification)
 **Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -49,6 +49,17 @@ the implementation issues.
 | **Infrastructure** | SQLAlchemy repositories, number parser, provision matcher, LLM appraisal adapter | `src/claim_validation/infrastructure/` |
 | **Interfaces** | REST routers, `ClaimVerdictView` consumed by NegotiationSession | `src/claim_validation/interfaces/` |
 
+## Runtime Integration
+
+| Concern | Implementation |
+|---|---|
+| Entry path | `shared.app.create_app` → `claim_validation.composition.build_container` → router |
+| Persistence | Migration `0301_claim_validation`; JSONB aggregate payloads + measure keys |
+| Reference data | registered through `POST /api/v1/reference-figures`; empty table ⇒ `AMBIGUOUS` |
+| Downstream | `ClaimVerdictView` only; no ORM/vector leakage |
+| Legacy path | none; pre-wiring `NotImplementedError` bodies removed |
+| Proof | `tests/integration/test_claim_validation_wiring.py`, `test_claim_validation_persistence.py` |
+
 ## Related ADRs
 
 | ADR | Relevance |
@@ -57,6 +68,7 @@ the implementation issues.
 | ADR-003 Cross-Context Communication | Verdicts published to NegotiationSession (partnership) |
 | ADR-006 Cost Tracking | Causal appraisal and expert review are metered calls |
 | ADR-007 Compliance Engine | Figure contradiction is a deterministic compliance check |
+| ADR-012 ClaimValidation Runtime Integration | Composition root, persistence and downstream view |
 
 ## Diagrams
 
