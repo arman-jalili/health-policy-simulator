@@ -21,6 +21,7 @@ from evidence_corpus.domain.services import (
     CitabilitySpec,
     NativeVsOcrSelection,
 )
+from evidence_corpus.domain.values import ExtractionMethod, SpeakerKind
 from evidence_corpus.infrastructure.extraction import ocr, pymupdf
 from evidence_corpus.infrastructure.indexing import postgres as index_postgres
 from evidence_corpus.infrastructure.repository import sqlalchemy as repositories_sqlalchemy
@@ -123,3 +124,133 @@ class TestPublishedLanguage:
         assert "import sqlalchemy" not in source
         assert "import pydantic" not in source
         assert "import fastapi" not in source
+
+
+class TestExecutableDomainRules:
+    """The domain rules behind the ports, executed without a database or a vendor library."""
+
+    def test_page_facts_route_scans_and_empty_pages_to_ocr(self) -> None:
+        from evidence_corpus.domain.rules import PageFactsOcrSelection
+        from evidence_corpus.domain.values import PageTextFacts
+
+        selection = PageFactsOcrSelection()
+
+        assert (
+            selection.select(
+                PageTextFacts(has_text_layer=False, average_chars_per_page=0, missing_glyph_rate=0)
+            )
+            is ExtractionMethod.OCR
+        )
+        assert (
+            selection.select(
+                PageTextFacts(has_text_layer=True, average_chars_per_page=12, missing_glyph_rate=0)
+            )
+            is ExtractionMethod.OCR
+        )
+        assert (
+            selection.select(
+                PageTextFacts(
+                    has_text_layer=True, average_chars_per_page=2500, missing_glyph_rate=0.4
+                )
+            )
+            is ExtractionMethod.OCR
+        )
+
+    def test_page_facts_route_a_clean_text_layer_to_native(self) -> None:
+        from evidence_corpus.domain.rules import PageFactsOcrSelection
+        from evidence_corpus.domain.values import PageTextFacts
+
+        facts = PageTextFacts(
+            has_text_layer=True, average_chars_per_page=2500, missing_glyph_rate=0.01
+        )
+
+        assert PageFactsOcrSelection().select(facts) is ExtractionMethod.NATIVE
+
+    def test_citability_spec_requires_document_quality_passage_citability_and_provenance(
+        self,
+    ) -> None:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Passage, Publication
+        from evidence_corpus.domain.rules import DefaultCitabilitySpec
+        from evidence_corpus.domain.values import (
+            ExtractionQuality,
+            LanguageTag,
+            Offsets,
+            Provenance,
+            SourceType,
+        )
+
+        spec = DefaultCitabilitySpec()
+        document = Document.register(
+            source_uri="s3://corpus/std.pdf",
+            content_hash="sha256:abc",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        passage = Passage.new(
+            article_id="art_1",
+            document_id=document.id,
+            ord=0,
+            text="Text",
+            offsets=Offsets(0, 4),
+            speaker_kind=SpeakerKind.INSTITUTION,
+        )
+
+        assert spec.is_satisfied(document, passage) is False
+
+        document.record_extraction("Text", ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0))
+        assert spec.is_satisfied(document, passage) is False
+
+        passage.provenance = Provenance(
+            outlet="Der Standard",
+            published_on=date(2026, 10, 1),
+            medium="print",
+            page_from=1,
+            page_to=1,
+            offsets=Offsets(0, 4),
+            source_uri="s3://corpus/std.pdf",
+        )
+        assert spec.is_satisfied(document, passage) is True
+
+    def test_citability_spec_refuses_person_attributed_spans(self) -> None:
+        from datetime import date
+
+        from evidence_corpus.domain.entities import Document, Passage, Publication
+        from evidence_corpus.domain.rules import DefaultCitabilitySpec
+        from evidence_corpus.domain.values import (
+            ExtractionQuality,
+            LanguageTag,
+            Offsets,
+            Provenance,
+            SourceType,
+        )
+
+        document = Document.register(
+            source_uri="s3://corpus/std.pdf",
+            content_hash="sha256:abc",
+            publication=Publication("Der Standard", date(2026, 10, 1), "print"),
+            source_type=SourceType.PRESS_REPORT,
+            language=LanguageTag("de-AT"),
+        )
+        document.record_extraction("Text", ExtractionQuality(ExtractionMethod.NATIVE, 0.99, 0.0))
+        passage = Passage.new(
+            article_id="art_1",
+            document_id=document.id,
+            ord=0,
+            text="Zitat",
+            offsets=Offsets(0, 5),
+            speaker_kind=SpeakerKind.PERSON,
+            provenance=Provenance(
+                outlet="Der Standard",
+                published_on=date(2026, 10, 1),
+                medium="print",
+                page_from=1,
+                page_to=1,
+                offsets=Offsets(0, 5),
+                source_uri="s3://corpus/std.pdf",
+            ),
+        )
+
+        assert DefaultCitabilitySpec().is_satisfied(document, passage) is False
