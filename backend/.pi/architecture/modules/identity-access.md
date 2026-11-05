@@ -196,7 +196,7 @@ domain catalog.
 | Method | Path | Handler | Input | Output | Auth |
 |---|---|---|---|---|---|
 | GET | `/healthz` | liveness | — | `{status}` | none |
-| GET | `/readyz` | readiness (DB, LLM reachability) | — | `{ready, checks[]}` | none |
+| GET | `/readyz` | readiness (DB, LLM reachability) | — | `{status, service, checks{database, llm}}`; 503 envelope on failure | none |
 | POST | `/api/v1/admin/keys` | `create_api_key` | `{label, role}` | `201 {key}` (shown once) | `admin` |
 | GET | `/api/v1/admin/keys` | `list_api_keys` | — | `[{key_id, label, role, created_at}]` | `admin` |
 | DELETE | `/api/v1/admin/keys/{key_id}` | `revoke_api_key` | — | `204` | `admin` |
