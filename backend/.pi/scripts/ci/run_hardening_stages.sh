@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Hardening Stage Runner
 #
-# Runs all 11 hardening stages as defined in the architecture pipeline.
+# Runs all 12 hardening stages as defined in the architecture pipeline.
 # Each stage runs its scripts and reports pass/fail.
 # A stage failure prevents MR merge (allow_failure: No).
 #
@@ -19,6 +19,7 @@
 #   9. package_build        — Docker build (conditional, main only)
 #   10. release_readiness   — Runbook/observability/policy checks
 #   11. identity_access_proofing — Contract implementation + real coverage gate
+#   12. evidence_retrieval_proofing — Contract implementation + real coverage gate
 
 set -euo pipefail
 
@@ -228,6 +229,11 @@ run_stage "11" "identity_access_proofing" \
     "${SCRIPTS_DIR}/stage_identity-access_proofing.sh" \
     "always"
 
+# Stage 12: EvidenceRetrieval contract proofing + coverage gate
+run_stage "12" "evidence_retrieval_proofing" \
+    "${SCRIPTS_DIR}/stage_evidence-retrieval_proofing.sh" \
+    "always"
+
 # ── Summary ──
 
 echo ""
@@ -236,7 +242,7 @@ echo "║               Hardening Stage Summary                ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
-for result in "${STAGE_RESULTS[@]}"; do
+for result in ${STAGE_RESULTS[@]+"${STAGE_RESULTS[@]}"}; do
     IFS=':' read -ra parts <<< "$result"
     status="${parts[0]}"
     name="${parts[1]}"
