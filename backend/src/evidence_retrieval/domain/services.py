@@ -9,6 +9,7 @@ I/O, no ORM, no vendor types.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from datetime import date
 
@@ -63,8 +64,15 @@ class ApplyRecencyPolicy:
         source_type: SourceType,
         as_of: date,
     ) -> float:
-        """Return the recency component in ``[0, 1]``; exempt sources keep ``1.0``."""
-        raise NotImplementedError("ApplyRecencyPolicy.apply is a frozen stub")
+        """Return the recency component in ``[0, 1]``; exempt sources keep ``1.0``.
+
+        Decay is exponential with the policy half-life. A future publication date is treated as
+        today; a non-perishable source type is never penalized for age.
+        """
+        if policy.is_exempt(source_type):
+            return 1.0
+        age_days = max(0, (as_of - published_on).days)
+        return float(math.pow(0.5, age_days / policy.half_life_days))
 
 
 class ReciprocalRankFusion:
