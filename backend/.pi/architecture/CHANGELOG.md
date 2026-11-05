@@ -48,6 +48,36 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Governance guard: docs state what the rules actually catch
+
+### Changed
+- `modules/governance-compliance.md`: the guard-rules table no longer claims an NER model. GC-001 is a
+  honourific regex (no allowlist consultation), GC-002 takes `speaker_kind` from the request body, GC-003
+  matches only the minister phrase, GC-004 trusts caller-supplied citation ids, GC-005 is **not wired**.
+- Added "Guard fidelity — what these rules actually catch": per-rule catches/misses with the tracking issue,
+  plus the chain semantics (first non-`ACCEPT` wins, one violation per call).
+- Wiring Contract: migration `0303` → `0305` (the governance tables live in `0305`); the provenance row now
+  records that `_NoFacts` makes disclosure answer 422 until the real source is bound.
+- Collaborator reachability: `ContradictedFigureRule`'s verdict lookup and `DisclosePositionProvenance`
+  now show their current stub state next to the obligation.
+
+### Why
+The epic closed with "GC-005 contradicted figures" and "provenance completeness guard" listed as delivered.
+Probing the API showed GC-005 accepts everything (the wired lookup returns `None`) and provenance returns
+422 for every request (the wired facts source is a stub). The rules were tested with fakes that the
+container does not use — the W8 failure the gate exists to prevent, this time in the documents.
+
+### Impact Analysis
+- Files affected: `.pi/architecture/modules/governance-compliance.md`, `docs/runbook-governance-compliance.md`
+- Validators required: `validate-canonical.sh`, `validate-architecture.sh`
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated (#265, #266, #267, #268, #269)
+- [x] Canonical refs updated
+- [x] Validators run
+
 ## [2026-11-06] - GovernanceCompliance delivered (issues #249-#262)
 
 ### Changed

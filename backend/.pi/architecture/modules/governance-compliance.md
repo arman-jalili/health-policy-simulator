@@ -177,14 +177,32 @@ operator tool to check that all nine personas resolve to allowlist entries.
 
 | Rule id | Check | Implementation | Verdict on hit |
 |---|---|---|---|
-| `GC-001` | Named person in agent output | NER `PERSON` + title patterns (`Dr.`, `Mag.`, `Prof.`, `Obmann`, `Präsident`) against allowlist | rewrite (drop span) |
-| `GC-002` | Direct quotation attributed to a person | `speaker_kind == person` from corpus + quotation marks within ±3 sentences | reject |
-| `GC-003` | Institution referenced by a person's name ("Minister X's ministry") | NER + institutional alias mapping | rewrite to canonical institution name |
-| `GC-004` | Claim without citation presented as fact | absence of `passage_id` / `reference_figure_id` | rewrite to `unsupported` label |
-| `GC-005` | Figure contradicted by `ReferenceFigure` | delegated to ClaimValidation verdict | reject figure |
+| `GC-001` | Named person in agent output | **honourific regex only** (`Dr.`, `Mag.`, `Prof.`, `Dipl.-Ing.`, `Obmann`, `Obfrau`, `Präsident(in)`) — no NER model, no allowlist consultation | rewrite (span → `[person]`) |
+| `GC-002` | Direct quotation attributed to a person | `speaker_kind` **supplied by the caller** (not read from the passage) + the first quoted span anywhere in the text (no sentence window) | reject |
+| `GC-003` | Institution referenced by a person's name | only the literal phrase `minister('s)? ministry` / `ministerium des ministers`, resolved against the allowlist aliases | rewrite to canonical name |
+| `GC-004` | Claim without citation presented as fact | absence of **caller-supplied** `cited_passage_ids` / `reference_figure_ids` (the ids are not derived from the text) | rewrite to `unsupported:` prefix |
+| `GC-005` | Figure contradicted by `ReferenceFigure` | **not wired**: the container binds a lookup that returns `None` for every id, so the rule never fires | (intended) reject |
 
-**Deterministic by design.** Rule evaluation uses token rules + a fixed NER model. No LLM decides
-compliance (ADR-007). Every verdict is reproducible for the same input.
+**Deterministic by design.** Rule evaluation is a fixed sequence of regex/string rules and a table
+lookup. No LLM decides compliance (ADR-007), and provider adapters cannot be imported from
+`application/` (AST-enforced). Every verdict is reproducible for the same input.
+
+### Guard fidelity — what these rules actually catch
+
+The five rules are **heuristics with declared inputs**, not a classifier. They are honest about that only
+if this table is read with them:
+
+| Rule | Catches | Misses (observed) | Tracked |
+|---|---|---|---|
+| GC-001 | `Dr. Kurz`, `Prof. Dr. Meier` | `Sebastian Kurz`, `Kurz`, `DR. KURZ`, `Kurz'` | #266 |
+| GC-002 | a quotation when the body declares `speaker_kind: person` | the same quotation labelled `institution` | #267 |
+| GC-003 | `minister's ministry`, `Ministerium des Ministers` | `Kurz' Ministerium`, possessive forms | #266 |
+| GC-004 | uncited sentences that smell like facts (`ist/sind/beträgt/…` or a number) | a bare assertion with no copula and no number | — |
+| GC-005 | nothing today — the verdict lookup is a stub that returns `None` | every contradicted figure | #265 |
+
+Chain semantics: the chain stops at the first non-`ACCEPT` rule, so a `REWRITE` suppresses a later
+`REJECT` and only one violation per call is persisted (#268). Do not present the guard as
+"rejects contradicted figures" until #265 is closed.
 
 ## API Endpoints
 
@@ -257,9 +275,9 @@ and can be argued with — three disqualifying properties for a compliance contr
 | Router | `app.include_router(governance_compliance_router)` | boot test asserting registration |
 | Composition | allowlist loaded from StakeholderModel at startup (fail fast if empty or containing a personal name); violation and provenance stores bound to their tables | startup test: empty allowlist aborts boot |
 | Guard on the write path | `EnforceInstitutionOnlyOutput` is a **blocking** dependency of the negotiation write path; a missing guard must fail closed | negative test: guard unbound ⇒ argument write returns 5xx, never persists |
-| Persistence | Migration `0303` applied; violations append-only and idempotent on `violation_hash` | restart + duplicate-retry test |
+| Persistence | Migration `0305` applied; violations append-only and idempotent on `violation_hash` | restart + duplicate-retry test |
 | Determinism | No LLM call in the guard path; rule version recorded per violation | unit test monkeypatching the LLM client to raise — guard must still work |
-| Provenance | `DisclosePositionProvenance` reads invocations from SimulationOrchestration and verdicts from ClaimValidation | integration test: disclosure record complete for a real run |
+| Provenance | **Deferred.** `DisclosePositionProvenance` reads from a stub (`_NoFacts`) that always returns an incomplete record, so the endpoint answers 422 for every request; the complete source (SimulationOrchestration invocations + ClaimValidation verdicts) is not wired | #269 — the rejection is correct, the source is missing; `/readyz` must report the degraded posture |
 
 
 ### Collaborator reachability (W8)
@@ -273,7 +291,8 @@ Every row is a call-site obligation, not a description: the collaborator must be
 | institution allowlist | boot | boot aborts on an empty or personal-name allowlist | an empty allowlist is treated as "permit all" |
 | rule engine | every argument write | `rule_version` recorded on each violation row | a violation is recorded without a rule version |
 | `violation_hash` uniqueness | retry path | a duplicate retry yields one row | duplicate rows on retry |
-| `DisclosePositionProvenance` | brief publication | a complete disclosure record for a real run | a partial record is published |
+| `DisclosePositionProvenance` | brief publication | a complete disclosure record for a real run | **current: `_NoFacts` ⇒ every request 422** (#269) |
+| `ContradictedFigureRule` verdict lookup | guard, on every check with `reference_figure_ids` | `reject` on a contradicted figure | **current: `UnknownFigureVerdicts` returns `None` ⇒ rule never fires** (#265) |
 | LLM independence | guard path | the guard still works with the LLM client raising | the guard calls the model and degrades to permissive |
 
 ## Acceptance Criteria

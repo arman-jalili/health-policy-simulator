@@ -21,7 +21,7 @@ Contract: `docs/contracts-governance-compliance.md`
 | `GUARD_VERDICT_REQUIRED` | Write attempted without a verdict | Route the write through the guard |
 | `PROVENANCE_INCOMPLETE` | Evidence, arguments or invocation missing | Complete the run; do not publish |
 | Duplicate violation row | Bypass of `violation_hash` | Use `RecordGovernanceViolation` |
-| Guard latency spike | NER/resolver dependency | Check `governance_guard_checks_total`; guard is local and deterministic |
+| Guard latency spike | regex/allowlist resolver (no model, no network) | Check `governance_guard_checks_total`; the guard is local and deterministic — a spike means CPU/GC, not a provider |
 
 ## Metrics
 
