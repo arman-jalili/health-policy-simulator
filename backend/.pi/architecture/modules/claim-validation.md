@@ -404,6 +404,11 @@ class ReferenceFigureRepository(Protocol):
 | 10 | Measure identity | `Wartezeit` and `Wartezeit auf Facharzttermin` do not collapse into one measure | unit |
 | 11 | Wiring | Router registered; empty `ReferenceFigure` table yields `ambiguous`, never `supported`; verdict port refuses contradicted claims downstream | integration |
 
+**Runtime fixes (2026-11-06):** measure identity is normalised at the application boundary before
+lookup/registration; `VerifyClaim` records contradiction findings through `RecordContradiction` with
+a deterministic pair id; the number parser refuses multi-number/year-leading text and scopes scale
+markers to the immediate phrase.
+
 **Verified:** 2026-11-06. AC 1–11 pass; public API and restart proofs:
 `tests/integration/test_claim_validation_wiring.py`,
 `tests/integration/test_claim_validation_persistence.py`.

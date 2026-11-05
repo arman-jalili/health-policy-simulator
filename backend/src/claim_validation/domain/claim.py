@@ -113,7 +113,9 @@ class Claim:
         reference = evidence.reference_figure
         asserted = evidence.asserted_value
         if reference is None:
-            self.escalate(f"no reference figure for measure {self.measure}")
+            self.escalate(
+                evidence.escalation_reason or f"no reference figure for measure {self.measure}"
+            )
             return
         if asserted is None:
             self.mark_unsupported("no asserted value")

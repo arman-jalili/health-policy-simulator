@@ -26,16 +26,24 @@ class GermanNumberParser:
     """Parse `1.204`, `3,2 Mrd. €`, `22 %` into a decimal value and unit."""
 
     def parse(self, text: str) -> tuple[Decimal, str] | None:
-        match = _NUMBER.search(text)
-        if match is None:
+        matches = list(_NUMBER.finditer(text))
+        if len(matches) != 1:
+            # Refuse to guess: a year or a second figure may be the actual claim.
             return None
+        match = matches[0]
         value = self._decimal(match.group(0))
         if value is None:
             return None
-        tail = text[match.end() :].casefold()
-        scale = self._scale(tail)
-        unit = self._unit(tail)
+        window = " ".join(text[match.end() :].split()[:2]).casefold()
+        scale = self._scale(window)
+        unit = self._unit(window)
+        if self._looks_like_year(match.group(0), value) and scale == 1 and unit == "count":
+            return None
         return value * scale, unit
+
+    @staticmethod
+    def _looks_like_year(token: str, value: Decimal) -> bool:
+        return token.isdigit() and len(token) == 4 and Decimal("1900") <= value <= Decimal("2099")
 
     @staticmethod
     def _decimal(token: str) -> Decimal | None:

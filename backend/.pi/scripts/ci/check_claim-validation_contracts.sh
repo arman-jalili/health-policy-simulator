@@ -93,6 +93,12 @@ require_absent "$SRC" "NotImplementedError" "no NotImplementedError residue"
 
 echo ""; echo "--- Capability proofs ---"
 require_literal "$SRC/infrastructure/number_parser.py" "class GermanNumberParser" "German number parser"
+require_literal "$SRC/application/services.py" "ResolveMeasureIdentity" "measure identity used at boundary"
+require_literal "$SRC/application/services.py" "record_contradiction" "contradiction pipeline wired"
+require_literal "$SRC/domain/services.py" "finding_for" "contradiction detector has a finding API"
+require_literal "$SRC/infrastructure/number_parser.py" "len(matches) != 1" "ambiguous number refusal"
+require_literal "tests/integration/test_claim_validation_wiring.py" "test_contradictions_are_produced_and_idempotent" "contradiction API proof"
+require_literal "tests/integration/test_claim_validation_wiring.py" "test_measure_variants_normalise_at_the_api_boundary" "measure boundary proof"
 for test in test_aggregate_root_claim.py test_type_dispatch.py test_tolerance.py test_real_contradiction.py test_reference_provenance.py test_german_number_parsing.py test_measure_identity.py; do
     found=$(find tests/unit/claim-validation -name "$test" | head -1)
     [[ -n "$found" ]] && pass "unit proof $test" || fail "unit proof $test missing"

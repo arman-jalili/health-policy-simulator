@@ -29,12 +29,18 @@ from claim_validation.domain.repositories import (
     ContradictionRepository,
     ReferenceFigureRepository,
 )
-from claim_validation.domain.services import path_for
+from claim_validation.domain.services import (
+    ContradictionDetector,
+    ResolveMeasureIdentity,
+    path_for,
+)
 from claim_validation.domain.values import (
     ClaimId,
     ClaimType,
+    MeasureReference,
     ReferenceFigure,
     ReferenceFigureId,
+    ToleranceBand,
     VerificationEvidence,
 )
 from evidence_corpus.domain.values import AuthorityTier
@@ -44,6 +50,15 @@ from shared.metrics import METRICS
 
 _LEGAL_MARKERS = ("gesetz", "§", "verordnung", "asvg", "vertrag")
 _CAUSAL_MARKERS = ("weil", "verursacht", "führt zu", "aufgrund", "bewirkt")
+_MEASURE_RESOLVER = ResolveMeasureIdentity()
+
+
+def _normalise(measure: MeasureReference | None) -> MeasureReference | None:
+    if measure is None:
+        return None
+    return _MEASURE_RESOLVER.resolve(
+        measure.measure, measure.unit, measure.period, measure.geography
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,18 +67,29 @@ class VerifyClaim:
     references: ReferenceFigureRepository
     parser: NumberParserPort
     evidence: EvidencePort
+    record_contradiction: RecordContradiction
 
     async def execute(self, request: VerifyClaimRequest) -> ClaimVerdictResult:
         claim_type = request.claim_type or _infer_claim_type(request)
+        measure = _normalise(request.measure)
         claim = Claim(
             id=ClaimId(new_id("clm")),
             text=request.text,
             type=claim_type,
-            measure=request.measure,
+            measure=measure,
         )
         evidence = await self._evidence_for(claim_type, request)
         claim.verify(path_for(claim_type), evidence)
         await self.claims.save(claim)
+        if claim.measure is not None:
+            others = await self.claims.verified_for_measure(claim.measure)
+            detector = ContradictionDetector()
+            for other in others:
+                if other.id == claim.id:
+                    continue
+                finding = detector.finding_for(claim, other, ToleranceBand())
+                if finding is not None:
+                    await self.record_contradiction.execute(finding)
         claim.drain_events()
         METRICS.increment("claim_verifications_total", labels={"claim_type": claim_type.value})
         return _verdict_result(claim)
@@ -77,12 +103,24 @@ class VerifyClaim:
         if asserted is None:
             parsed = self.parser.parse(request.text)
             asserted = parsed[0] if parsed is not None else None
-        measure = request.measure
+        measure = _normalise(request.measure)
         if measure is None:
             return VerificationEvidence(asserted_value=asserted)
         reference = await self.references.find(measure)
         if reference is not None and reference.measure != measure:
             raise ReferenceMeasureMismatch("reference figure measure does not match the claim")
+        if reference is None:
+            candidates = await self.references.list_all()
+            same_measure = [item for item in candidates if item.measure.measure == measure.measure]
+            if same_measure:
+                item = same_measure[0]
+                reason = (
+                    "reference figure exists for "
+                    f"period={item.measure.period}, unit={item.measure.unit}, "
+                    f"geography={item.measure.geography}; claim asserts "
+                    f"period={measure.period}, unit={measure.unit}, geography={measure.geography}"
+                )
+                return VerificationEvidence(asserted_value=asserted, escalation_reason=reason)
         sources = (reference.source_id,) if reference is not None else ()
         return VerificationEvidence(
             sources=sources,
@@ -146,7 +184,7 @@ class RegisterReferenceFigure:
             raise ValidationFailedError(f"invalid as_of date: {request.as_of}") from error
         figure = ReferenceFigure(
             id=ReferenceFigureId(new_id("fig")),
-            measure=request.measure,
+            measure=_normalise(request.measure) or request.measure,
             value=request.value,
             tier=tier,
             as_of=as_of,
@@ -163,8 +201,9 @@ class ListReferenceFigures:
 
     async def execute(self, request: ListReferenceFiguresRequest) -> list[ReferenceFigureResult]:
         figures = await self.references.list_all()
-        if request.measure is not None:
-            figures = [figure for figure in figures if figure.measure == request.measure]
+        requested = _normalise(request.measure)
+        if requested is not None:
+            figures = [figure for figure in figures if figure.measure == requested]
         return [_figure_result(figure) for figure in figures]
 
 

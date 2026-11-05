@@ -122,3 +122,4 @@ class VerificationEvidence:
     method: str = "deterministic"
     support: CausalSupport | None = None
     study_ids: tuple[str, ...] = ()
+    escalation_reason: str | None = None
