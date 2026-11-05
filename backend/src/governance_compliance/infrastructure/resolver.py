@@ -7,4 +7,8 @@ from governance_compliance.application.values import InstitutionalAllowlist
 
 class AllowlistInstitutionResolver:
     def resolve(self, mention: str, allowlist: InstitutionalAllowlist) -> str | None:
-        return allowlist.aliases.get(mention.strip())
+        wanted = mention.strip().casefold()
+        for alias, canonical in allowlist.aliases.items():
+            if alias.casefold() == wanted:
+                return canonical
+        return None
