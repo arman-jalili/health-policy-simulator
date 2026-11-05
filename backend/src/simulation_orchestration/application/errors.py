@@ -45,3 +45,10 @@ class InvalidPromptTemplate(ValidationFailedError):
     """A prompt template is empty or has no checksum."""
 
     code = "INVALID_PROMPT_TEMPLATE"
+
+
+class UnknownLastEventId(ValidationFailedError):
+    """The supplied Last-Event-ID is unknown or belongs to another run."""
+
+    code = "UNKNOWN_LAST_EVENT_ID"
+    status_code = 400

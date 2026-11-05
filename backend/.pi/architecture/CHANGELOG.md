@@ -48,6 +48,23 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Simulation metering, idempotency and live SSE (#272-#275)
+
+### Changed
+- Bootstrap nodes call `LLMClient.complete`; invocation rows use the response tokens/latency/model,
+  are marked synthetic, and use a deterministic id keyed by run/round/node/purpose. Re-execution is
+  idempotent.
+- Zero model prices abort boot unless `SIMULATION_ALLOW_ZERO_PRICE=true`; `/readyz` reports
+  `simulation_pricing: configured|zero`.
+- SSE validates `Last-Event-ID` before opening the response (`400 UNKNOWN_LAST_EVENT_ID`), then
+  replays and stays live until `run.completed`/`run.failed`.
+- Adversarial suite adds title-less names, relabelled quotes and a contradicted-figure case.
+
+### Verification
+- Full suite green; SSE live/replay and invocation idempotency tests added.
+
+---
+
 ## [2026-11-06] - Governance guard correctness batch (#265-#269)
 
 ### Changed

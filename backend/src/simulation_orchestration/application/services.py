@@ -8,6 +8,7 @@ remove a frozen member without a new freeze entry; all bodies are implemented.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from decimal import Decimal
@@ -40,6 +41,7 @@ from simulation_orchestration.application.errors import (
     PromptNotFound,
     SimulationJobNotFound,
     SimulationRunNotFound,
+    UnknownLastEventId,
 )
 from simulation_orchestration.application.events import (
     RunCompleted,
@@ -323,10 +325,17 @@ class RunSimulationJob:
 
 
 class StreamSimulationProgress:
-    """Replay ordered progress events after ``Last-Event-ID``."""
+    """Replay ordered progress events, then keep the stream live until a terminal event."""
 
     def __init__(self, *, progress: ProgressStore) -> None:
         self._progress = progress
+
+    async def validate(self, request: StreamSimulationProgressRequest) -> None:
+        if not request.last_event_id:
+            return
+        previous = await self._progress.get(request.last_event_id)
+        if previous is None or previous.run_id != request.run_id:
+            raise UnknownLastEventId(f"unknown Last-Event-ID {request.last_event_id!r}")
 
     async def _events(
         self, request: StreamSimulationProgressRequest
@@ -335,17 +344,25 @@ class StreamSimulationProgress:
         if request.last_event_id:
             previous = await self._progress.get(request.last_event_id)
             if previous is None or previous.run_id != request.run_id:
-                raise ValueError(f"unknown Last-Event-ID {request.last_event_id!r}")
+                raise UnknownLastEventId(f"unknown Last-Event-ID {request.last_event_id!r}")
             after = previous.sequence
+        terminal = {ProgressKind.COMPLETED, ProgressKind.FAILED}
+        idle_since: float | None = None
         while True:
             batch = list(await self._progress.list_after(request.run_id, after, request.limit))
-            if not batch:
+            if batch:
+                idle_since = None
+                for event in batch:
+                    yield event
+                after = batch[-1].sequence
+                if any(event.kind in terminal for event in batch):
+                    return
+                continue
+            if idle_since is None:
+                idle_since = asyncio.get_running_loop().time()
+            elif asyncio.get_running_loop().time() - idle_since >= 0.5:
                 return
-            for event in batch:
-                yield event
-            if len(batch) < request.limit:
-                return
-            after = batch[-1].sequence
+            await asyncio.sleep(0.05)
 
     def execute(self, request: StreamSimulationProgressRequest) -> AsyncIterator[ProgressEventView]:
         return self._events(request)
@@ -439,9 +456,14 @@ class RecordAgentInvocation:
             raise ValueError("latency must not be negative")
         price = self._prices.price_for(request.model)
         cost = (
-            Decimal(request.input_tokens) * price.input_per_1k
-            + Decimal(request.output_tokens) * price.output_per_1k
-        ) / Decimal("1000")
+            Decimal("0")
+            if request.parameters.get("synthetic") is True
+            else (
+                Decimal(request.input_tokens) * price.input_per_1k
+                + Decimal(request.output_tokens) * price.output_per_1k
+            )
+            / Decimal("1000")
+        )
         envelope = InvocationEnvelope(
             invocation_id=request.invocation_id,
             run_id=request.run_id,
