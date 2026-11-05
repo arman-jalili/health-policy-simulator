@@ -48,6 +48,7 @@ class StakeholderProfileResult:
     profile: StakeholderProfile
     veto_rights: tuple[VetoRight, ...]
     power: NegotiatingPower
+    positions: tuple[HistoricalPosition, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
