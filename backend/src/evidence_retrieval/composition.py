@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
+from evidence_corpus.composition import CorpusContainer
 from evidence_retrieval.application.ports import (
     Clock,
     EmbeddingPort,
@@ -33,8 +34,22 @@ from evidence_retrieval.domain.services import (
     ScoreEvidenceCandidates,
     StanceClassifier,
 )
+from evidence_retrieval.infrastructure.adapters import (
+    CorpusPassageSearch,
+    LexicalEmbedding,
+    NoopReranker,
+    RuleBasedStanceModel,
+    StaticRetrievalReadiness,
+    SystemClock,
+)
+from evidence_retrieval.infrastructure.memory import InMemoryEvidencePackRepository
+from evidence_retrieval.infrastructure.query_rewrite import GermanQueryRewrite
+from evidence_retrieval.infrastructure.repository.sqlalchemy import (
+    SqlAlchemyEvidencePackRepository,
+)
 from shared.config import Settings
 from shared.db import Database, UnitOfWork
+from shared.enums import Persistence
 
 
 @dataclass
@@ -73,9 +88,64 @@ def build_container(
     settings: Settings,
     database: Database | None = None,
     actor: str = "system",
+    corpus: CorpusContainer | None = None,
 ) -> EvidenceRetrievalContainer:
-    """Select and construct adapters for the configured persistence family."""
-    raise NotImplementedError(
-        f"TODO(wiring): build evidence-retrieval for persistence={settings.persistence} "
-        f"and {'a database' if database is not None else 'no database'} (actor={actor})"
+    """Select and construct adapters for the configured persistence family.
+
+    Retrieval consumes corpus ports only (ADR-003): the index writer, passage repository, snapshot
+    repository and authority-rule repository. It never imports corpus persistence adapters or reads
+    corpus tables.
+    """
+    if corpus is None:
+        raise ValueError("evidence-retrieval requires the wired EvidenceCorpus container")
+    if settings.persistence is Persistence.MEMORY:
+        packs: EvidencePackRepository = InMemoryEvidencePackRepository()
+        unit_of_work = None
+    else:
+        if database is None:
+            raise ValueError(
+                "PERSISTENCE=postgres requires a Database; the application shell owns the engine"
+            )
+        packs = SqlAlchemyEvidencePackRepository(database.session_factory)
+        unit_of_work = UnitOfWork(database.session_factory)
+
+    passage_search = CorpusPassageSearch(
+        index=corpus.index_writer,  # type: ignore[arg-type]
+        passages=corpus.passages,
+        snapshots=corpus.snapshots,
+        authority_rules=corpus.authority_rules,
+    )
+    query_rewrite = GermanQueryRewrite()
+    fusion = ReciprocalRankFusion()
+    stance_classifier = StanceClassifier(RuleBasedStanceModel())
+    scorer = ScoreEvidenceCandidates()
+    clock = SystemClock()
+    search_candidates = SearchEvidenceCandidates(
+        search_port=passage_search,
+        query_rewrite=query_rewrite,
+        fusion=fusion,
+        stance_classifier=stance_classifier,
+        scorer=scorer,
+    )
+    recency = ApplyRecencyPolicy()
+    return EvidenceRetrievalContainer(
+        packs=packs,
+        passage_search=passage_search,
+        embeddings=LexicalEmbedding(),
+        reranker=NoopReranker(),
+        query_rewrite=query_rewrite,
+        readiness=StaticRetrievalReadiness(True, True),
+        fusion=fusion,
+        stance_classifier=stance_classifier,
+        scorer=scorer,
+        recency=recency,
+        clock=clock,
+        search_candidates=search_candidates,
+        assemble_pack=AssembleEvidencePack(
+            search_candidates=search_candidates, packs=packs, clock=clock
+        ),
+        get_pack=GetEvidencePack(packs),
+        get_score_breakdown=GetScoreBreakdown(packs),
+        reweight_pack=ReweightEvidencePack(packs=packs, recency=recency, clock=clock),
+        unit_of_work=unit_of_work,
     )
