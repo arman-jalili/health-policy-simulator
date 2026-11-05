@@ -42,3 +42,35 @@ def test_domain_services_own_pure_rules() -> None:
     assert CausalAppraiser.__module__ == "claim_validation.domain.services"
     assert "resolve" in method_names(ResolveMeasureIdentity)
     assert "compare" in method_names(FigureComparison)
+
+
+# --- behaviour: layer boundaries (issue #167) ------------------------------------------------
+
+from tests.unit.claim_validation_contract_helpers import imported_names  # noqa: E402
+
+from claim_validation.domain.claim import Claim  # noqa: E402
+from claim_validation.infrastructure.number_parser import GermanNumberParser  # noqa: E402
+from claim_validation.interfaces.http.router import router  # noqa: E402
+
+
+def test_aggregate_is_domain_owned() -> None:
+    assert Claim.__module__ == "claim_validation.domain.claim"
+
+
+def test_text_parsing_is_an_infrastructure_adapter() -> None:
+    assert GermanNumberParser.__module__ == "claim_validation.infrastructure.number_parser"
+
+
+def test_http_router_is_the_interface_layer() -> None:
+    assert router.prefix == "/api/v1"
+    assert "claim-validation" in (router.tags or [])
+
+
+def test_application_layer_never_imports_infrastructure() -> None:
+    from pathlib import Path
+
+    application = Path("src/claim_validation/application")
+    for module in application.glob("*.py"):
+        imports = imported_names(module)
+        forbidden = [name for name in imports if name.startswith("claim_validation.infrastructure")]
+        assert not forbidden, module
