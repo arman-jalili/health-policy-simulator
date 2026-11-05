@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from evidence_corpus.domain.values import ClaimType
+from evidence_retrieval.application.commands import SearchEvidenceCandidatesRequest
 from evidence_retrieval.application.services import SearchEvidenceCandidates
 from evidence_retrieval.domain.values import SnapshotId
 
@@ -47,4 +48,27 @@ class EvaluationHarness:
 
     async def run(self, cases: Sequence[EvaluationCase], *, k: int = 10) -> RecallReport:
         """Return the measured report; the caller decides whether it is good enough."""
-        raise NotImplementedError("EvaluationHarness.run is a frozen stub")
+        if k < 1:
+            raise ValueError("k must be at least 1")
+        if not cases:
+            raise ValueError("at least one labelled case is required")
+
+        per_case: dict[str, float] = {}
+        for case in cases:
+            result = await self._search.execute(
+                SearchEvidenceCandidatesRequest(
+                    claim=case.claim,
+                    claim_type=case.claim_type,
+                    snapshot_id=str(case.snapshot_id),
+                    limit=k,
+                )
+            )
+            retrieved = {str(candidate.passage_id) for candidate in result.candidates}
+            relevant = set(case.relevant_passage_ids)
+            per_case[case.claim] = len(retrieved & relevant) / len(relevant) if relevant else 0.0
+
+        return RecallReport(
+            case_count=len(cases),
+            recall_at_k=sum(per_case.values()) / len(per_case),
+            per_case_recall=per_case,
+        )
