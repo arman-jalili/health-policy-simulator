@@ -107,7 +107,9 @@ class RunSimulationJob:
         self._budget_guard = budget_guard
         self._checkpoint_policy = checkpoint_policy
         self._clock = clock
-        self._uow = uow
+        # UnitOfWork is retained in the constructor contract; stores own their transactions
+        # until NegotiationSession supplies a shared session.
+        _ = uow
 
     async def execute(self, request: StartSimulationRequest) -> StartSimulationResult:
         now = self._clock.now()
@@ -146,6 +148,7 @@ class RunSimulationJob:
         if job.status is not JobStatus.RUNNING:
             job = replace(job, status=JobStatus.RUNNING, updated_at=now)
             await self._jobs.save(job)
+        await self._negotiation.load_state(job.run_id)
         already_started = any(
             event.kind is ProgressKind.STARTED
             for event in await self._progress.list_after(job.run_id, 0, 1000)
@@ -232,9 +235,14 @@ class RunSimulationJob:
                 await self._publish_paused(job, reason, next_state)
                 break
             usage = await self._current_usage(job)
+            checkpoint = (
+                self._checkpoint_policy.checkpoint(next_state)
+                if self._checkpoint_policy.is_safe_boundary(next_state)
+                else next_state
+            )
             job = replace(
                 job,
-                checkpoint=record_budget(next_state, usage),
+                checkpoint=record_budget(checkpoint, usage),
                 budget_used=usage,
                 updated_at=self._clock.now(),
             )
@@ -357,7 +365,7 @@ class PauseOrResumeSimulation:
         self._jobs = jobs
         self._progress = progress
         self._clock = clock
-        self._uow = uow
+        _ = uow
 
     async def execute(self, request: PauseOrResumeSimulationRequest) -> PauseResumeResult:
         job = await self._jobs.get_by_run(request.run_id)
@@ -522,6 +530,8 @@ class RegisterPromptTemplate:
         template = self._versioning.next_version(
             existing=existing, name=request.name, body=request.body
         )
+        if all(item.version != template.version for item in existing):
+            template = replace(template, created_at=self._clock.now())
         await self._registry.save(template)
         return PromptTemplateResult(
             id=str(template.id),

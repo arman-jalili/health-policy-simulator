@@ -135,7 +135,7 @@ def build_container(
             jobs=jobs,
             progress=progress,
             clock=clock,
-            uow=run_job._uow,
+            uow=uow,
         ),
         record_agent_invocation=record_agent_invocation,
         get_job=GetJob(jobs=jobs, progress=progress),

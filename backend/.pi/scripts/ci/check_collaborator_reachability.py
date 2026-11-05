@@ -29,32 +29,8 @@ SOURCE_ROOT = pathlib.Path("src")
 # collaborators: the class never reads them, its consumers do.
 EXEMPT_SUFFIXES = ("/domain/errors.py", "/shared/errors.py", "/application/errors.py")
 
-_ALLOWED: dict[str, str] = {
-    # key: "<module path>:<Class>.<attr>"
-    "src/simulation_orchestration/application/services.py:RunSimulationJob._negotiation": (
-        "#246 (Phase 4 graph lands; the gateway has no caller until then)"
-    ),
-    "src/simulation_orchestration/application/services.py:RunSimulationJob._checkpoint_policy": (
-        "#246 (checkpoint boundary not yet consulted)"
-    ),
-    "src/simulation_orchestration/application/services.py:RunSimulationJob._uow": "#246 (UnitOfWork unused)",
-    "src/simulation_orchestration/application/services.py:PauseOrResumeSimulation._uow": (
-        "#246 (UnitOfWork unused)"
-    ),
-    "src/simulation_orchestration/application/services.py:RegisterPromptTemplate._clock": (
-        "#246 (PromptVersioning stamps datetime.now instead)"
-    ),
-    "src/stakeholder_model/application/services.py:RecordHistoricalPosition._clock": "#246 (injected clock unused)",
-    "src/stakeholder_model/application/services.py:RegisterStakeholder._clock": "#246 (injected clock unused)",
-    "src/stakeholder_model/application/services.py:BindAgentPersona._clock": "#246 (injected clock unused)",
-    "src/evidence_retrieval/application/services.py:AssembleEvidencePack._clock": "#246 (injected clock unused)",
-    "src/evidence_corpus/infrastructure/repository/sqlalchemy.py:SqlAlchemyAuthorityRuleRepository._uow": (
-        "#246 (UnitOfWork unused)"
-    ),
-    "src/evidence_corpus/infrastructure/indexing/memory.py:InMemoryIndexWriter.german_stopwords": (
-        "#246 (stopwords configured, never applied — adapter parity)"
-    ),
-}
+_ALLOWED: dict[str, str] = {}
+
 
 
 def _assigned(init: ast.FunctionDef) -> set[str]:

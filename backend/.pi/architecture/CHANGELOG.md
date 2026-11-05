@@ -48,6 +48,27 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - W8 ratchet emptied; attribution sourced from corpus (#245, #246)
+
+### Changed
+- `RecordHistoricalPosition` classifies attribution from the cited `PassageView` via
+  `AttributionRule.classify`; client-supplied strength is ignored and unresolved passages fall back
+  to `mention`.
+- `check_collaborator_reachability.py` allowlist is now **empty**; every injected collaborator has a
+  production read. `--strict` passes.
+- Simulation run consumes `NegotiationGateway`, applies `CheckpointPolicy`, and no longer stores an
+  unused `UnitOfWork`; pause/resume likewise.
+- Prompt creation uses the injected clock; `AssembleEvidencePack` stamps `frozen_at` from its clock.
+- The memory index applies the configured German stopwords, matching the Postgres `german` tsvector.
+- Authority-rule SQL adapter joins its injected `UnitOfWork` session.
+
+### Verification
+- W8: 0 injected-but-unread, 0 allowlisted, 0 unexplained; `--strict` passes.
+- Public API: explicit request for an unresolvable passage is stored as `mention`, unusable.
+- Full suite: 1081 passed; memory/Postgres index parity test passes.
+
+---
+
 ## [2026-11-06] - Governance guard: docs state what the rules actually catch
 
 ### Changed

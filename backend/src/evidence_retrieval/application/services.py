@@ -261,6 +261,7 @@ class AssembleEvidencePack:
         if not any(c.stance is StanceLabel.CONTRADICTING for c in result.candidates):
             pack.record_absence([request.claim], "no contradicting passage above threshold")
         pack.freeze()
+        pack.frozen_at = self._clock.now()
         await self._packs.save(pack)
         METRICS.increment(
             "evidence_retrieval_packs_total",
