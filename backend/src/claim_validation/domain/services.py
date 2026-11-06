@@ -26,6 +26,7 @@ _UNITS = {
     "personen": "count",
     "kassenstellen": "count",
     "stellen": "count",
+    "count": "count",
     "tage": "days",
     "tag": "days",
     "days": "days",
@@ -44,7 +45,8 @@ class ResolveMeasureIdentity:
 
     def resolve(self, measure: str, unit: str, period: str, geography: str) -> MeasureReference:
         normal_measure = " ".join(measure.split()).casefold()
-        normal_unit = _UNITS.get(" ".join(unit.split()).casefold(), unit.strip())
+        folded_unit = " ".join(unit.split()).casefold()
+        normal_unit = _UNITS.get(folded_unit, folded_unit)
         normal_period = " ".join(period.split()).casefold()
         normal_geo = _GEOGRAPHIES.get(
             " ".join(geography.split()).casefold(), geography.strip().upper()

@@ -57,6 +57,8 @@ APP_SECRET=some-example-value   # same value in .env.example
 | `SIMULATION_INPUT_PRICE_PER_1K` | `0.0` | EUR per 1k input tokens, applied when an invocation envelope is recorded |
 | `SIMULATION_OUTPUT_PRICE_PER_1K` | `0.0` | EUR per 1k output tokens |
 | `SIMULATION_ALLOW_ZERO_PRICE` | `true` | When `false`, boot refuses a model priced at zero |
+| `SIMULATION_STREAM_IDLE_S` | `3600` | Max seconds an SSE stream may be idle before `run.stream_closed` (`max_idle`) |
+| `SIMULATION_STREAM_HEARTBEAT_S` | `15` | Seconds between `: ping` heartbeat comments while idle |
 
 Zero prices are permissive by default so a local demo runs without a price list, and
 `/readyz` reports `simulation_pricing: configured|zero` so the posture is visible rather than implicit.

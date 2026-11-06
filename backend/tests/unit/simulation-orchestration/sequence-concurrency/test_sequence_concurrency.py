@@ -6,6 +6,7 @@ import asyncio
 from datetime import UTC, datetime
 
 from simulation_orchestration.application.commands import StreamSimulationProgressRequest
+from simulation_orchestration.application.dto import ProgressEventView
 from simulation_orchestration.application.events import RunStarted
 from simulation_orchestration.application.progress import ProgressPublisher
 from simulation_orchestration.application.services import StreamSimulationProgress
@@ -47,15 +48,20 @@ async def test_sse_replay_after_last_event_id_returns_each_event_once() -> None:
     store = InMemoryProgressStore()
     await _publish_many(store, 10)
     all_events = await store.list_after(RunId("run_1"), 0, 100)
-    service = StreamSimulationProgress(progress=store)
+    service = StreamSimulationProgress(progress=store, idle_timeout_s=0.1, heartbeat_s=0)
 
-    replay = [
+    frames = [
         event
         async for event in service.execute(
             StreamSimulationProgressRequest(
                 run_id=RunId("run_1"), last_event_id=all_events[4].event_id
             )
         )
+    ]
+    replay = [
+        frame
+        for frame in frames
+        if isinstance(frame, ProgressEventView) and frame.kind is not ProgressKind.STREAM_CLOSED
     ]
 
     assert [event.sequence for event in replay] == [6, 7, 8, 9, 10]

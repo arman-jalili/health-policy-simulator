@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+from collections.abc import AsyncGenerator
+from typing import cast
 
 from tests.unit.simulation_orchestration_contract_helpers import (
     enum_values,
@@ -90,49 +93,67 @@ async def _seeded(count: int = 3) -> InMemoryProgressStore:
     return store
 
 
+async def _collect(
+    stream: AsyncGenerator[ProgressEventView | str, None],
+) -> list[ProgressEventView | str]:
+    return [frame async for frame in stream]
+
+
+def _real(frames: list[ProgressEventView | str]) -> list[ProgressEventView]:
+    return [
+        frame
+        for frame in frames
+        if isinstance(frame, ProgressEventView) and frame.kind is not ProgressKind.STREAM_CLOSED
+    ]
+
+
 async def test_stream_replays_in_monotonic_order() -> None:
     store = await _seeded()
-    service = StreamSimulationProgress(progress=store)
+    service = StreamSimulationProgress(progress=store, idle_timeout_s=0.1, heartbeat_s=0)
 
-    events = [
+    frames = [
         event
         async for event in service.execute(StreamSimulationProgressRequest(run_id=RunId("run_1")))
     ]
+    events = _real(frames)
 
     assert [event.sequence for event in events] == [1, 2, 3]
+    assert isinstance(frames[-1], ProgressEventView)
+    assert frames[-1].kind is ProgressKind.STREAM_CLOSED
+    assert frames[-1].payload == {"reason": "max_idle"}
 
 
 async def test_last_event_id_replays_without_gaps_or_duplicates() -> None:
     store = await _seeded()
-    service = StreamSimulationProgress(progress=store)
+    service = StreamSimulationProgress(progress=store, idle_timeout_s=0.1, heartbeat_s=0)
 
-    events = [
+    frames = [
         event
         async for event in service.execute(
             StreamSimulationProgressRequest(run_id=RunId("run_1"), last_event_id="evt_1")
         )
     ]
 
-    assert [event.sequence for event in events] == [2, 3]
+    assert [event.sequence for event in _real(frames)] == [2, 3]
 
 
 async def test_batching_preserves_order() -> None:
     store = await _seeded(5)
-    service = StreamSimulationProgress(progress=store)
+    service = StreamSimulationProgress(progress=store, idle_timeout_s=0.1, heartbeat_s=0)
 
-    events = [
+    frames = [
         event
         async for event in service.execute(
             StreamSimulationProgressRequest(run_id=RunId("run_1"), limit=2)
         )
     ]
 
-    assert [event.sequence for event in events] == [1, 2, 3, 4, 5]
+    assert [event.sequence for event in _real(frames)] == [1, 2, 3, 4, 5]
 
 
 async def test_unknown_last_event_id_is_rejected() -> None:
     store = await _seeded()
-    service = StreamSimulationProgress(progress=store)
+    service = StreamSimulationProgress(progress=store, idle_timeout_s=0.1, heartbeat_s=0)
     from simulation_orchestration.application.errors import UnknownLastEventId
 
     with pytest.raises(UnknownLastEventId, match="unknown Last-Event-ID"):
@@ -186,10 +207,11 @@ async def test_stream_stays_live_until_a_terminal_event() -> None:
             created_at=datetime.now(tz=UTC),
         )
     )
-    stream = StreamSimulationProgress(progress=store).execute(
+    stream = StreamSimulationProgress(progress=store, idle_timeout_s=1.0, heartbeat_s=0).execute(
         StreamSimulationProgressRequest(run_id=RunId("run_live"))
     )
     first = await anext(stream)
+    assert not isinstance(first, str)
     assert first.kind is ProgressKind.STARTED
 
     await store.append(
@@ -203,4 +225,123 @@ async def test_stream_stays_live_until_a_terminal_event() -> None:
         )
     )
     second = await anext(stream)
+    assert not isinstance(second, str)
     assert second.kind is ProgressKind.COMPLETED
+    closed = await anext(stream)
+    assert not isinstance(closed, str)
+    assert closed.kind is ProgressKind.STREAM_CLOSED
+    assert closed.payload == {"reason": "run.completed"}
+
+
+async def test_stream_does_not_close_at_the_old_half_second_cutoff() -> None:
+    from simulation_orchestration.application.values import ProgressKind
+    from simulation_orchestration.infrastructure.memory import InMemoryProgressStore
+
+    store = InMemoryProgressStore()
+    await store.append(
+        ProgressEventView(
+            event_id="evt_start",
+            run_id=RunId("run_slow"),
+            sequence=1,
+            kind=ProgressKind.STARTED,
+            payload={},
+            created_at=datetime.now(tz=UTC),
+        )
+    )
+    stream = cast(
+        AsyncGenerator[ProgressEventView | str, None],
+        StreamSimulationProgress(progress=store, idle_timeout_s=2.0, heartbeat_s=0.05).execute(
+            StreamSimulationProgressRequest(run_id=RunId("run_slow"))
+        ),
+    )
+    first = await anext(stream)
+    assert not isinstance(first, str)
+    rest_task = asyncio.create_task(_collect(stream))
+
+    await asyncio.sleep(0.7)
+    await store.append(
+        ProgressEventView(
+            event_id="evt_done",
+            run_id=RunId("run_slow"),
+            sequence=2,
+            kind=ProgressKind.COMPLETED,
+            payload={},
+            created_at=datetime.now(tz=UTC),
+        )
+    )
+    rest = await rest_task
+    assert any(frame == ": ping\n\n" for frame in rest)
+    assert isinstance(rest[-1], ProgressEventView)
+    assert rest[-1].kind is ProgressKind.STREAM_CLOSED
+    assert rest[-1].payload == {"reason": "run.completed"}
+
+
+async def test_idle_close_is_explicit_and_heartbeats_are_visible() -> None:
+    from simulation_orchestration.application.values import ProgressKind
+    from simulation_orchestration.infrastructure.memory import InMemoryProgressStore
+
+    store = InMemoryProgressStore()
+    await store.append(
+        ProgressEventView(
+            event_id="evt_start",
+            run_id=RunId("run_idle"),
+            sequence=1,
+            kind=ProgressKind.PAUSED,
+            payload={},
+            created_at=datetime.now(tz=UTC),
+        )
+    )
+    frames = [
+        frame
+        async for frame in StreamSimulationProgress(
+            progress=store, idle_timeout_s=0.12, heartbeat_s=0.03
+        ).execute(StreamSimulationProgressRequest(run_id=RunId("run_idle")))
+    ]
+
+    assert ": ping\n\n" in frames
+    assert isinstance(frames[-1], ProgressEventView)
+    assert frames[-1].kind is ProgressKind.STREAM_CLOSED
+    assert frames[-1].payload == {"reason": "max_idle"}
+
+
+async def test_disconnect_stops_polling_and_is_counted() -> None:
+    from shared.metrics import METRICS
+    from simulation_orchestration.application.values import ProgressKind
+    from simulation_orchestration.infrastructure.memory import InMemoryProgressStore
+
+    class _CountingStore(InMemoryProgressStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.polls = 0
+
+        async def list_after(
+            self, run_id: RunId, after_sequence: int, limit: int
+        ) -> list[ProgressEventView]:
+            self.polls += 1
+            return await super().list_after(run_id, after_sequence, limit)
+
+    store = _CountingStore()
+    await store.append(
+        ProgressEventView(
+            event_id="evt_start",
+            run_id=RunId("run_gone"),
+            sequence=1,
+            kind=ProgressKind.STARTED,
+            payload={},
+            created_at=datetime.now(tz=UTC),
+        )
+    )
+    before = METRICS.value("simulation_stream_disconnects_total")
+    stream = cast(
+        AsyncGenerator[ProgressEventView | str, None],
+        StreamSimulationProgress(progress=store, idle_timeout_s=10.0, heartbeat_s=0.02).execute(
+            StreamSimulationProgressRequest(run_id=RunId("run_gone"))
+        ),
+    )
+    assert not isinstance(await anext(stream), str)
+    await stream.aclose()
+    polls = store.polls
+    await asyncio.sleep(0.15)
+
+    assert store.polls == polls
+    assert METRICS.value("simulation_stream_disconnects_total") == before + 1

@@ -38,9 +38,13 @@ rather than an empty list, so the client can display "searched, found nothing" h
 ```
 event: round.opened | position.stated | argument.submitted | position.revised
      | conflict.opened | coalition.formed | round.closed | run.closed
+     | run.stream_closed
 id: <event_id>            (monotonic, supports Last-Event-ID replay)
 data: {"run_id": "...", "round": 2, "sequence": 41, ...}
 ```
+Idle connections emit `: ping` comments and are never closed silently: a server-initiated close ends
+with `run.stream_closed` and a reason (`run.completed`, `run.failed`, `max_idle`). The synthetic close
+frame intentionally omits `id:` so it cannot become a `Last-Event-ID`.
 
 **Endpoint inventory (18):** runs (create/read/list/pause/resume/stream/events), positions,
 arguments, conflicts, coalitions, evidence packs, passages, claims, stakeholders, briefs

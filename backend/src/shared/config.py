@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     simulation_input_price_per_1k: float = 0.0
     simulation_output_price_per_1k: float = 0.0
     simulation_allow_zero_price: bool = True
+    simulation_stream_idle_s: float = 3600.0
+    simulation_stream_heartbeat_s: float = 15.0
     db_echo: bool = False
     db_pool_size: Annotated[int, Field(ge=1, le=50)] = 5
     db_max_overflow: Annotated[int, Field(ge=0, le=50)] = 5

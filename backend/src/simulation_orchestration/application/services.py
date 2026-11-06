@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from shared.ids import new_id
@@ -325,10 +326,22 @@ class RunSimulationJob:
 
 
 class StreamSimulationProgress:
-    """Replay ordered progress events, then keep the stream live until a terminal event."""
+    """Replay ordered progress events, then keep the stream live until a terminal event.
 
-    def __init__(self, *, progress: ProgressStore) -> None:
+    Idle is not terminal: the stream waits up to ``idle_timeout_s`` (default one hour), emits
+    ``: ping`` heartbeats, and always ends with a ``run.stream_closed`` frame carrying a reason.
+    """
+
+    def __init__(
+        self,
+        *,
+        progress: ProgressStore,
+        idle_timeout_s: float = 3600.0,
+        heartbeat_s: float = 15.0,
+    ) -> None:
         self._progress = progress
+        self._idle_timeout_s = max(0.001, idle_timeout_s)
+        self._heartbeat_s = max(0.0, heartbeat_s)
 
     async def validate(self, request: StreamSimulationProgressRequest) -> None:
         if not request.last_event_id:
@@ -337,34 +350,85 @@ class StreamSimulationProgress:
         if previous is None or previous.run_id != request.run_id:
             raise UnknownLastEventId(f"unknown Last-Event-ID {request.last_event_id!r}")
 
+    def _closed(
+        self,
+        request: StreamSimulationProgressRequest,
+        *,
+        sequence: int,
+        last_event_id: str,
+        reason: str,
+    ) -> ProgressEventView:
+        return ProgressEventView(
+            event_id=last_event_id or "evt_stream_closed",
+            run_id=request.run_id,
+            sequence=sequence,
+            kind=ProgressKind.STREAM_CLOSED,
+            payload={"reason": reason},
+            created_at=datetime.now(tz=UTC),
+        )
+
     async def _events(
         self, request: StreamSimulationProgressRequest
-    ) -> AsyncIterator[ProgressEventView]:
+    ) -> AsyncIterator[ProgressEventView | str]:
         after = 0
+        last_event_id = ""
         if request.last_event_id:
             previous = await self._progress.get(request.last_event_id)
             if previous is None or previous.run_id != request.run_id:
                 raise UnknownLastEventId(f"unknown Last-Event-ID {request.last_event_id!r}")
             after = previous.sequence
-        terminal = {ProgressKind.COMPLETED, ProgressKind.FAILED}
-        idle_since: float | None = None
-        while True:
-            batch = list(await self._progress.list_after(request.run_id, after, request.limit))
-            if batch:
-                idle_since = None
-                for event in batch:
-                    yield event
-                after = batch[-1].sequence
-                if any(event.kind in terminal for event in batch):
-                    return
-                continue
-            if idle_since is None:
-                idle_since = asyncio.get_running_loop().time()
-            elif asyncio.get_running_loop().time() - idle_since >= 0.5:
+            last_event_id = previous.event_id
+            if previous.kind in {ProgressKind.COMPLETED, ProgressKind.FAILED}:
                 return
-            await asyncio.sleep(0.05)
+        terminal = {ProgressKind.COMPLETED, ProgressKind.FAILED}
+        loop = asyncio.get_running_loop()
+        last_activity = loop.time()
+        last_heartbeat = last_activity
+        try:
+            while True:
+                batch = list(await self._progress.list_after(request.run_id, after, request.limit))
+                now = loop.time()
+                if batch:
+                    for event in batch:
+                        yield event
+                        last_event_id = event.event_id
+                        after = event.sequence
+                        last_activity = now
+                        last_heartbeat = now
+                        if event.kind in terminal:
+                            yield self._closed(
+                                request,
+                                sequence=event.sequence,
+                                last_event_id=event.event_id,
+                                reason=event.kind.value,
+                            )
+                            return
+                    continue
+                if now - last_activity >= self._idle_timeout_s:
+                    yield self._closed(
+                        request,
+                        sequence=after,
+                        last_event_id=last_event_id,
+                        reason="max_idle",
+                    )
+                    return
+                if self._heartbeat_s and now - last_heartbeat >= self._heartbeat_s:
+                    yield ": ping\n\n"
+                    last_heartbeat = now
+                sleep_for = 0.05
+                if self._heartbeat_s:
+                    sleep_for = min(
+                        sleep_for, max(0.001, self._heartbeat_s - (now - last_heartbeat))
+                    )
+                sleep_for = min(sleep_for, max(0.001, self._idle_timeout_s - (now - last_activity)))
+                await asyncio.sleep(sleep_for)
+        except (asyncio.CancelledError, GeneratorExit):
+            METRICS.increment("simulation_stream_disconnects_total")
+            raise
 
-    def execute(self, request: StreamSimulationProgressRequest) -> AsyncIterator[ProgressEventView]:
+    def execute(
+        self, request: StreamSimulationProgressRequest
+    ) -> AsyncIterator[ProgressEventView | str]:
         return self._events(request)
 
 
