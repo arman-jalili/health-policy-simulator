@@ -177,11 +177,11 @@ operator tool to check that all nine personas resolve to allowlist entries.
 
 | Rule id | Check | Implementation | Verdict on hit |
 |---|---|---|---|
-| `GC-001` | Named person in agent output | **honourific regex only** (`Dr.`, `Mag.`, `Prof.`, `Dipl.-Ing.`, `Obmann`, `Obfrau`, `Präsident(in)`) — no NER model, no allowlist consultation | rewrite (span → `[person]`) |
-| `GC-002` | Direct quotation attributed to a person | `speaker_kind` **supplied by the caller** (not read from the passage) + the first quoted span anywhere in the text (no sentence window) | reject |
+| `GC-001` | Named person in agent output | deterministic detector: honourifics (`Dr.`, `Mag.`, `Prof.`, `Dipl.-Ing.`, `Obmann`, `Obfrau`, `Präsident(in)`, case-insensitive) **plus** the curated list in `config/guard/person_names.txt`, matched as full name, surname-only and `X. Surname`; spans merged. No model call | rewrite (span → `[person]`) |
+| `GC-002` | Direct quotation attributed to a person | rejects when the body says `speaker_kind: person` **or** the text contains a detected person reference (so a quotation with a name cannot be relabelled); matches the first quoted span anywhere in the text (no sentence window) | reject |
 | `GC-003` | Institution referenced by a person's name | only the literal phrase `minister('s)? ministry` / `ministerium des ministers`, resolved against the allowlist aliases | rewrite to canonical name |
 | `GC-004` | Claim without citation presented as fact | absence of **caller-supplied** `cited_passage_ids` / `reference_figure_ids` (the ids are not derived from the text) | rewrite to `unsupported:` prefix |
-| `GC-005` | Figure contradicted by `ReferenceFigure` | **not wired**: the container binds a lookup that returns `None` for every id, so the rule never fires | (intended) reject |
+| `GC-005` | Figure contradicted by `ReferenceFigure` | wired to `ClaimValidationFigureVerdicts`, which reads the `reference_id` on the claim verification record. A figure id with **no** claim behind it yields no verdict and is accepted | reject |
 
 **Deterministic by design.** Rule evaluation is a fixed sequence of regex/string rules and a table
 lookup. No LLM decides compliance (ADR-007), and provider adapters cannot be imported from
@@ -192,17 +192,17 @@ lookup. No LLM decides compliance (ADR-007), and provider adapters cannot be imp
 The five rules are **heuristics with declared inputs**, not a classifier. They are honest about that only
 if this table is read with them:
 
-| Rule | Catches | Misses (observed) | Tracked |
-|---|---|---|---|
-| GC-001 | `Dr. Kurz`, `Prof. Dr. Meier` | `Sebastian Kurz`, `Kurz`, `DR. KURZ`, `Kurz'` | #266 |
-| GC-002 | a quotation when the body declares `speaker_kind: person` | the same quotation labelled `institution` | #267 |
-| GC-003 | `minister's ministry`, `Ministerium des Ministers` | `Kurz' Ministerium`, possessive forms | #266 |
-| GC-004 | uncited sentences that smell like facts (`ist/sind/beträgt/…` or a number) | a bare assertion with no copula and no number | — |
-| GC-005 | nothing today — the verdict lookup is a stub that returns `None` | every contradicted figure | #265 |
+| Rule | Catches (verified 2026-11-06) | Misses (known) |
+|---|---|---|
+| GC-001 | `Dr. Kurz`, `Sebastian Kurz`, `Kurz`, `DR. KURZ`, `Prof. Dr. Meier`, `S. Kurz`; institution names such as `Kassenärztliche Vereinigung` are not rewritten | a person **not** in `config/guard/person_names.txt` and written without an honourific |
+| GC-002 | a quotation with a detected person reference, whatever `speaker_kind` the body declares | a quotation attributed to an institution with no person mentioned (by design: that is institution speech) |
+| GC-003 | `minister's ministry`, `Ministerium des Ministers` | possessive forms (`Kurz' Ministerium`), other owner-constructions |
+| GC-004 | uncited sentences that smell like facts (`ist/sind/beträgt/…` or a number) | a bare assertion with no copula and no number |
+| GC-005 | a figure id whose claim verdict is `CONTRADICTED` → `reject` (verified end-to-end through `POST /reference-figures` → `POST /claims:verify` → `POST /governance/check`) | a figure id with no claim record (accepted, explicit) |
 
-Chain semantics: the chain stops at the first non-`ACCEPT` rule, so a `REWRITE` suppresses a later
-`REJECT` and only one violation per call is persisted (#268). Do not present the guard as
-"rejects contradicted figures" until #265 is closed.
+Chain semantics: the chain evaluates in rule order and **stops at the first non-`ACCEPT`**, so a `REWRITE`
+suppresses a later `REJECT` and one violation per call is persisted. That is a deliberate simplification of
+the write path (one action per output), not an oversight; if aggregation is ever needed, `REJECT` must win.
 
 ## API Endpoints
 
@@ -277,7 +277,7 @@ and can be argued with — three disqualifying properties for a compliance contr
 | Guard on the write path | `EnforceInstitutionOnlyOutput` is a **blocking** dependency of the negotiation write path; a missing guard must fail closed | negative test: guard unbound ⇒ argument write returns 5xx, never persists |
 | Persistence | Migration `0305` applied; violations append-only and idempotent on `violation_hash` | restart + duplicate-retry test |
 | Determinism | No LLM call in the guard path; rule version recorded per violation | unit test monkeypatching the LLM client to raise — guard must still work |
-| Provenance | **Deferred.** `DisclosePositionProvenance` reads from a stub (`_NoFacts`) that always returns an incomplete record, so the endpoint answers 422 for every request; the complete source (SimulationOrchestration invocations + ClaimValidation verdicts) is not wired | #269 — the rejection is correct, the source is missing; `/readyz` must report the degraded posture |
+| Provenance | **Deferred and visible.** `DisclosePositionProvenance` reads from `_NoFacts`, which returns an incomplete record, so the endpoint answers 422 for every request until NegotiationSession records positions; the complete source (invocations + verdicts) is not wired. `/readyz` reports `governance_provenance: deferred` | the rejection is correct, the source is missing; closing this requires the Phase 4 write path, not a stub replacement |
 
 
 ### Collaborator reachability (W8)
@@ -292,7 +292,7 @@ Every row is a call-site obligation, not a description: the collaborator must be
 | rule engine | every argument write | `rule_version` recorded on each violation row | a violation is recorded without a rule version |
 | `violation_hash` uniqueness | retry path | a duplicate retry yields one row | duplicate rows on retry |
 | `DisclosePositionProvenance` | brief publication | a complete disclosure record for a real run | **current: `_NoFacts` ⇒ every request 422** (#269) |
-| `ContradictedFigureRule` verdict lookup | guard, on every check with `reference_figure_ids` | `reject` on a contradicted figure | **current: `UnknownFigureVerdicts` returns `None` ⇒ rule never fires** (#265) |
+| `ContradictedFigureRule` verdict lookup | guard, on every check with `reference_figure_ids` | `reject` on a contradicted figure | the lookup is bound to a stub that returns `None` (verified: wired to `ClaimValidationFigureVerdicts` in `shared/app.py`) |
 | LLM independence | guard path | the guard still works with the LLM client raising | the guard calls the model and degrades to permissive |
 
 ## Acceptance Criteria

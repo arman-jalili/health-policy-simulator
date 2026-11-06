@@ -303,6 +303,19 @@ replay and audit depend on framework internals, and it was rejected in ADR-003.
 | Metering | Every call writes `agent_invocation` with model, `prompt@version`, tokens, cost | usage endpoint reflects a live run |
 | Ownership | Graph holds only ids/phase/budget; no domain state | architecture test on graph state schema |
 
+**Stream semantics (verified 2026-11-06):** `Last-Event-ID` is validated **before** the
+`StreamingResponse` (unknown or foreign ids → `400 UNKNOWN_LAST_EVENT_ID`), replay is gap-free, and a
+completed run closes with `run.completed`. Two limits remain (#278): the generator returns after **0.5 s of
+idleness**, so a paused run's stream closes without a terminal event and the client cannot distinguish
+"paused" from "finished"; and no heartbeat comment is emitted. Until #278 is closed, a UI must treat a
+closed stream without `run.completed` as "still running" and re-attach.
+
+**Pricing posture:** zero prices are allowed by default (`SIMULATION_ALLOW_ZERO_PRICE=true`) so a local
+demo boots without a price list; `/readyz` reports `simulation_pricing: configured|zero`, and every
+invocation therefore carries `cost_estimate = 0` unless the two price settings are filled in. Set
+`SIMULATION_ALLOW_ZERO_PRICE=false` outside local so a misconfigured deployment fails at boot instead of
+metering zero.
+
 **Runtime (ADR-013):** the router is mounted in `shared/app.py`, the background worker is started by
 the lifespan, and `build_container` selects the scripted provider. `PERSISTENCE=postgres` uses the
 `0302_simulation_orchestration` tables (plus `0303_simulation_lease` and

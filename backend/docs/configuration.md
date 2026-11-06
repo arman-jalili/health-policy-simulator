@@ -48,3 +48,17 @@ Fail — secret copied unchanged from the example:
 ```dotenv
 APP_SECRET=some-example-value   # same value in .env.example
 ```
+
+## Simulation metering
+
+| Variable | Default | Effect |
+|---|---|---|
+| `SIMULATION_MODEL_ID` | `scripted-local` | The only model the price table can serve; an unknown id aborts boot |
+| `SIMULATION_INPUT_PRICE_PER_1K` | `0.0` | EUR per 1k input tokens, applied when an invocation envelope is recorded |
+| `SIMULATION_OUTPUT_PRICE_PER_1K` | `0.0` | EUR per 1k output tokens |
+| `SIMULATION_ALLOW_ZERO_PRICE` | `true` | When `false`, boot refuses a model priced at zero |
+
+Zero prices are permissive by default so a local demo runs without a price list, and
+`/readyz` reports `simulation_pricing: configured|zero` so the posture is visible rather than implicit.
+Set `SIMULATION_ALLOW_ZERO_PRICE=false` in staging and production: a deployment that forgot to price the
+model should fail at boot, not meter every run at `0.0`.

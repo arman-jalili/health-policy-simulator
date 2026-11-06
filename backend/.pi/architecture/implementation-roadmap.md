@@ -171,18 +171,21 @@ Bootstrap only — no bounded contexts.
 
 **Goal:** Numbers are checkable, LLM calls are metered and traceable, and no person-level output can reach persistence.
 
-**Phase 3 verified:** 2026-11-06 on `e9973aa` (all three modules closed).
+**Phase 3 re-verified:** 2026-11-06 on `df61791`, after the correction batch (#271) and the metering/SSE
+batch (#276).
 
-- ClaimValidation: aggregate, paths, tolerance, reference provenance, escalation, unsupported retention
-  implemented and exercised through the API; measure identity, contradiction production and German
-  parsing have runtime gaps (#200, #201, #202).
-- SimulationOrchestration: budget guard, pause/resume, retries, recovery and worker liveness verified
-  through the API; metering is synthetic (#272), not idempotent under recovery (#273); SSE replay works,
-  live streaming and unknown-id handling do not (#274).
-- GovernanceCompliance: guard, allowlist and violation persistence run; GC-005 cannot fire (#265),
-  GC-001 only matches honourifics (#266), GC-002 trusts the caller (#267), chain severity collapses to the
-  first hit (#268), provenance answers 422 pending a facts source (#269), and the adversarial suite cannot
-  fail (#275).
+- ClaimValidation: unchanged from the previous verification — tolerance, provenance, escalation, causal and
+  qualitative paths hold; measure identity, contradiction production and German parsing are now wired
+  (verified through the API), with one casing gap in the unit table (#277).
+- SimulationOrchestration: budget guard, pause/resume, retries, recovery, worker liveness hold. Metering now
+  reads the provider response (model, tokens, latency) and is idempotent on a derived invocation id; zero
+  pricing is permissive by default but reported by `/readyz` as `simulation_pricing: zero`. SSE validates
+  `Last-Event-ID` before streaming and replays gap-free; the live window is still capped by a 0.5 s idle
+  timeout (#278).
+- GovernanceCompliance: GC-001 detects honourific-free names from the curated list, GC-002 resists
+  relabelling via the person detector, GC-005 rejects a contradicted figure end-to-end, and the adversarial
+  corpus now contains the real attack strings. Provenance remains a visible 422 (`governance_provenance:
+  deferred`) until Phase 4 records positions.
 
 The remaining gaps are recorded in the acceptance list below rather than in a status line, so "closed" is
 not read as "verified".
@@ -216,10 +219,12 @@ not read as "verified".
   dropped — `tests/unit/claim-validation/causal-never-verified` + `unverifiable-retained`
 - [x] A press-tier `ReferenceFigure` is refused —
   `tests/unit/claim-validation/reference-provenance`
-- [ ] Every LLM call writes exactly one `agent_invocation` row with model, `prompt@version`, tokens, cost
-  — **not met**: no production path calls the LLM, tokens are the literals `1/1`, the zero-price default
-  makes cost `0.0` for every row (#272), and a re-executed node after crash recovery writes a second row
-  (#273)
+- [x] Every LLM call writes exactly one `agent_invocation` row with model, `prompt@version`, tokens, cost
+  — verified 2026-11-06 on `df61791`: nodes call `LLMClient.complete` and record the response's
+  model/tokens/latency; the invocation id is derived from `(run, round, node, purpose)` so re-execution
+  writes one row (both adapters upsert); cost is computed from the price table, which is `0.0` by default
+  — visible as `simulation_pricing: zero` in `/readyz`. `prompt@version` is recorded but not yet resolved
+  against the prompt registry
 - [x] Exceeding the run budget pauses the run (`RunBudgetExhausted`) without persisting a partial argument
   — verified 2026-11-06 on `e9973aa`: `max_invocations=1` → job `paused`, `run.budget_exhausted`
   published, usage `1`; the "no partial argument" half is untestable until NegotiationSession persists
@@ -227,13 +232,15 @@ not read as "verified".
 - [x] "Dr. Müller sagte…" never returns `accept` from the guard — returns `rewrite` / `person_named`.
   The honourific is doing all the work: title-less forms (`Sebastian Kurz`, `Kurz`, `DR. KURZ`) still
   return `accept` (#266), so the AC is true for the string and false for the class
-- [ ] ≥30 adversarial compliance strings classified correctly in CI — 30 strings exist and are green, but
-  the corpus omits every known bypass, stubs GC-005 and re-implements aggregation the app does not do
-  (#275); the count is met, the coverage is not
-- [ ] SSE reconnect with `Last-Event-ID` replays without gaps or duplicates — **replay verified** on
-  `e9973aa` (resume after event 1 returns exactly the remaining 2; after the last, nothing). Not met as a
-  live feed: an unknown id raises `ValueError` inside the response generator (broken 200, no 4xx) and the
-  stream closes as soon as it has caught up (#274)
+- [x] ≥30 adversarial compliance strings classified correctly in CI — verified on `df61791`: the corpus
+  gained title-less names, ALL-CAPS honourifics, relabelled personal quotes and a contradicted-figure case,
+  and the guard now rejects every one through the public API (GC-005 proven end to end with a registered
+  reference figure and a `CONTRADICTED` claim)
+- [x] SSE reconnect with `Last-Event-ID` replays without gaps or duplicates — verified on `df61791`:
+  resume after event 1 returns exactly the remaining events, after the last returns nothing, unknown or
+  foreign ids return `400 UNKNOWN_LAST_EVENT_ID` **before** the stream opens, and a completed run closes
+  with `run.completed`. Caveat recorded in #278: the live window ends after 0.5 s of idleness, so a paused
+  run's stream closes without a terminal marker
 
 ---
 
