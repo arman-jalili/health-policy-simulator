@@ -14,8 +14,6 @@ export ENV=local
 export AUTH_MODE=demo
 export PERSISTENCE=postgres
 export DATABASE_URL="postgresql+asyncpg://hps:hps@localhost:5433/health_policy"
-# Step 2 pipes the seed's stdout into a JSON file; at INFO the log records land there too (#419).
-export LOG_LEVEL=ERROR
 
 alembic upgrade head
 ```
@@ -25,8 +23,13 @@ alembic upgrade head
 ## 2. Seed the demo corpus (idempotent)
 
 ```bash
-make demo-seed | tee /tmp/demo-seed.json
+# stdout must be the JSON result only: `-s` stops make from echoing the command, and LOG_LEVEL=ERROR
+# keeps the structured log records off it. Both are required (#419).
+LOG_LEVEL=ERROR make -s demo-seed > /tmp/demo-seed.json
 ```
+
+Plain `make demo-seed` prints the ids for a human reader, but its stdout also carries the make command
+echo and (at the default `LOG_LEVEL=INFO`) every log record, so it cannot be piped into a JSON file.
 
 The command ingests `samples/demo-corpus.pdf`, publishes one citable passage per sample article,
 pins the `demo-corpus-v1` snapshot, registers five reference figures and assembles one evidence pack
