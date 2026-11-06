@@ -18,7 +18,7 @@ import { getRun } from "@/features/run/api";
 import { useLocalRuns, useSeed } from "@/features/run/hooks";
 import { useReadyz } from "@/features/platform/hooks";
 import { formatDate, truncateMiddle } from "@/lib/format";
-import { enumLabel } from "@/lib/i18n";
+import { enumLabel, type MessageKey } from "@/lib/i18n";
 
 export default function DashboardPage() {
   const { t, locale } = useSettings();
@@ -54,7 +54,6 @@ export default function DashboardPage() {
                 {t("dashboard.readiness")}: {readyz.data.status}
               </StatusPill>
             )}
-            <StatusPill tone="info">{`attribution: ${cap("attribution")}`}</StatusPill>
             <StatusPill tone="info">{`llm: ${cap("llm")}`}</StatusPill>
             <StatusPill tone="neutral">{`pricing: ${cap("simulation_pricing")}`}</StatusPill>
           </div>
@@ -76,9 +75,6 @@ export default function DashboardPage() {
             }
           />
           <CardBody>
-            <p className="mb-3 rounded-xs border border-line bg-surface-muted px-2 py-1.5 text-2xs text-ink-muted">
-              {t("dashboard.localIndexNote")}
-            </p>
             {runs.length === 0 ? (
               <EmptyState
                 title={t("dashboard.recentEmpty")}
@@ -222,16 +218,14 @@ export default function DashboardPage() {
             ) : (
               <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {[
-                  "negotiation_session",
-                  "negotiation_session_persistence",
-                  "consensus_analysis",
-                  "decision_brief",
-                  "stakeholder_model",
-                  "evidence_retrieval_mode",
-                ].map((key) => (
-                  <div key={key} className="rounded-xs border border-line px-2 py-1.5">
-                    <dt className="font-mono text-2xs text-ink-muted">{key}</dt>
-                    <dd className="mt-0.5 text-sm">{cap(key)}</dd>
+                  { key: "negotiation_session", label: "dashboard.gate.negotiation" },
+                  { key: "consensus_analysis", label: "dashboard.gate.consensus" },
+                  { key: "decision_brief", label: "dashboard.gate.brief" },
+                  { key: "evidence_retrieval_mode", label: "dashboard.gate.evidence" },
+                ].map((row) => (
+                  <div key={row.key} className="rounded-xs border border-line px-2 py-1.5">
+                    <dt className="text-2xs text-ink-muted">{t(row.label as MessageKey)}</dt>
+                    <dd className="mt-0.5 text-sm">{cap(row.key)}</dd>
                   </div>
                 ))}
               </dl>

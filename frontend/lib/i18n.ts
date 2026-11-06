@@ -143,6 +143,10 @@ const messages = {
     de: "Die Bereitschaftsmatrix zeigt, welche Kontexte gebunden sind.",
     en: "The readiness matrix shows which contexts are wired.",
   },
+  "dashboard.gate.negotiation": { de: "Verhandlungsprotokoll", en: "Negotiation log" },
+  "dashboard.gate.consensus": { de: "Konsensanalyse", en: "Consensus analysis" },
+  "dashboard.gate.brief": { de: "Entscheidungsbrief", en: "Decision brief" },
+  "dashboard.gate.evidence": { de: "Evidenzsuche", en: "Evidence retrieval" },
   "dashboard.viewHealth": { de: "Vollständige Matrix", en: "Full matrix" },
   "new.title": { de: "Neue Verhandlung", en: "New run" },
   "new.subtitle": {

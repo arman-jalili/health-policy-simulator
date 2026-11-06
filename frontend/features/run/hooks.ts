@@ -5,9 +5,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { useReadyz } from "@/features/platform/hooks";
 
+import { ApiError } from "@/lib/http";
 import {
   loadRunIndex,
   loadSeed,
+  saveRunIndex,
   updateRunInIndex,
   type DemoSeed,
   type RunIndexEntry,
@@ -438,5 +440,52 @@ export function useLocalRuns(): readonly RunIndexEntry[] {
       window.removeEventListener("storage", sync);
     };
   }, []);
+
+  // The index is per browser; entries can outlive the database (a wiped volume, a cleared demo DB).
+  // Verify once per mount: drop what the server no longer knows and refresh phase/closed for the rest,
+  // so the overview never offers a dead link. A failed request that is not a 404 keeps the entry.
+  const verified = useRef(false);
+  useEffect(() => {
+    if (verified.current) return;
+    verified.current = true;
+    const entries = loadRunIndex();
+    if (entries.length === 0) return;
+    let cancelled = false;
+    void Promise.allSettled(
+      entries.map(async (entry) => {
+        try {
+          return { entry, run: await getRun(entry.runId) };
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) return { entry, run: null };
+          return { entry, run: undefined };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      const kept: RunIndexEntry[] = [];
+      let changed = false;
+      for (const result of results) {
+        if (result.status !== "fulfilled") continue;
+        const { entry, run } = result.value;
+        if (run === null) {
+          changed = true;
+          continue;
+        }
+        if (run === undefined) {
+          kept.push(entry);
+          continue;
+        }
+        if (entry.phase !== run.phase || entry.closed !== run.closed) changed = true;
+        kept.push({ ...entry, phase: run.phase, closed: run.closed });
+      }
+      if (!changed) return;
+      saveRunIndex(kept);
+      setRuns(kept);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return runs;
 }
