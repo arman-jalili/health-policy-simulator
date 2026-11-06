@@ -88,6 +88,20 @@ recorded in #332; an empty run list is a legitimate "no refusals" result).
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
 
+## JSON rendering (#344)
+
+`JsonBriefRenderer.render(brief)` returns UTF-8 JSON of the frozen document, and
+`brief_document(brief)` is the pure mapping used by tests and future PDF/HTML renderers:
+
+- `disclaimer{text, model_reference, prompt_version}` is always present (AC 10) and
+  `schema_version` names the document contract (`"1.0"`);
+- sections are emitted in ordinal order regardless of insertion order, so the document is
+  deterministic byte-for-byte;
+- citations carry their locator and `resolved` flag; blocked outcomes keep `kind: "blocked"` and
+  their blockers; rejected proposals are listed;
+- the document validates against `BriefResponse`, which is why the HTTP contract and the renderer
+  cannot drift.
+
 ## Blocked-outcome honesty (#343)
 
 `TopicOutcome.assert_honest()` refuses any outcome that names a blocker but is stated as
