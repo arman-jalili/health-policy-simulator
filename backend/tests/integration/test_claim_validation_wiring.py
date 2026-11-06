@@ -166,7 +166,7 @@ async def test_measure_variants_normalise_at_the_api_boundary() -> None:
                 "claim_type": "quantitative",
                 "measure": {
                     "measure": "KASSENSTELLEN",
-                    "unit": "count",
+                    "unit": "Count",
                     "period": "2026",
                     "geography": "AT",
                 },

@@ -51,6 +51,33 @@ def test_specific_measures_do_not_collapse() -> None:
 def test_unit_and_geography_aliases_are_canonical() -> None:
     service = _Resolve()
 
-    assert service.resolve("Kosten", "Mrd. €", "2026", "österreich").unit == "Mrd. €"
+    assert service.resolve("Kosten", "Mrd. €", "2026", "österreich").unit == "mrd. €"
     assert service.resolve("Anteil", "Prozent", "2026", "AT").unit == "percent"
     assert service.resolve("Kosten", "EUR", "2026", "Austria").geography == "AT"
+
+
+def test_count_and_percent_casing_are_one_identity() -> None:
+    service = _Resolve()
+
+    for variant in ("count", "Count", "COUNT", " count "):
+        assert service.resolve("Kassenstellen", variant, "2026", "AT").unit == "count"
+    for variant in ("percent", "Percent", "PERCENT", "%", "Prozent"):
+        assert service.resolve("Anteil", variant, "2026", "AT").unit == "percent"
+    for variant in ("EUR", "eur", "Euro", "euro", "€"):
+        assert service.resolve("Kosten", variant, "2026", "AT").unit == "EUR"
+
+
+def test_unit_resolution_is_idempotent_for_the_emitted_vocabulary() -> None:
+    from claim_validation.domain.services import _UNITS
+
+    service = _Resolve()
+    for key in _UNITS:
+        emitted = service.resolve("m", key, "2026", "AT").unit
+        assert service.resolve("m", emitted, "2026", "AT").unit == emitted
+        assert emitted.casefold() in {key.casefold() for key in _UNITS}
+
+
+def test_unknown_units_pass_through_normalised_not_invented() -> None:
+    service = _Resolve()
+
+    assert service.resolve("Kosten", "  Mrd.  € ", "2026", "AT").unit == "mrd. €"
