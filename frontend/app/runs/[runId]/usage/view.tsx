@@ -93,7 +93,7 @@ export default function UsagePage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card>
           <CardHeader title={t("usage.title")} />
           <CardBody className="space-y-4">

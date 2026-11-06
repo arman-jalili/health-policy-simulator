@@ -65,7 +65,7 @@ export default function DashboardPage() {
         <ErrorState error={readyz.error} onRetry={() => void readyz.refetch()} />
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
             title={t("dashboard.recent")}
@@ -154,7 +154,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
             title={t("dashboard.seed")}

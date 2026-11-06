@@ -14,15 +14,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "border-accent bg-accent text-on-accent hover:bg-accent-hover",
-  secondary: "border-line-strong bg-surface text-ink hover:bg-surface-muted",
-  ghost: "border-transparent bg-transparent text-ink-muted hover:bg-surface-muted hover:text-ink",
+  primary: "border-accent bg-accent text-on-accent hover:border-accent-hover hover:bg-accent-hover",
+  secondary: "border-line-strong bg-surface text-ink hover:border-accent hover:text-accent",
+  ghost: "border-transparent bg-transparent text-ink-muted hover:bg-surface-muted hover:text-accent",
   danger: "border-danger bg-danger text-on-accent hover:opacity-90",
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-8 px-2.5 text-2xs",
-  md: "h-9 px-3 text-sm",
+  sm: "h-8 px-3 text-2xs",
+  md: "h-10 px-4 text-sm",
 };
 
 export function Button({
@@ -44,7 +44,7 @@ export function Button({
       title={disabledReason}
       aria-busy={loading || undefined}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-md border font-medium transition-colors",
+        "inline-flex shrink-0 items-center justify-center gap-2 rounded-md border font-heading font-medium tracking-[0.02em] transition-colors",
         "disabled:cursor-not-allowed disabled:opacity-50",
         VARIANTS[variant],
         SIZES[size],

@@ -18,10 +18,10 @@ export function ChartFrame({
   const { t } = useSettings();
   return (
     <figure className="space-y-2">
-      <figcaption className="text-sm font-medium text-ink">{title}</figcaption>
+      <figcaption className="font-heading text-base font-semibold text-ink">{title}</figcaption>
       {description !== undefined && <p className="text-2xs text-ink-muted">{description}</p>}
       <div>{children}</div>
-      <details className="rounded-md border border-line bg-surface">
+      <details className="border border-line bg-surface">
         <summary className="cursor-pointer px-3 py-2 text-2xs text-ink-muted">
           {t("common.showData")}
         </summary>

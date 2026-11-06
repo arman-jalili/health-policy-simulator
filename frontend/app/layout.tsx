@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Source_Code_Pro, Source_Sans_3, Source_Serif_4 } from "next/font/google";
+import { Roboto, Roboto_Condensed, Roboto_Mono } from "next/font/google";
 import { Suspense, type ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -7,21 +7,24 @@ import { Providers } from "@/components/providers";
 
 import "@/styles/globals.css";
 
-const sourceSans = Source_Sans_3({
-  variable: "--font-source-sans",
+const roboto = Roboto({
+  variable: "--font-roboto",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "700"],
   display: "swap",
 });
 
-const sourceSerif = Source_Serif_4({
-  variable: "--font-source-serif",
+const robotoCondensed = Roboto_Condensed({
+  variable: "--font-roboto-condensed",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
 });
 
-const sourceCode = Source_Code_Pro({
-  variable: "--font-source-code",
+const robotoMono = Roboto_Mono({
+  variable: "--font-roboto-mono",
   subsets: ["latin"],
+  weight: ["400", "500"],
   display: "swap",
 });
 
@@ -39,15 +42,15 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
   return (
     <html
       lang="de-AT"
-      data-theme="paper"
+      data-theme="portal"
       data-density="comfortable"
       data-motion="full"
       suppressHydrationWarning
-      className={`${sourceSans.variable} ${sourceSerif.variable} ${sourceCode.variable} h-full antialiased`}
+      className={`${roboto.variable} ${robotoCondensed.variable} ${robotoMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         <Providers>
-          <Suspense fallback={<div className="min-h-dvh bg-surface-muted" />}>
+          <Suspense fallback={<div className="min-h-dvh bg-surface" />}>
             <AppShell>{children}</AppShell>
           </Suspense>
         </Providers>

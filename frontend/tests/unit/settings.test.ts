@@ -24,9 +24,9 @@ describe("settings store", () => {
   });
 
   it("round-trips a saved setting set", () => {
-    saveSettings({ ...DEFAULT_SETTINGS, theme: "ink", density: "compact", locale: "en" });
+    saveSettings({ ...DEFAULT_SETTINGS, theme: "contrast", density: "compact", locale: "en" });
     const loaded = loadSettings();
-    expect(loaded.theme).toBe("ink");
+    expect(loaded.theme).toBe("contrast");
     expect(loaded.density).toBe("compact");
     expect(loaded.locale).toBe("en");
   });

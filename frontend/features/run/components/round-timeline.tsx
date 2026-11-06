@@ -10,7 +10,7 @@ import { readChartPalette } from "@/lib/chart/encoding";
 import { useChartWidth } from "@/lib/chart/use-width";
 import { enumLabel, humanize } from "@/lib/i18n";
 
-const LEFT = 130;
+const LEFT = 170;
 const TOP = 18;
 const ROW = 28;
 
@@ -159,7 +159,7 @@ export function RoundTimeline({
                   fontSize={10}
                   fill={palette.ink}
                 >
-                  {(stakeholderNames.get(id) ?? id).slice(0, 20)}
+                  {(stakeholderNames.get(id) ?? id).slice(0, 26)}
                 </text>
                 <line
                   x1={LEFT}

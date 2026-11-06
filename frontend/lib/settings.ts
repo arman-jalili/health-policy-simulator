@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const LOCALES = ["de-AT", "en"] as const;
-export const THEMES = ["paper", "ink", "dark", "system"] as const;
+export const THEMES = ["portal", "contrast"] as const;
 export const DENSITIES = ["comfortable", "compact"] as const;
 export const MOTIONS = ["full", "reduced"] as const;
 export const NUMBER_LOCALES = ["de-AT", "en-GB"] as const;
@@ -37,7 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultQuestion: DEFAULT_QUESTION,
   budgetMaxInvocations: 30,
   locale: "de-AT",
-  theme: "paper",
+  theme: "portal",
   density: "comfortable",
   motion: "full",
   timeZone: "Europe/Vienna",

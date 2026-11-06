@@ -74,7 +74,7 @@ export function RunShell({ children }: { readonly children: ReactNode }) {
         </nav>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="max-w-4xl text-lg font-semibold leading-snug">
+            <h1 className="max-w-4xl text-xl font-light text-accent">
               {entry?.question !== undefined && entry.question !== ""
                 ? entry.question
                 : t("run.questionUnavailable")}

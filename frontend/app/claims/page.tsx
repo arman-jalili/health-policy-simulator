@@ -93,7 +93,7 @@ export default function ClaimsPage() {
     <div className="space-y-4">
       <PageHeader title={t("claims.title")} subtitle={t("claims.subtitle")} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title={t("claims.verify")} description={t("claims.verifyHint")} />
           <CardBody className="space-y-3">
@@ -326,7 +326,12 @@ export default function ClaimsPage() {
           ) : sortedFigures.length === 0 ? (
             <EmptyState title={t("claims.noFigures")} />
           ) : (
-            <div className="overflow-x-auto">
+            <div
+              className="overflow-x-auto"
+              role="region"
+              aria-label={t("claims.referenceFigures")}
+              tabIndex={0}
+            >
               <Table caption={t("claims.referenceFigures")}>
                 <THead>
                   <TR>
@@ -463,7 +468,7 @@ export default function ClaimsPage() {
         </CardBody>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title={t("claims.contradictions")} />
           <CardBody>

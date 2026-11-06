@@ -35,7 +35,7 @@ export function EmptyState({
   readonly action?: ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-dashed border-line-strong bg-surface px-4 py-8 text-center">
+    <div className="border border-dashed border-line-strong bg-surface px-4 py-8 text-center">
       <p className="text-sm font-medium text-ink">{title}</p>
       {hint !== undefined && <p className="mx-auto mt-2 max-w-prose text-sm text-ink-muted">{hint}</p>}
       {action !== undefined && <div className="mt-4 flex justify-center">{action}</div>}
@@ -102,7 +102,7 @@ export function ErrorState({
             : t("common.error"));
 
   return (
-    <div role="alert" className="rounded-md border border-danger/30 bg-danger-quiet px-4 py-3">
+    <div role="alert" className="border border-danger/30 bg-danger-quiet px-4 py-3">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 text-danger">
           <Icon name="warning" />
@@ -152,7 +152,7 @@ export function DegradedBanner({
   const problems = Object.entries(checks);
   if (problems.length === 0) return null;
   return (
-    <div role="status" className="rounded-md border border-warn/40 bg-warn-quiet px-4 py-3">
+    <div role="status" className="border border-warn/40 bg-warn-quiet px-4 py-3">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 text-warn">
           <Icon name="warning" />
@@ -175,7 +175,7 @@ export function DegradedBanner({
 export function ForbiddenState({ detail }: { readonly detail?: string }) {
   const { t } = useSettings();
   return (
-    <div role="alert" className="rounded-md border border-warn/40 bg-warn-quiet px-4 py-3 text-sm">
+    <div role="alert" className="border border-warn/40 bg-warn-quiet px-4 py-3 text-sm">
       <p className="font-medium text-warn">{t("error.forbidden")}</p>
       {detail !== undefined && <p className="mt-1 text-ink-muted">{detail}</p>}
     </div>

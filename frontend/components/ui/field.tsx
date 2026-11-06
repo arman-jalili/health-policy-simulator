@@ -8,7 +8,7 @@ import type {
 import { cn } from "@/lib/cn";
 
 const CONTROL =
-  "w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:bg-surface-muted disabled:text-ink-subtle";
+  "w-full rounded-xs border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:bg-surface-muted disabled:text-ink-subtle";
 
 export function Field({
   label,
@@ -25,7 +25,7 @@ export function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label htmlFor={htmlFor} className="block text-sm font-medium text-ink">
+      <label htmlFor={htmlFor} className="block font-heading text-sm font-medium text-ink">
         {label}
       </label>
       {children}
@@ -44,7 +44,7 @@ export function Field({
 }
 
 export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(CONTROL, "h-9", className)} {...props} />;
+  return <input className={cn(CONTROL, "h-10", className)} {...props} />;
 }
 
 export function TextArea({ className, rows = 4, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -53,7 +53,7 @@ export function TextArea({ className, rows = 4, ...props }: TextareaHTMLAttribut
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(CONTROL, "h-9", className)} {...props}>
+    <select className={cn(CONTROL, "h-10", className)} {...props}>
       {children}
     </select>
   );

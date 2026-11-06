@@ -19,6 +19,7 @@ export type IconName =
   | "external"
   | "download"
   | "print"
+  | "search"
   | "menu";
 
 interface IconProps extends SVGProps<SVGSVGElement> {
@@ -113,6 +114,12 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M6 9V4h12v5" />
       <rect x="4" y="9" width="16" height="8" rx="1" />
       <path d="M7 17h10v4H7z" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m16.5 16.5 4 4" />
     </>
   ),
   menu: (

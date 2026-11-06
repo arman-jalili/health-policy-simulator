@@ -13,15 +13,15 @@ export interface ChartPalette {
 
 const FALLBACK: ChartPalette = {
   surface: "#ffffff",
-  ink: "#1f2426",
-  muted: "#5a6567",
-  line: "#d9d7cf",
-  accent: "#a81e2e",
-  ok: "#1d6b4f",
+  ink: "#475256",
+  muted: "#74767b",
+  line: "#e0e4e5",
+  accent: "#007a4f",
+  ok: "#007a4f",
   warn: "#8a5a00",
-  danger: "#a81e2e",
-  veto: "#6e141f",
-  info: "#1a5f8a",
+  danger: "#b3261e",
+  veto: "#7a1f1f",
+  info: "#006464",
 };
 
 export function readChartPalette(): ChartPalette {

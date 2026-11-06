@@ -392,11 +392,11 @@ export default function SettingsPage() {
               value={settings.theme}
               onChange={(event) =>
                 updateSettings({
-                  theme: event.target.value as "paper" | "ink" | "dark" | "system",
+                  theme: event.target.value as "portal" | "contrast",
                 })
               }
             >
-              {["paper", "ink", "dark", "system"].map((value) => (
+              {["portal", "contrast"].map((value) => (
                 <option key={value} value={value}>
                   {enumLabel("theme", value, locale)}
                 </option>

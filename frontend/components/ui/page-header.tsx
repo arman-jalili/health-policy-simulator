@@ -20,13 +20,17 @@ export function PageHeader({
   readonly meta?: ReactNode;
 }) {
   return (
-    <header className="mb-5">
+    <header className="mb-6 border-b border-line pb-5">
       {crumbs !== undefined && crumbs.length > 0 && (
-        <nav aria-label="Brotkrümel" className="mb-2 text-2xs text-ink-muted">
-          <ol className="flex flex-wrap items-center gap-1">
+        <nav aria-label="Brotkrümel" className="mb-3 text-2xs text-ink-muted">
+          <ol className="flex flex-wrap items-center gap-1.5">
             {crumbs.map((crumb, index) => (
-              <li key={`${crumb.label}-${index}`} className="flex items-center gap-1">
-                {index > 0 && <span aria-hidden="true">/</span>}
+              <li key={`${crumb.label}-${index}`} className="flex items-center gap-1.5">
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-ink-subtle">
+                    /
+                  </span>
+                )}
                 {crumb.href !== undefined ? (
                   <Link href={crumb.href} className="no-underline hover:underline">
                     {crumb.label}
@@ -39,11 +43,11 @@ export function PageHeader({
           </ol>
         </nav>
       )}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl leading-tight">{title}</h1>
+          <h1 className="text-2xl">{title}</h1>
           {subtitle !== undefined && (
-            <p className="mt-1 max-w-prose text-sm text-ink-muted">{subtitle}</p>
+            <p className="mt-2 max-w-prose text-base text-ink-muted">{subtitle}</p>
           )}
         </div>
         {actions !== undefined && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

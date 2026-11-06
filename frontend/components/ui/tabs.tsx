@@ -18,7 +18,7 @@ export function Tabs({ items }: { readonly items: readonly TabItem[] }) {
   const { t } = useSettings();
   return (
     <nav aria-label={t("run.tabs.console")} className="border-b border-line">
-      <ul className="flex gap-1 overflow-x-auto">
+      <ul className="flex gap-0 overflow-x-auto">
         {items.map((item) => {
           const active =
             item.exact === true ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -28,10 +28,10 @@ export function Tabs({ items }: { readonly items: readonly TabItem[] }) {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-10 items-center whitespace-nowrap border-b-2 px-3 text-sm no-underline",
+                  "inline-flex h-11 items-center whitespace-nowrap border-b-[3px] px-3 font-heading text-[0.8125rem] font-bold uppercase tracking-[0.04em] no-underline transition-colors",
                   active
-                    ? "border-accent font-semibold text-accent"
-                    : "border-transparent text-ink-muted hover:text-ink",
+                    ? "border-accent text-accent"
+                    : "border-transparent text-ink-muted hover:text-accent",
                 )}
               >
                 {t(item.labelKey)}

@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 
 export function Card({ children, className }: { readonly children: ReactNode; readonly className?: string }) {
   return (
-    <section className={cn("rounded-md border border-line bg-surface", className)}>{children}</section>
+    <section className={cn("border border-line bg-surface", className)}>{children}</section>
   );
 }
 
@@ -20,9 +20,9 @@ export function CardHeader({
   readonly id?: string | undefined;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line bg-surface-muted px-5 py-3">
       <div className="min-w-0">
-        <h2 id={id} className="text-base font-semibold">
+        <h2 id={id} className="font-heading text-lg font-semibold text-ink">
           {title}
         </h2>
         {description !== undefined && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
@@ -33,5 +33,5 @@ export function CardHeader({
 }
 
 export function CardBody({ children, className }: { readonly children: ReactNode; readonly className?: string }) {
-  return <div className={cn("px-4 py-3", className)}>{children}</div>;
+  return <div className={cn("px-5 py-4", className)}>{children}</div>;
 }

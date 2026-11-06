@@ -3,7 +3,11 @@ import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 export function TableWrap({ children, className }: { readonly children: ReactNode; readonly className?: string }) {
-  return <div className={cn("overflow-x-auto rounded-md border border-line bg-surface", className)}>{children}</div>;
+  return (
+    <div tabIndex={0} className={cn("overflow-x-auto border border-line bg-surface", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function Table({ children, caption }: { readonly children: ReactNode; readonly caption?: string }) {
