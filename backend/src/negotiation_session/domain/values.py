@@ -3,9 +3,8 @@
 Canonical: ``.pi/architecture/modules/negotiation-session.md``
 
 Value objects are immutable and equal by value. ``NegotiationPhase`` is the monotonic state
-label; ``StoppingCondition`` is the named terminal rule with its parameters. Rule-bearing
-methods raise ``NotImplementedError`` naming the implementing issue — their signatures are
-frozen now and may not change without a new freeze entry.
+label; ``StoppingCondition`` is the named terminal rule with its parameters. Their signatures
+are frozen and may not change without a new freeze entry.
 """
 
 from __future__ import annotations

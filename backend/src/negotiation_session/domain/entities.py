@@ -3,8 +3,7 @@
 Canonical: ``.pi/architecture/modules/negotiation-session.md`` (Owned entities and value objects)
 
 These entities live inside the ``SimulationRun`` aggregate and are only mutated through it.
-Methods whose component is not implemented yet raise ``NotImplementedError`` naming the
-implementing issue; their signatures and return types are frozen.
+Their signatures and return types are frozen.
 """
 
 from __future__ import annotations

@@ -3,8 +3,7 @@
 Canonical: ``.pi/architecture/modules/negotiation-session.md`` (Aggregate root — SimulationRun)
 
 The run is the consistency boundary: every guard below is enforced inside one aggregate
-transaction, and every state change appends to ``events``. Components whose issue has not landed
-yet raise ``NotImplementedError`` naming that issue.
+transaction, and every state change appends to ``events``.
 """
 
 from __future__ import annotations
