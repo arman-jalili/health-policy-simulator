@@ -46,6 +46,7 @@ from negotiation_session.domain.events import (
     RoundOpened,
     SimulationRunOpened,
 )
+from negotiation_session.domain.services import RoundRobinTurnOrder
 from negotiation_session.domain.values import (
     ArgumentId,
     ArgumentStance,
@@ -355,10 +356,11 @@ class SimulationRun:
         )
 
     def turn_order(self) -> tuple[TurnAssignment, ...]:
-        topic = TopicRef(self.mandate.question)
-        return tuple(
-            TurnAssignment(stakeholder=stakeholder, topic=topic, order=index)
-            for index, stakeholder in enumerate(sorted(self.bound))
+        topics = tuple(self.conflicts) or (TopicRef(self.mandate.question),)
+        return RoundRobinTurnOrder().assign(
+            bound=self.bound,
+            round_number=len(self.rounds) + 1,
+            topics=topics,
         )
 
     def drain_events(self) -> list[DomainEvent]:
