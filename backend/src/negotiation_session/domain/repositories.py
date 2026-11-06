@@ -23,6 +23,10 @@ class SimulationRunRepository(Protocol):
 
     async def get(self, run_id: RunId) -> SimulationRun | None: ...
 
+    async def all_ids(self) -> Sequence[RunId]:
+        """List persisted run ids for read-model indexes; never used to mutate state."""
+        ...
+
     async def save(self, run: SimulationRun) -> None:
         """Persist the run and append its drained events in the same transaction."""
         ...

@@ -18,14 +18,23 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from claim_validation.composition import build_container as build_claim_validation_container
 from claim_validation.interfaces.http.router import router as claim_validation_router
+from consensus_analysis.application.commands import RunClosedRequest as ConsensusRunClosedRequest
 from consensus_analysis.application.dto import ModelledEstimate
 from consensus_analysis.application.estimators import AssumedEstimator
+from consensus_analysis.application.ports import UnitOfWork as ConsensusUnitOfWorkPort
 from consensus_analysis.composition import build_container as build_consensus_container
 from consensus_analysis.domain.entities import PackageComponent
 from consensus_analysis.domain.errors import ConsensusAnalysisUnavailable
-from consensus_analysis.domain.values import BasisKind, RunId, ScenarioId
+from consensus_analysis.domain.repositories import ConsensusRepository
+from consensus_analysis.domain.values import BasisKind, ScenarioId
+from consensus_analysis.domain.values import RunId as ConsensusRunId
 from consensus_analysis.infrastructure.acl import IllustrativeExampleCatalog
 from consensus_analysis.infrastructure.comparison import LexicographicRanker
+from consensus_analysis.infrastructure.negotiation_sources import (
+    runtime_mandate,
+    runtime_powers,
+    runtime_run_log,
+)
 from consensus_analysis.infrastructure.projection import LogFoldingRebuilder
 from consensus_analysis.infrastructure.repository.memory import (
     InMemoryConsensusRepository,
@@ -37,24 +46,29 @@ from consensus_analysis.infrastructure.repository.memory import (
 from consensus_analysis.infrastructure.repository.memory import (
     NoopUnitOfWork as ConsensusUnitOfWork,
 )
-from consensus_analysis.infrastructure.sources import (
-    unavailable_mandate,
-    unavailable_powers,
-    unavailable_run_log,
+from consensus_analysis.infrastructure.repository.sqlalchemy import (
+    SqlAlchemyConsensusRepository,
 )
 from consensus_analysis.interfaces.http.router import router as consensus_analysis_router
+from decision_brief.application.ports import EventPublisher as BriefEventPublisher
+from decision_brief.application.ports import UnitOfWork as BriefUnitOfWork
 from decision_brief.composition import build_container as build_decision_brief_container
+from decision_brief.domain.repositories import DecisionBriefRepository
 from decision_brief.domain.values import BRIEF_PROMPT_VERSION, SimulationDisclaimer
-from decision_brief.infrastructure.acl import EvidenceCorpusCitationResolver
-from decision_brief.infrastructure.failclosed import (
-    UnwiredConsensusSource,
-    UnwiredHistorySource,
-    UnwiredProvenanceGate,
+from decision_brief.infrastructure.acl import (
+    ConsensusViewAcl,
+    EvidenceCorpusCitationResolver,
+    GovernanceProvenanceGate,
+    NegotiationHistoryAcl,
 )
 from decision_brief.infrastructure.projection import BriefProjectionAdapter
 from decision_brief.infrastructure.repository.memory import InMemoryDecisionBriefRepository
+from decision_brief.infrastructure.repository.sqlalchemy import (
+    SqlAlchemyDecisionBriefRepository,
+)
 from decision_brief.infrastructure.runtime import (
     LoggingEventPublisher,
+    SharedOutboxEventPublisher,
     UuidFactory,
 )
 from decision_brief.interfaces.http.router import router as decision_brief_router
@@ -65,6 +79,7 @@ from evidence_retrieval.composition import build_container as build_retrieval_co
 from evidence_retrieval.interfaces.http.router import router as evidence_retrieval_router
 from governance_compliance.composition import build_container as build_governance_container
 from governance_compliance.infrastructure.allowlist import StaticAllowlistSource, from_published
+from governance_compliance.infrastructure.facts import NegotiationProvenanceFacts
 from governance_compliance.infrastructure.figures import ClaimValidationFigureVerdicts
 from governance_compliance.interfaces.http.router import router as governance_compliance_router
 from identity_access.composition import build_identity_access_container
@@ -82,6 +97,7 @@ from negotiation_session.interfaces.http.router import router as negotiation_ses
 from shared.clock import SystemClock
 from shared.config import Settings, get_settings
 from shared.db import Database
+from shared.db import UnitOfWork as DbUnitOfWork
 from shared.enums import Persistence
 from shared.http.errors import register_error_handlers
 from shared.http.health import router as health_router
@@ -171,26 +187,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.stakeholder_model = build_stakeholder_container(app_settings, database)
     app.state.claim_validation = build_claim_validation_container(app_settings, database)
     app.state.simulation_orchestration = build_simulation_container(app_settings, database)
-    app.state.consensus_analysis = build_consensus_container(
-        app_settings,
-        database,
-        consensus=InMemoryConsensusRepository(),
-        packages=InMemoryPackageRepository(),
-        scenarios=InMemoryScenarioRepository(),
-        log=unavailable_run_log(),
-        powers=unavailable_powers(),
-        mandate=unavailable_mandate(),
-        estimation={BasisKind.ASSUMED: AssumedEstimator()},
-        catalogue=IllustrativeExampleCatalog(examples=()),
-        components=_EmptyComponentCatalogue(),
-        llm=_UnavailableLlm(),
-        rebuilder=LogFoldingRebuilder(ids=_ids),
-        ranker=LexicographicRanker(),
-        events=InMemoryEventPublisher(),
-        clock=SystemClock(),
-        ids=_ids,
-        uow=ConsensusUnitOfWork(),
-    )
     app.state.governance_compliance = build_governance_container(
         app_settings,
         database,
@@ -200,11 +196,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         figure_verdicts=ClaimValidationFigureVerdicts(app.state.claim_validation.claims),
     )
     app.state.negotiation_progress = InMemoryProgressBroker()
+    stakeholder_profiles = StakeholderProfiles(app.state.stakeholder_model)
     app.state.negotiation_session = build_negotiation_container(
         app_settings,
         database,
         evidence=RetrievalEvidencePacks(app.state.evidence_retrieval),
-        stakeholders=StakeholderProfiles(app.state.stakeholder_model),
+        stakeholders=stakeholder_profiles,
         claims=ClaimVerdicts(app.state.claim_validation),
         governance=GovernanceGuardAdapter(
             app.state.governance_compliance.enforce_institution_only_output
@@ -212,23 +209,85 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         invocations=RequiredInvocationLookup(),
         progress=app.state.negotiation_progress,
     )
+    if app_settings.persistence is Persistence.POSTGRES:
+        consensus_repository: ConsensusRepository = SqlAlchemyConsensusRepository(
+            database.session_factory
+        )
+        consensus_uow: ConsensusUnitOfWorkPort = DbUnitOfWork(database.session_factory)
+    else:
+        consensus_repository = InMemoryConsensusRepository()
+        consensus_uow = ConsensusUnitOfWork()
+    app.state.consensus_analysis = build_consensus_container(
+        app_settings,
+        database,
+        consensus=consensus_repository,
+        packages=InMemoryPackageRepository(),
+        scenarios=InMemoryScenarioRepository(),
+        log=runtime_run_log(app.state.negotiation_session.get_simulation_run),
+        powers=runtime_powers(stakeholder_profiles),
+        mandate=runtime_mandate(app.state.negotiation_session.get_simulation_run),
+        estimation={BasisKind.ASSUMED: AssumedEstimator()},
+        catalogue=IllustrativeExampleCatalog(examples=()),
+        components=_EmptyComponentCatalogue(),
+        llm=_UnavailableLlm(),
+        rebuilder=LogFoldingRebuilder(ids=_ids),
+        ranker=LexicographicRanker(),
+        events=InMemoryEventPublisher(),
+        clock=SystemClock(),
+        ids=_ids,
+        uow=consensus_uow,
+    )
+
+    async def _derive_on_run_closed(run: object) -> None:
+        run_id = getattr(run, "id", None)
+        if run_id is None:
+            return
+        try:
+            await app.state.consensus_analysis.handle_run_closed.execute(
+                ConsensusRunClosedRequest(run_id=ConsensusRunId(str(run_id)))
+            )
+        except Exception as error:  # derivation is fail-closed; never mask the close itself
+            logger.warning("consensus_run_closed_derivation_failed", error=str(error))
+
+    app.state.negotiation_session.subscribe_run_closed(_derive_on_run_closed)
+    app.state.governance_compliance.disclose_position_provenance._facts = (
+        NegotiationProvenanceFacts(
+            runs=app.state.negotiation_session.get_simulation_run,
+            model=app_settings.simulation_model_id,
+            prompt_version="bootstrap-turn@1",
+        )
+    )
+    app.state.governance_provenance = "wired"
+    if app_settings.persistence is Persistence.POSTGRES:
+        brief_repository: DecisionBriefRepository = SqlAlchemyDecisionBriefRepository(
+            database.session_factory
+        )
+        brief_events: BriefEventPublisher = SharedOutboxEventPublisher(database.session_factory)
+        brief_uow: BriefUnitOfWork = DbUnitOfWork(database.session_factory)
+    else:
+        brief_repository = InMemoryDecisionBriefRepository()
+        brief_events = LoggingEventPublisher()
+        brief_uow = ConsensusUnitOfWork()
     app.state.decision_brief = build_decision_brief_container(
         app_settings,
         database,
-        briefs=InMemoryDecisionBriefRepository(),
-        history=UnwiredHistorySource(),
-        consensus=UnwiredConsensusSource(),
+        briefs=brief_repository,
+        history=NegotiationHistoryAcl(runs=app.state.negotiation_session.get_simulation_run),
+        consensus=ConsensusViewAcl(consensus=app.state.consensus_analysis),
         citations=EvidenceCorpusCitationResolver(app.state.corpus.resolve_passage),
-        provenance=UnwiredProvenanceGate(),
+        provenance=GovernanceProvenanceGate(
+            runs=app.state.negotiation_session.get_simulation_run,
+            provenance=app.state.governance_compliance.get_position_provenance,
+        ),
         projection=BriefProjectionAdapter(ids=UuidFactory(), clock=SystemClock()),
         disclaimer=SimulationDisclaimer.canonical(
             model_reference=app_settings.simulation_model_id,
             prompt_version=BRIEF_PROMPT_VERSION,
         ),
-        events=LoggingEventPublisher(),
+        events=brief_events,
         clock=SystemClock(),
         ids=UuidFactory(),
-        uow=ConsensusUnitOfWork(),
+        uow=brief_uow,
         renderer=JsonBriefRenderer(),
     )
 
@@ -266,7 +325,7 @@ _ids = SequentialIdFactory()
 class _EmptyComponentCatalogue:
     """No component catalogue is published yet, so the package cannot assemble itself."""
 
-    async def components(self, run_id: RunId) -> Sequence[PackageComponent]:
+    async def components(self, run_id: ConsensusRunId) -> Sequence[PackageComponent]:
         raise ConsensusAnalysisUnavailable(
             "accepted components are not published per run yet; a package cannot be assembled "
             "around parts nobody accepted"

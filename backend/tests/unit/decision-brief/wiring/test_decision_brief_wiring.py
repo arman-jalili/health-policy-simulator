@@ -225,14 +225,14 @@ def test_the_app_binds_the_container() -> None:
     assert container.renderer.media_type == "application/json"
 
 
-async def test_publication_fails_closed_while_the_provenance_gate_is_unwired(
+async def test_publication_refuses_an_unknown_run_before_any_gate_is_skipped(
     api_client: httpx.AsyncClient,
 ) -> None:
     response = await api_client.post(
         "/api/v1/runs/run_01J/brief", headers={"X-API-Key": "admin-key"}
     )
-    assert response.status_code == 503
-    assert response.json()["code"] in {"BRIEF_GATE_UNAVAILABLE", "INTERNAL_ERROR"}
+    assert response.status_code == 409
+    assert response.json()["code"] == "BRIEF_SOURCE_INCOMPLETE"
 
 
 async def test_an_analyst_cannot_publish_a_brief(api_client: httpx.AsyncClient) -> None:
@@ -495,7 +495,7 @@ def test_the_contract_proofing_script_passes() -> None:
 # ── Readiness reports the gate wiring honestly (#348) ──────────────────────────────
 
 
-def test_readiness_reports_decision_brief_and_its_unwired_gates() -> None:
+def test_readiness_reports_decision_brief_and_its_wired_gates() -> None:
     app = create_app(
         Settings(
             _env_file=None,
@@ -510,8 +510,8 @@ def test_readiness_reports_decision_brief_and_its_unwired_gates() -> None:
     with TestClient(app) as client:
         body = client.get("/readyz").json()
 
-    assert body["checks"]["decision_brief"] == "degraded"
-    assert "UnwiredProvenanceGate" in body["checks"]["decision_brief_gates"]
+    assert body["checks"]["decision_brief"] == "ok"
+    assert body["checks"]["decision_brief_gates"] == "wired"
 
 
 def test_the_runbook_and_dr_plan_exist_and_name_the_deferral() -> None:
@@ -525,3 +525,16 @@ def test_the_runbook_and_dr_plan_exist_and_name_the_deferral() -> None:
     assert "Never** roll back a published brief" in runbook
     assert "D-007" in dr_plan
     assert "ReproductionCheck" in dr_plan
+
+
+def test_production_container_binds_no_fail_closed_stand_in() -> None:
+    app = create_app(
+        Settings(
+            _env_file=None,
+            database_url=DATABASE_URL,
+            persistence=Persistence.MEMORY,
+        )
+    )
+    collaborators = app.state.decision_brief.publish_decision_brief.collaborators()
+
+    assert not [item for item in collaborators if type(item).__name__.startswith("Unwired")]

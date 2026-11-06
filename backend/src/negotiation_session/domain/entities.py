@@ -61,6 +61,7 @@ class NegotiationMandate:
     profile_version: str
     phase: NegotiationPhase = NegotiationPhase.DRAFT
     mandate_hash: str = ""
+    consensus_threshold: float = 0.5
 
     def is_immutable_after_open(self) -> bool:
         """The mandate is frozen once the run left ``DRAFT``."""

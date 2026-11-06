@@ -112,7 +112,7 @@ tests/integration/test_stakeholder_persistence.py      (new, model on corpus)
 
 ## D-005 — GovernanceCompliance provenance facts source
 
-**Status:** Deferred (visible; endpoint fails closed)
+**Status:** Closed by #407 (position/evidence/argument facts + invocation/model reference)
 **Recorded:** 2026-11-06 · governance-compliance epic (#269)
 **Estimate:** ~2 h once NegotiationSession exposes position/argument/run-log reads.
 
@@ -125,6 +125,9 @@ caller can satisfy it. Boot logs `governance_provenance_source_deferred` and `/r
 invocation/prompt/model from SimulationOrchestration, and claim verdicts from ClaimValidation. Replace
 the stub, remove the `deferred` readyz value, and add the public E2E disclosure test named in the module
 W8 table.
+
+**Closed:** `NegotiationProvenanceFacts` reads the aggregate by position id, takes evidence/argument ids
+and the argument's invocation, and `/readyz` reports `governance_provenance: wired`.
 
 ---
 
@@ -151,7 +154,7 @@ and the implementation roadmap's post-hackathon section.*
 
 ## D-008 — NegotiationSession durable persistence
 
-**Status:** Deferred (visible, not silent) · tracked by **#405**
+**Status:** Closed by #405 (migrations 0401/0402 + SQLAlchemy adapters + restart test)
 **Recorded:** 2026-11-06 · epic negotiation-session (#281), `main @ ef2ceb4`
 **Estimate:** ~4–5 h
 
@@ -167,11 +170,15 @@ and the implementation roadmap's post-hackathon section.*
 projection rebuild is exercised on stored runs. Rebuilding a projection from an event log that does not
 survive a restart is not a rebuild.
 
+**Closed:** `0401` stores the aggregate snapshot and child tables; `0402` stores the append-only log with
+store-allocated ordinals. `build_negotiation_container` selects the adapters by `PERSISTENCE`; a run and
+its event log survive an engine dispose + fresh container.
+
 ---
 
 ## D-009 — NegotiationSession → ConsensusAnalysis seam
 
-**Status:** Deferred (fails closed) · tracked by **#406**
+**Status:** Closed by #406 (run-log, powers and mandate ACLs; run-closed subscriber; 0501 adapters)
 **Recorded:** 2026-11-06 · epics negotiation-session (#281) + consensus-analysis (#304)
 **Estimate:** ~6–8 h (three ports + one subscription + `0501` adapters)
 
@@ -187,11 +194,15 @@ survive a restart is not a rebuild.
 `POST /runs/{id}/analysis:derive` answers `503 CONSENSUS_ANALYSIS_UNAVAILABLE`, which is honest — but it is
 a dependency gap, not a verdict.
 
+**Closed:** the runtime binds `NegotiationRunLogSource`, `NegotiationStakeholderPowers` and
+`NegotiationMandateThreshold`; `CloseRound` notifies `HandleRunClosed`; `0501` gets a SQLAlchemy
+repository. A missing run still fails closed with a named reason.
+
 ---
 
 ## D-007 — DecisionBrief upstream bindings
 
-**Status:** Deferred (fail-closed, not skipped)
+**Status:** Closed by #407 (history/consensus/provenance gates bound; 0502 + shared outbox)
 **Owner:** consensus-analysis epic + governance-compliance epic
 **Recorded:** 2026-11-06 · epic decision-brief (#330), issue #346
 **Estimate:** 4–6 h once the two upstream contexts publish the missing reads
@@ -204,11 +215,11 @@ a dependency gap, not a verdict.
 | Projection builder | real (`BriefProjectionAdapter` + `SectionAssembler`) |
 | Citation resolver | real (`EvidenceCorpusCitationResolver` over `corpus.resolve_passage`) |
 | Run-history port | **unwired** (`UnwiredHistorySource`) — NegotiationSession publishes run state, round summaries and conflict topics but no question text and no corpus snapshot pin, and `BriefVersion` requires both |
-| Consensus port | **unwired** (`UnwiredConsensusSource`) — the consensus-analysis container is not mounted in `shared/app.py` yet |
-| Provenance gate | **unwired** (`UnwiredProvenanceGate`) — GovernanceCompliance exposes per-position provenance, not a run-level disclosure query |
-| Persistence | in-memory repository; migration `0502_decision_brief` has no SQLAlchemy adapter |
-| Events | `LoggingEventPublisher`; not yet on the shared outbox |
-| Signal | publication returns `503 BRIEF_GATE_UNAVAILABLE` (or `409 BRIEF_SOURCE_INCOMPLETE`), never a 201 with a skipped gate |
+| Consensus port | bound to `ConsensusViewAcl` over the mounted consensus container |
+| Provenance gate | bound to `GovernanceProvenanceGate` (all open positions must have a disclosure row) |
+| Persistence | `SqlAlchemyDecisionBriefRepository` over `0502` when `PERSISTENCE=postgres` |
+| Events | `SharedOutboxEventPublisher` writes `shared_event_outbox` |
+| Signal | gated publication returns 201 only when every gate passes; missing run/citation/disclosure is 409/422 |
 
 ### Why it was accepted
 

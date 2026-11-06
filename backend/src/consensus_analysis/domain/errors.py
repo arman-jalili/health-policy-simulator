@@ -228,6 +228,12 @@ class ScenarioNotFound(NotFoundError):
     code = "SCENARIO_NOT_FOUND"
 
 
+class RunNotClosed(ConflictError):
+    """Derivation was requested while the run is still open; that is a state, not a missing port."""
+
+    code = "RUN_NOT_CLOSED"
+
+
 class ConsensusAnalysisUnavailable(ServiceUnavailableError):
     """A required collaborator is unbound; derivation fails closed, never invents agreement."""
 

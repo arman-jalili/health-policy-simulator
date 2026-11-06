@@ -37,6 +37,7 @@ class OpenRunBody(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     round_cap: int | None = Field(default=None, ge=1, le=50)
     stakeholder_ids: list[str] | None = None
+    consensus_threshold: float = Field(default=0.5, gt=0, le=1)
 
 
 class BoundStakeholderBody(BaseModel):
@@ -52,6 +53,29 @@ class OpenRunResponse(BaseModel):
     phase: str
     mandate_hash: str
     bound: list[BoundStakeholderBody]
+
+
+class OpenRoundBody(BaseModel):
+    round: int | None = Field(default=None, ge=1)
+
+
+class OpenRoundResponse(BaseModel):
+    run_id: str
+    round: int
+    closed: bool
+    turn_order: list[str]
+
+
+class LearningInsightBody(BaseModel):
+    insight_type: str = Field(min_length=1)
+    statement: str = Field(min_length=1, max_length=5000)
+    derived_from: list[str] = Field(default_factory=list)
+    round_number: int = Field(default=0, ge=0)
+
+
+class CloseRoundBody(BaseModel):
+    learning: list[LearningInsightBody] = Field(default_factory=list)
+    convergence: str = Field(default="unmeasured", max_length=64)
 
 
 class RunResponse(BaseModel):
@@ -195,6 +219,13 @@ class LearningResponse(BaseModel):
     run_id: str
     round: int
     insights: list[LearningInsightResponse]
+
+
+class CloseRoundResponse(BaseModel):
+    run_id: str
+    round: int
+    learning: LearningResponse
+    stopping_condition: dict[str, object]
 
 
 class LearningListResponse(BaseModel):

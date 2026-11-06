@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Implemented and wired (memory persistence; SQLAlchemy adapters and migrations 0401/0402 deferred)
+**Status:** Implemented and wired (SQLAlchemy snapshot + append-only log in PostgreSQL; memory is the explicit test/local family)
 **Depends:** EvidenceRetrieval (ACL — `EvidencePack` → `ClaimEvidence`), StakeholderModel (partnership — `StakeholderProfileView`), ClaimValidation (partnership — verdicts gate claims), GovernanceCompliance (ACL — output guard), SimulationOrchestration (ACL — command invocation)
 **Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
@@ -499,7 +499,7 @@ the LangGraph nodes; no cross-aggregate transaction joining a run with a corpus 
 |---|---|---|
 | Router + SSE | `app.include_router(negotiation_session_router)`; SSE endpoint shares the progress broker with SimulationOrchestration | boot test asserting both route and stream |
 | Composition | ACL adapters wired to EvidenceRetrieval, StakeholderModel, ClaimValidation, GovernanceCompliance — none stubbed | integration test: a run executes with real ports |
-| Persistence | **Deferred (D-008, #405).** `0401`/`0402` are stubs and the in-memory adapters back both persistence families, so a run does **not** survive a restart; `/events` replays only within the process | the current behaviour is proven by a restart test asserting `404` |
+| Persistence | `0401`/`0402` create the snapshot and append-only log; `PERSISTENCE=postgres` binds the SQLAlchemy adapters, so a run and its `/events` log survive a restart. Memory remains the explicit local family | restart test: engine dispose + fresh container returns the same run and event sequence |
 | Event log | Every state change appends to the run log in the same transaction | replay fold equality test |
 | Guard on the write path | No argument or position can be persisted without a GovernanceCompliance verdict; the port must not have a permissive default | negative test: guard unreachable ⇒ writes fail, not pass |
 | Orchestrator hook | Graph nodes invoke these application services and hold only ids in graph state | architecture test: no graph state fields for positions/arguments |

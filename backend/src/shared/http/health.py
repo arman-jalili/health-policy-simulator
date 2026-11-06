@@ -112,6 +112,14 @@ async def readyz(request: Request) -> JSONResponse:
         checks["decision_brief"] = "degraded" if unwired else "ok"
         checks["decision_brief_gates"] = ",".join(unwired) if unwired else "wired"
 
+    negotiation = getattr(request.app.state, "negotiation_session", None)
+    if negotiation is not None:
+        state, adapter = negotiation.readiness()
+        postgres_configured = "postgres" in str(settings.persistence).lower()
+        healthy = adapter.startswith("SqlAlchemy") if postgres_configured else True
+        checks["negotiation_session"] = state if healthy else "degraded"
+        checks["negotiation_session_persistence"] = adapter
+
     stakeholder = getattr(request.app.state, "stakeholder_model", None)
     if stakeholder is not None:
         institution_count = len(stakeholder.allowlist.institutions)
@@ -120,10 +128,23 @@ async def readyz(request: Request) -> JSONResponse:
 
     consensus = getattr(request.app.state, "consensus_analysis", None)
     if consensus is not None:
-        # Derived projections are always "ok" as a store; the inputs are what can be missing, and a
-        # missing input is a named refusal on the derivation path rather than a broken probe.
-        checks["consensus_analysis"] = "ok"
-        checks["consensus_analysis_projection"] = str(settings.persistence)
+        collaborators = consensus.derive_consensus.collaborators()
+        unavailable = [
+            type(item).__name__
+            for item in collaborators
+            if type(item).__name__.startswith("Unavailable")
+        ]
+        repository = collaborators[0] if collaborators else None
+        adapter = (
+            "postgres"
+            if repository is not None and "SqlAlchemy" in type(repository).__name__
+            else "memory"
+        )
+        postgres_configured = "postgres" in str(settings.persistence).lower()
+        adapter_matches = adapter == "postgres" if postgres_configured else True
+        checks["consensus_analysis"] = "degraded" if unavailable or not adapter_matches else "ok"
+        checks["consensus_analysis_persistence"] = adapter
+        checks["consensus_analysis_sources"] = ",".join(unavailable) if unavailable else "wired"
 
     claims = getattr(request.app.state, "claim_validation", None)
     if claims is not None:
@@ -158,7 +179,9 @@ async def readyz(request: Request) -> JSONResponse:
     if governance is not None:
         checks["governance_compliance"] = "ok"
         checks["governance_allowlist"] = str(len(governance.allowlist.institutions))
-        checks["governance_provenance"] = "deferred"
+        checks["governance_provenance"] = getattr(
+            request.app.state, "governance_provenance", "deferred"
+        )
 
     if failures:
         raise ServiceUnavailableError(

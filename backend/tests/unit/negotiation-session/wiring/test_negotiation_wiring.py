@@ -35,6 +35,8 @@ def test_http_contract_is_exact() -> None:
         ("GET", "/api/v1/runs/{run_id}"),
         ("GET", "/api/v1/runs/{run_id}/events"),
         ("GET", "/api/v1/runs/{run_id}/rounds"),
+        ("POST", "/api/v1/runs/{run_id}/rounds"),
+        ("POST", "/api/v1/runs/{run_id}/rounds/{number}:close"),
         ("POST", "/api/v1/runs/{run_id}/positions"),
         ("POST", "/api/v1/runs/{run_id}/turns"),
         ("POST", "/api/v1/runs/{run_id}/positions/{position_id}:revise"),
@@ -46,6 +48,7 @@ def test_http_contract_is_exact() -> None:
     }
     assert set(routes) == expected
     assert routes[("POST", "/api/v1/runs")].status_code == 202
+    assert routes[("POST", "/api/v1/runs/{run_id}/rounds")].status_code == 201
     assert routes[("POST", "/api/v1/runs/{run_id}/positions")].status_code == 201
     assert routes[("POST", "/api/v1/runs/{run_id}/turns")].status_code == 201
     assert routes[("POST", "/api/v1/runs/{run_id}/abstentions")].status_code == 204
@@ -63,6 +66,7 @@ def test_container_and_factory_are_frozen() -> None:
         "translate_question_to_mandate",
         "select_relevant_stakeholders",
         "open_simulation_run",
+        "open_round",
         "submit_initial_position",
         "take_negotiation_turn",
         "revise_position",
@@ -91,6 +95,7 @@ def test_container_and_factory_are_frozen() -> None:
     assert annotation_names(HttpContainer) == [
         "translate_question_to_mandate",
         "open_simulation_run",
+        "open_round",
         "submit_initial_position",
         "take_negotiation_turn",
         "revise_position",
