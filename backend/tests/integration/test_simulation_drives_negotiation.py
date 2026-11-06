@@ -105,6 +105,8 @@ async def test_configured_prices_show_a_non_zero_cost_for_the_real_stakeholder()
 
     assert usage["total_invocations"] == 1
     assert float(usage["cost"]) > 0.0
+    assert usage["model"] == "scripted-local"
+    assert usage["provider"] == "scripted"
     assert usage["by_stakeholder"][0]["stakeholder"] == "stk_aerztekammer"
     assert float(usage["by_stakeholder"][0]["cost"]) > 0.0
 
@@ -155,7 +157,17 @@ async def test_automated_run_does_not_manufacture_unanimity() -> None:
         records = (await client.get(f"/api/v1/runs/{run_id}/consensus")).json()["records"]
         rounds = (await client.get(f"/api/v1/runs/{run_id}/rounds")).json()["items"]
         events = (await client.get(f"/api/v1/runs/{run_id}/events")).json()["items"]
+        from negotiation_session.domain.values import RunId as NegotiationRunId
 
+        aggregate = await app.state.negotiation_session.get_simulation_run.load(
+            NegotiationRunId(run_id)
+        )
+
+    arguments = [argument for round_ in aggregate.rounds for argument in round_.arguments]
+    assert arguments
+    assert all(argument.text.startswith("[synthetic]") for argument in arguments)
+    assert all("Persona:" not in argument.text for argument in arguments)
+    assert all("Agenda topic:" not in argument.text for argument in arguments)
     assert records
     assert records[0]["support"] < 1.0
     assert records[0]["minorities"]

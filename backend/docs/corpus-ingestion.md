@@ -7,9 +7,8 @@ Canonical: `.pi/architecture/modules/evidence-corpus.md` (pipeline), `docs/demo-
 > demo runs on the one-document `demo-corpus-v1` snapshot. When the work is done, record the snapshot label in
 > D-010 and remove the entry.
 >
-> Before running anything: **finish the backend test suite first** — `pytest -m integration` runs
-> `alembic downgrade base` on `DATABASE_URL` and wipes the database (issue #421). Ingest is the last step
-> before a demo.
+> Integration tests derive and use a separate `<database>_test` database (#421). Still run ingest as the last
+> step before a demo so the snapshot you cite is the snapshot you verified.
 
 ## The short version
 
@@ -35,13 +34,11 @@ tail -f /tmp/ingest.log
 Then assemble packs against the printed `snapshot_id` and point `/settings → Demo-Bootstrap`
 at a seed file that contains it.
 
-## Why not the HTTP API
+## HTTP API or offline script?
 
-`POST /api/v1/corpus/documents` extracts text and saves the document, but the remaining pipeline steps —
-segmentation and passage indexing — have **no route** (issue #424), and `POST /api/v1/corpus/ingestion-runs`
-only records a row. A document ingested over HTTP never becomes searchable.
-
-Two more reasons to stay offline for large files:
+`POST /corpus/documents/{id}:segment`, `:index` and `:publish` now complete the pipeline over HTTP, and
+`POST /corpus/ingestion-runs` processes its paths and records per-path outcomes/reasons (#424, #427). Use the
+API for a handful of files; use the offline script for a multi-gigabyte corpus because:
 
 - The route executes extraction **inline on the event loop** (PyMuPDF work inside `async def`), so the API is
   unresponsive for the whole file.
@@ -69,15 +66,19 @@ starting, and prefer a curated subset for the demo (see below).
 
 ## Scanned documents
 
-`PyMuPdfExtractor` refuses a PDF without a text layer (`ExtractionFailed: no text layer found; route to OCR`),
-and a **sparse** text layer is routed to OCR too (a one-line cover page is enough). The OCR adapter
+Only a PDF with **no text layer at all** is routed to OCR; a sparse or damaged layer is extracted natively
+and may end up quarantined by the quality gate instead of silently discarded. The OCR adapter
 (`TesseractOcrExtractor`) needs the Python packages `pytesseract` + `Pillow` **and the `tesseract` system
-binary**; it runs at ~300 dpi, i.e. seconds per page. Without the binary every OCR-routed file fails — through
-`POST /corpus/ingestion-runs` that failure is reported as a bare `failed` count with no reason (#427).
+binary**; it runs at ~300 dpi, i.e. seconds per page.
+
+`/readyz` reports `ocr: available|absent`. A batch that needs OCR while the stack is absent fails fast with
+`OCR_UNAVAILABLE`, and `GET /corpus/ingestion-runs/{id}` lists `(path, outcome, reason)` for every file, so a
+failed batch never reports only a bare counter (#427).
 
 ```bash
-# is the OCR stack usable? (the script will not tell you — see #427)
+# is the OCR stack usable?
 python -c "import pytesseract; print(pytesseract.get_tesseract_version())" || echo "OCR unavailable"
+curl -s localhost:8000/readyz | jq '.checks.ocr'
 ```
 
 Check the text layer before planning:

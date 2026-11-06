@@ -35,6 +35,18 @@ async def healthz(request: Request) -> dict[str, str]:
     }
 
 
+def _ocr_available() -> bool:
+    """Tesseract is a system binary; the Python wrapper alone cannot OCR anything."""
+    import shutil
+
+    try:
+        import pytesseract  # noqa: F401
+        from PIL import Image  # noqa: F401
+    except ImportError:
+        return False
+    return shutil.which("tesseract") is not None
+
+
 async def _check_llm(health_url: str | None, timeout_s: float) -> tuple[bool, str]:
     """Return ``(ok, status)``; an unset URL is reported as not configured, not a failure."""
     if not health_url:
@@ -76,6 +88,7 @@ async def readyz(request: Request) -> JSONResponse:
             )
         )
 
+    checks["ocr"] = "available" if _ocr_available() else "absent"
     provider = settings.llm_provider.strip().lower()
     checks["llm"] = provider
     checks["llm_model"] = (

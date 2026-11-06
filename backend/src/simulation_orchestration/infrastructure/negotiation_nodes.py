@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from simulation_orchestration.application.commands import RecordAgentInvocationRequest
+from simulation_orchestration.application.errors import LlmOutputUnparseable
 from simulation_orchestration.application.ports import LLMClient, NegotiationGateway
 from simulation_orchestration.application.services import RecordAgentInvocation
 from simulation_orchestration.application.values import (
     GraphState,
-    InvocationId,
     InvocationOutcome,
     LLMRequest,
+    NegotiationTurnBriefing,
     NegotiationTurnCommand,
     PromptRef,
     RunPhase,
 )
+from simulation_orchestration.infrastructure.identity import invocation_identity
 
 _PROMPT = PromptRef("stakeholder-turn", 1)
 
@@ -61,12 +62,14 @@ class NegotiationTurnNode:
         llm: LLMClient,
         model: str,
         synthetic: bool,
+        scripted: bool = False,
     ) -> None:
         self._recorder = recorder
         self._negotiation = negotiation
         self._llm = llm
         self._model = model
         self._synthetic = synthetic
+        self._scripted = scripted
 
     async def execute(self, state: GraphState) -> GraphState:
         actor = state.next_actor
@@ -78,6 +81,10 @@ class NegotiationTurnNode:
             f"Agenda topic: {briefing.topic}. Round {state.round}.\n"
             f"Evidence pack: {briefing.evidence_pack_id}; passages: "
             f"{', '.join(briefing.passage_ids) or 'none'}.\n"
+            f"Interests: {'; '.join(briefing.interests) or 'none'}.\n"
+            f"Constraints: {'; '.join(briefing.constraints) or 'none'}.\n"
+            f"Red lines: {'; '.join(briefing.red_lines) or 'none'}.\n"
+            f"Veto classes: {', '.join(briefing.veto_classes) or 'none'}.\n"
             f"Current stances: {briefing.current_stances or 'none'}.\n"
             f"Previous learning: {briefing.previous_learning or 'none'}.\n"
             "Write one institutional argument. Return JSON only with keys "
@@ -95,13 +102,8 @@ class NegotiationTurnNode:
             )
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
-        decision = _decision(response.text, actor)
-        invocation_id = InvocationId(
-            "inv_"
-            + hashlib.sha256(
-                f"{state.run_id}|{state.round}|{actor}|stakeholder-turn".encode()
-            ).hexdigest()[:26]
-        )
+        decision = _decision(response.text, briefing, synthetic=self._scripted, prompt=prompt)
+        invocation_id = invocation_identity(state.run_id, state.round, actor, "stakeholder-turn")
         await self._recorder.execute(
             RecordAgentInvocationRequest(
                 invocation_id=invocation_id,
@@ -150,8 +152,13 @@ class _Decision:
     argument: str
 
 
-def _decision(text: str, actor: str) -> _Decision:
-    """Parse the model's JSON decision; scripted/non-JSON output gets a deterministic stance."""
+_STANCES = frozenset({"support", "oppose", "qualify", "conditional_accept"})
+
+
+def _decision(
+    text: str, briefing: NegotiationTurnBriefing, *, synthetic: bool, prompt: str
+) -> _Decision:
+    """Parse a real JSON decision; the scripted provider gets an explainable persona policy."""
     payload = text.strip()
     if payload.startswith("```"):
         lines = payload.splitlines()
@@ -160,24 +167,65 @@ def _decision(text: str, actor: str) -> _Decision:
         parsed = json.loads(payload)
     except (TypeError, ValueError):
         parsed = {}
+    if not isinstance(parsed, dict):
+        parsed = {}
+
     stance = str(parsed.get("stance") or "").strip().lower()
-    if stance not in {"support", "oppose", "qualify", "conditional_accept"}:
-        stance = _fallback_stance(actor)
-    proposal = parsed.get("proposal")
-    if isinstance(proposal, dict):
-        proposal_summary = str(proposal.get("summary") or "")
-    else:
-        proposal_summary = str(proposal or "")
-    claims = parsed.get("claims") or []
+    argument = str(parsed.get("argument") or parsed.get("text") or "").strip()
+    echoes_prompt = bool(argument) and (argument in prompt or prompt.strip() in argument)
+    if stance in _STANCES and argument and not echoes_prompt:
+        proposal = parsed.get("proposal")
+        if isinstance(proposal, dict):
+            proposal_summary = str(proposal.get("summary") or "")
+        else:
+            proposal_summary = str(proposal or "")
+        claims = parsed.get("claims") or []
+        return _Decision(
+            stance=stance,
+            proposal=proposal_summary or "Measured position on the agenda",
+            claims=tuple(str(claim) for claim in claims if str(claim).strip()),
+            argument=argument,
+        )
+
+    if not synthetic:
+        reason = "prompt echo" if echoes_prompt else "no parseable stance/argument"
+        raise LlmOutputUnparseable(
+            f"model output was unusable ({reason}); expected JSON with stance and argument"
+        )
+
+    stance, reason = _persona_policy(briefing)
     return _Decision(
         stance=stance,
-        proposal=proposal_summary or "Measured position on the agenda",
-        claims=tuple(str(claim) for claim in claims if str(claim).strip()),
-        argument=str(parsed.get("argument") or parsed.get("text") or text),
+        proposal=f"{briefing.persona_name}: measured position on {briefing.topic}",
+        claims=(),
+        argument=(
+            f"[synthetic] {briefing.persona_name} nimmt eine geprüfte Position zum Thema "
+            f"{briefing.topic} ein. Begründung: {reason}."
+        ),
     )
 
 
-def _fallback_stance(actor: str) -> str:
-    options = ("support", "oppose", "qualify", "conditional_accept")
-    index = int(hashlib.sha256(actor.encode()).hexdigest(), 16) % len(options)
-    return options[index]
+def _persona_policy(briefing: NegotiationTurnBriefing) -> tuple[str, str]:
+    """Derive a stance from the persona card, not from an actor hash.
+
+    The primary interest's weight is the mandate strength: a 1.0 priority supports, a 0.9
+    priority with a veto right is conditional, a slightly weaker priority qualifies. Every
+    branch names the card fact that caused it so the argument survives the jury question.
+    """
+    weights = briefing.interest_weights
+    primary = weights[0] if weights else 0.0
+    interest = briefing.interests[0] if briefing.interests else "no declared interest"
+    veto = briefing.veto_classes[0] if briefing.veto_classes else ""
+    constraint = briefing.constraints[0] if briefing.constraints else ""
+    if primary >= 1.0:
+        return "support", f"priority interest '{interest}' has weight {primary:.2f}"
+    if primary >= 0.9 and veto:
+        return (
+            "conditional_accept",
+            f"veto right over {veto}; priority interest '{interest}' has weight {primary:.2f}",
+        )
+    if primary >= 0.9:
+        return "qualify", f"priority interest '{interest}' has weight {primary:.2f}"
+    if constraint:
+        return "qualify", f"constraint '{constraint}'; priority weight {primary:.2f}"
+    return "oppose", f"no priority above 0.90 on '{interest}' (weight {primary:.2f})"

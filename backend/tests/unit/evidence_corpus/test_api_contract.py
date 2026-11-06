@@ -252,6 +252,14 @@ class TestWiredEndpoints:
         assert read.json()["status"] == "completed"
         assert read.json()["attempted"] == 1
         assert read.json()["failed"] == 1
+        assert read.json()["outcomes"] == [
+            {
+                "path": "/corpus/a.pdf",
+                "outcome": "failed",
+                "reason": read.json()["outcomes"][0]["reason"],
+            }
+        ]
+        assert read.json()["outcomes"][0]["reason"]
 
     async def test_unknown_ingestion_run_uses_the_error_envelope(
         self, client: httpx.AsyncClient

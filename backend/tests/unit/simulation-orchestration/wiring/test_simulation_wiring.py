@@ -65,6 +65,8 @@ def test_container_and_factory_are_frozen() -> None:
         "register_prompt_template",
         "resolve_prompt_template",
         "worker",
+        "model",
+        "provider",
     ]
     assert parameter_names(build_container) == ["settings", "database", "negotiation"]
     assert annotation_names(HttpContainer) == [
@@ -73,6 +75,8 @@ def test_container_and_factory_are_frozen() -> None:
         "pause_or_resume_simulation",
         "get_job",
         "collect_usage_report",
+        "model",
+        "provider",
     ]
 
 

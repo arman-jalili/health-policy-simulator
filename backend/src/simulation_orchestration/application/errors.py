@@ -58,6 +58,12 @@ class LlmProviderFailed(ServiceUnavailableError):
     code = "LLM_PROVIDER_FAILED"
 
 
+class LlmOutputUnparseable(ServiceUnavailableError):
+    """A real provider returned prose or a prompt echo instead of a decision; never guess."""
+
+    code = "LLM_OUTPUT_UNPARSEABLE"
+
+
 class UnknownLastEventId(ValidationFailedError):
     """The supplied Last-Event-ID is unknown or belongs to another run."""
 

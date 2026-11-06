@@ -10,6 +10,8 @@ silently returning empty text, because empty text would look like a quarantine d
 from __future__ import annotations
 
 import io
+import shutil
+from pathlib import Path
 
 import pymupdf
 
@@ -24,6 +26,17 @@ class TesseractOcrExtractor:
 
     def __init__(self, language: str = "deu") -> None:
         self._language = language
+
+    @staticmethod
+    def available() -> bool:
+        """Whether the OCR stack can actually run; never assume the wrapper implies the binary."""
+        try:
+            import pytesseract
+            from PIL import Image  # noqa: F401
+        except ImportError:
+            return False
+        configured = Path(str(pytesseract.pytesseract.tesseract_cmd))
+        return shutil.which("tesseract") is not None or configured.is_file()
 
     async def extract(self, source_uri: str) -> ExtractionOutcome:
         try:

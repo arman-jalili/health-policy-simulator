@@ -71,6 +71,8 @@ class SimulationOrchestrationContainer:
     register_prompt_template: RegisterPromptTemplate
     resolve_prompt_template: ResolvePromptTemplate
     worker: WorkerLoop
+    model: str = ""
+    provider: str = "scripted"
 
 
 def build_container(
@@ -144,6 +146,7 @@ def build_container(
                     and settings.simulation_input_price_per_1k == 0
                     and settings.simulation_output_price_per_1k == 0
                 ),
+                scripted=provider == "scripted",
             ),
         ]
     )
@@ -180,10 +183,14 @@ def build_container(
         ),
         record_agent_invocation=record_agent_invocation,
         get_job=GetJob(jobs=jobs, progress=progress),
-        collect_usage_report=CollectUsageReport(invocations=invocations),
+        collect_usage_report=CollectUsageReport(
+            invocations=invocations, model=model_id, provider=provider
+        ),
         register_prompt_template=RegisterPromptTemplate(
             registry=registry, versioning=PromptVersioning(), clock=clock
         ),
         resolve_prompt_template=ResolvePromptTemplate(registry=registry),
         worker=BackgroundWorker(run_job),
+        model=model_id,
+        provider=provider,
     )

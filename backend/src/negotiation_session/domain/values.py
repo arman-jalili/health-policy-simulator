@@ -179,6 +179,7 @@ class StakeholderBinding:
     institution_name: str
     institution_code: str
     interests: tuple[str, ...] = ()
+    interest_weights: tuple[float, ...] = ()
     constraints: tuple[str, ...] = ()
     red_lines: tuple[str, ...] = ()
     veto_classes: tuple[str, ...] = ()

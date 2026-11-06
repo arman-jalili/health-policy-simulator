@@ -410,6 +410,18 @@ class TestIngestionRun:
         run.record(IngestionOutcome.FAILED)
 
         assert (run.attempted, run.accepted, run.quarantined, run.failed) == (3, 1, 1, 1)
+        assert len(run.outcomes) == 3
+
+    def test_record_keeps_path_and_reason_for_every_outcome(self) -> None:
+        run = IngestionRun(id="run_1", shard_label="shard-1")
+
+        run.record(
+            IngestionOutcome.FAILED, path="/corpus/a.pdf", reason="ExtractionFailed: missing"
+        )
+
+        assert run.outcomes[0].path == "/corpus/a.pdf"
+        assert run.outcomes[0].reason == "ExtractionFailed: missing"
+        assert run.failure_reason == "ExtractionFailed: missing"
 
     def test_complete_closes_once_and_emits_counts(self) -> None:
         run = IngestionRun(id="run_1", shard_label="shard-1")

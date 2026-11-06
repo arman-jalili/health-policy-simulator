@@ -583,8 +583,16 @@ class GetJob:
 
 
 class CollectUsageReport:
-    def __init__(self, *, invocations: InvocationStore) -> None:
+    def __init__(
+        self,
+        *,
+        invocations: InvocationStore,
+        model: str = "",
+        provider: str = "scripted",
+    ) -> None:
         self._invocations = invocations
+        self._model = model
+        self._provider = provider
 
     async def execute(self, request: CollectUsageReportRequest) -> UsageReportResult:
         usage = await self._invocations.usage_for_run(request.run_id)
@@ -596,6 +604,8 @@ class CollectUsageReport:
             cost=usage.cost,
             by_stakeholder=usage.by_stakeholder,
             by_round=usage.by_round,
+            model=self._model,
+            provider=self._provider,
         )
 
 

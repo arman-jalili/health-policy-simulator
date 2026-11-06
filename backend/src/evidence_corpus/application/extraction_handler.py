@@ -12,7 +12,12 @@ from evidence_corpus.application.commands import ExtractDocumentTextRequest
 from evidence_corpus.application.dto import ExtractionOutcome
 from evidence_corpus.application.events import EventPublisher
 from evidence_corpus.application.ports import ExtractionPort, OcrPort
-from evidence_corpus.domain.errors import DocumentNotFound, DocumentTooLarge, ExtractionFailed
+from evidence_corpus.domain.errors import (
+    DocumentNotFound,
+    DocumentTooLarge,
+    ExtractionFailed,
+    OcrUnavailable,
+)
 from evidence_corpus.domain.repositories import DocumentRepository
 from evidence_corpus.domain.rules import PageFactsOcrSelection
 from evidence_corpus.domain.values import ExtractionMethod
@@ -50,6 +55,10 @@ class ExtractDocumentTextHandler:
                 f"document has {facts.page_count} pages; limit is {self._max_pages}"
             )
         method = self._selection.select(facts)
+        if method is ExtractionMethod.OCR and not _ocr_available(self._ocr):
+            raise OcrUnavailable(
+                f"OCR is required for {document.source_uri} but the tesseract stack is absent"
+            )
         try:
             if method is ExtractionMethod.OCR:
                 outcome = await self._ocr.extract(document.source_uri)
@@ -64,3 +73,8 @@ class ExtractDocumentTextHandler:
         await self._documents.save(document)
         await self._events.publish(document.drain_events(), actor=self._actor, trace_id=None)
         return outcome
+
+
+def _ocr_available(ocr: OcrPort) -> bool:
+    probe = getattr(ocr, "available", None)
+    return bool(probe()) if callable(probe) else True

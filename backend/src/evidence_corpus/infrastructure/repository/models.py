@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Date,
     DateTime,
@@ -197,6 +198,9 @@ class IngestionRunRow(Base):
     quarantined: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcomes: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

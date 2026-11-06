@@ -8,7 +8,12 @@ message wording (ADR-004). Codes are uppercase snake case and must stay unique p
 
 from __future__ import annotations
 
-from shared.errors import ConflictError, NotFoundError, ValidationFailedError
+from shared.errors import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationFailedError,
+)
 
 
 class AlreadyExtracted(ConflictError):
@@ -74,6 +79,12 @@ class ExtractionFailed(ValidationFailedError):
 
     def __init__(self, source_uri: str, reason: str) -> None:
         super().__init__(f"extraction failed for {source_uri}: {reason}")
+
+
+class OcrUnavailable(ServiceUnavailableError):
+    """OCR was required but the tesseract binary or its Python stack is absent."""
+
+    code = "OCR_UNAVAILABLE"
 
 
 class DocumentTooLarge(ValidationFailedError):

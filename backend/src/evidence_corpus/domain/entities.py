@@ -270,9 +270,18 @@ class IngestionOutcome(StrEnum):
     FAILED = "failed"
 
 
+@dataclass(frozen=True, slots=True)
+class IngestionOutcomeRecord:
+    """One path's outcome and the reason it happened; never a bare counter."""
+
+    path: str
+    outcome: IngestionOutcome
+    reason: str | None = None
+
+
 @dataclass(slots=True)
 class IngestionRun:
-    """One auditable batch execution: outcome counts and retry lineage."""
+    """One auditable batch execution: outcome counts, per-path reasons and retry lineage."""
 
     id: str
     shard_label: str
@@ -282,10 +291,16 @@ class IngestionRun:
     quarantined: int = 0
     failed: int = 0
     failure_reason: str | None = None
+    outcomes: list[IngestionOutcomeRecord] = field(default_factory=list)
     events: list[DomainEvent] = field(default_factory=list)
 
-    def record(self, outcome: IngestionOutcome) -> None:
-        """Record one document outcome; illegal after the run is closed."""
+    def record(
+        self,
+        outcome: IngestionOutcome,
+        path: str = "",
+        reason: str | None = None,
+    ) -> None:
+        """Record one document outcome with its path and reason; illegal once closed."""
         if self.status is not RunStatus.RUNNING:
             raise RunAlreadyClosed(self.id)
 
@@ -296,6 +311,9 @@ class IngestionRun:
             self.quarantined += 1
         else:
             self.failed += 1
+            if self.failure_reason is None and reason:
+                self.failure_reason = reason
+        self.outcomes.append(IngestionOutcomeRecord(path=path, outcome=outcome, reason=reason))
 
     def complete(self) -> None:
         """Close the run once and emit `IngestionRunCompleted`."""

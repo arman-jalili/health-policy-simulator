@@ -65,6 +65,12 @@ class DocumentStageResponse(BaseModel):
     index: IndexManifestBody | None = None
 
 
+class IngestionOutcomeBody(BaseModel):
+    path: str
+    outcome: str
+    reason: str | None = None
+
+
 class IngestionRunResponse(BaseModel):
     run_id: str
     shard_label: str
@@ -73,6 +79,8 @@ class IngestionRunResponse(BaseModel):
     accepted: int
     quarantined: int
     failed: int
+    outcomes: list[IngestionOutcomeBody] = Field(default_factory=list)
+    failure_reason: str | None = None
 
 
 class OffsetsBody(BaseModel):

@@ -118,8 +118,9 @@ class NegotiationSessionGateway:
         topic = _topic(run)
         pack = await self._evidence_pack_for(run.mandate.question)
         previous = run.rounds[-2].learning if len(run.rounds) >= 2 else None
+        binding = run.bound[actor]
         return NegotiationTurnBriefing(
-            persona_name=run.bound[actor].institution_name,
+            persona_name=binding.institution_name,
             topic=str(topic),
             evidence_pack_id=pack.pack_id,
             passage_ids=pack.passage_ids,
@@ -127,6 +128,12 @@ class NegotiationSessionGateway:
                 json.dumps(previous.to_prompt_payload(), sort_keys=True) if previous else ""
             ),
             current_stances=_current_stances(run),
+            institution_code=binding.institution_code,
+            interests=binding.interests,
+            interest_weights=binding.interest_weights,
+            constraints=binding.constraints,
+            red_lines=binding.red_lines,
+            veto_classes=binding.veto_classes,
         )
 
     async def take_turn(self, command: NegotiationTurnCommand) -> NegotiationTurnView:
