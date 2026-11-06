@@ -319,6 +319,7 @@ class AssessImpact:
                     )
                 )
                 raise
+            self._illustrative.refuse(figure, self._catalogue.examples())
             figures.append(figure)
         assessment = ImpactAssessment.assess(
             assessment_id=AssessmentId(self._ids.new_id("imp")),

@@ -19,9 +19,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from consensus_analysis.domain.entities import MajorityPosition, MinorityPosition, PackageComponent
-from consensus_analysis.domain.errors import MislabeledEstimate, UnbackedEstimate
+from consensus_analysis.domain.errors import (
+    IllustrativeValueRefused,
+    MislabeledEstimate,
+    UnbackedEstimate,
+)
 from consensus_analysis.domain.values import (
     BasisKind,
     ConsensusOutcome,
@@ -37,6 +42,14 @@ from consensus_analysis.domain.values import (
     UncertaintyLabel,
     VetoBlockedOutcome,
 )
+
+
+def _same_number(left: Decimal, right: Decimal) -> bool:
+    """Compare two figures by value, ignoring how they were written down."""
+    left_exponent = int(left.as_tuple().exponent)
+    right_exponent = int(right.as_tuple().exponent)
+    step = Decimal(1).scaleb(min(left_exponent, right_exponent))
+    return left.quantize(step) == right.quantize(step)
 
 
 def ordered(stances: Mapping[StakeholderId, StanceSnapshot]) -> tuple[StanceSnapshot, ...]:
@@ -215,8 +228,16 @@ class IllustrativeValueGuard:
     """Guard: a documentation example can never be persisted as a run outcome (AC 7)."""
 
     def refuse(self, figure: EstimatedFigure, examples: Sequence[DocumentedExample]) -> None:
-        """Raise ``IllustrativeValueRefused`` when the figure reproduces a documented example."""
-        raise NotImplementedError("IllustrativeValueGuard.refuse is implemented by issue #315")
+        """Raise ``IllustrativeValueRefused`` when the figure reproduces a documented example.
+
+        The comparison is numeric, so ``22``, ``22.0`` and ``Decimal("22.00")`` are the same value:
+        the failure this guard prevents is a demo number reappearing as a result, and its rendering
+        is incidental. A coincidental match is indistinguishable from the defect, so it is refused
+        and the example is named — the operator can correct the catalogue or the figure.
+        """
+        for example in examples:
+            if _same_number(figure.value, example.value):
+                raise IllustrativeValueRefused(figure.field, f"{example.value}", example.source)
 
 
 @dataclass(frozen=True, slots=True)

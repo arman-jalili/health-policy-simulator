@@ -102,6 +102,22 @@ class IllustrativeValueRefused(ValidationFailedError):
 
     code = "ILLUSTRATIVE_VALUE_REFUSED"
 
+    def __init__(self, field: str, value: str, source: str) -> None:
+        self.field = field
+        self.value = value
+        self.source = source
+        super().__init__(
+            f"figure {field!r} reproduces the documentation example {value} from {source}; "
+            "a demo number cannot be persisted as an outcome",
+            details=[
+                {
+                    "message": f"value equals the documented example in {source}",
+                    "field": field,
+                    "code": "ILLUSTRATIVE_VALUE_REFUSED",
+                }
+            ],
+        )
+
 
 class FeasibilityContradictsVeto(ConflictError):
     """A scenario marked feasible names a veto holder as consenting (invariant 10, AC 10)."""
