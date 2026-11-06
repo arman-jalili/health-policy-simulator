@@ -54,6 +54,21 @@ class UnbackedEstimate(ValidationFailedError):
 
     code = "UNBACKED_ESTIMATE"
 
+    def __init__(self, field: str, claimed_basis: str, required: str = "assumed") -> None:
+        self.field = field
+        self.claimed_basis = claimed_basis
+        super().__init__(
+            f"figure {field!r} claims basis {claimed_basis!r} without enumerating its inputs; "
+            f"without inputs the basis must be {required!r}",
+            details=[
+                {
+                    "message": f"claim {claimed_basis!r} requires enumerated inputs",
+                    "field": field,
+                    "code": "UNBACKED_ESTIMATE",
+                }
+            ],
+        )
+
 
 class IllustrativeValueRefused(ValidationFailedError):
     """A documentation example was presented as a run outcome (invariant 8, AC 7)."""

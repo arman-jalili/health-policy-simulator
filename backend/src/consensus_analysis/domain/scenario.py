@@ -13,7 +13,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from consensus_analysis.domain.entities import ImpactAssessment
-from consensus_analysis.domain.events import DomainEvent
+from consensus_analysis.domain.events import (
+    DomainEvent,
+    ImpactAssessed,
+    ScenarioDefined,
+)
 from consensus_analysis.domain.values import (
     BaselineRef,
     Horizon,
@@ -21,6 +25,7 @@ from consensus_analysis.domain.values import (
     PackageId,
     ScenarioAssumption,
     ScenarioId,
+    UncertaintyLabel,
 )
 
 
@@ -49,12 +54,51 @@ class Scenario:
         assumptions: Sequence[ScenarioAssumption] = (),
     ) -> Scenario:
         """Define the counterfactual before any figure is estimated."""
-        raise NotImplementedError("Scenario.define is implemented by issue #313")
+        scenario = cls(
+            id=scenario_id,
+            package_id=package_id,
+            baseline=baseline,
+            horizon=horizon,
+            log_position=log_position,
+            assumptions=tuple(assumptions),
+        )
+        scenario.events.append(
+            ScenarioDefined(
+                scenario_id=scenario_id,
+                baseline=baseline.label,
+                horizon=horizon.years,
+                assumption_count=len(scenario.assumptions),
+            )
+        )
+        return scenario
 
     def assess(self, assessment: ImpactAssessment) -> None:
         """Attach an assessment that references this scenario and its package (invariant 9)."""
-        raise NotImplementedError("Scenario.assess is implemented by issue #313")
+        if assessment.scenario_id != self.id:
+            raise ValueError(
+                "ImpactAssessment must reference the scenario it is attached to "
+                f"({assessment.scenario_id!r} != {self.id!r})"
+            )
+        if assessment.package_id != self.package_id:
+            raise ValueError(
+                "ImpactAssessment must reference this scenario's package "
+                f"({assessment.package_id!r} != {self.package_id!r})"
+            )
+        self.assessments = (*self.assessments, assessment)
+        counts: dict[str, int] = {}
+        for figure in assessment.figures:
+            counts[figure.basis.kind.value] = counts.get(figure.basis.kind.value, 0) + 1
+        certainty = assessment.figures[0].label if assessment.figures else None
+        self.events.append(
+            ImpactAssessed(
+                scenario_id=self.id,
+                basis_counts=counts,
+                uncertainty=certainty or UncertaintyLabel.ASSUMED,
+            )
+        )
 
     def drain_events(self) -> tuple[DomainEvent, ...]:
         """Return and clear the pending events for the outbox in the saving transaction."""
-        raise NotImplementedError("Scenario.drain_events is implemented by issue #313")
+        drained = tuple(self.events)
+        self.events.clear()
+        return drained
