@@ -174,14 +174,17 @@ Bootstrap only — no bounded contexts.
 **Phase 3 re-verified:** 2026-11-06 on `df61791`, after the correction batch (#271) and the metering/SSE
 batch (#276).
 
-- ClaimValidation: unchanged from the previous verification — tolerance, provenance, escalation, causal and
-  qualitative paths hold; measure identity, contradiction production and German parsing are now wired
-  (verified through the API), with one casing gap in the unit table (#277).
+- ClaimValidation: tolerance, provenance, escalation, causal and qualitative paths hold; measure identity,
+  contradiction production and German parsing are wired and verified through the API. Unit normalisation is
+  case-, whitespace- and idempotence-clean (`Count`/`COUNT`/` count ` → `count`; unknown units pass through
+  lowercased).
 - SimulationOrchestration: budget guard, pause/resume, retries, recovery, worker liveness hold. Metering now
   reads the provider response (model, tokens, latency) and is idempotent on a derived invocation id; zero
   pricing is permissive by default but reported by `/readyz` as `simulation_pricing: zero`. SSE validates
-  `Last-Event-ID` before streaming and replays gap-free; the live window is still capped by a 0.5 s idle
-  timeout (#278).
+  `Last-Event-ID` before streaming and replays gap-free. Liveness verified on `6db19f5`: no idle cutoff,
+  `: ping` heartbeats, every server close carries `run.stream_closed` with a reason (`run.completed` /
+  `run.failed` / `max_idle`), heartbeats and the idle cap are configurable, and a client disconnect cancels
+  polling and is counted.
 - GovernanceCompliance: GC-001 detects honourific-free names from the curated list, GC-002 resists
   relabelling via the person detector, GC-005 rejects a contradicted figure end-to-end, and the adversarial
   corpus now contains the real attack strings. Provenance remains a visible 422 (`governance_provenance:
@@ -239,8 +242,8 @@ not read as "verified".
 - [x] SSE reconnect with `Last-Event-ID` replays without gaps or duplicates — verified on `df61791`:
   resume after event 1 returns exactly the remaining events, after the last returns nothing, unknown or
   foreign ids return `400 UNKNOWN_LAST_EVENT_ID` **before** the stream opens, and a completed run closes
-  with `run.completed`. Caveat recorded in #278: the live window ends after 0.5 s of idleness, so a paused
-  run's stream closes without a terminal marker
+  with `run.completed` and a `run.stream_closed` frame carrying the reason. A paused run stays open until
+  `SIMULATION_STREAM_IDLE_S` (default 3600 s) and emits `: ping` heartbeats meanwhile
 
 ---
 
