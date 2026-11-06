@@ -106,6 +106,20 @@ class BriefNotPublished(ConflictError):
     code = "BRIEF_NOT_PUBLISHED"
 
 
+class BriefVersionConflict(ConflictError):
+    """A successor must be version N+1 of the same run and reference N (AC 7)."""
+
+    code = "BRIEF_VERSION_CONFLICT"
+
+    def __init__(self, expected: int, actual: int) -> None:
+        self.expected = expected
+        self.actual = actual
+        super().__init__(
+            f"successor must be version {expected} referencing version {expected - 1}, "
+            f"got version {actual}"
+        )
+
+
 class BriefGateUnavailable(AppError):
     """A publication gate is not bound; publication fails closed and can never skip the gate."""
 

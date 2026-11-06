@@ -31,10 +31,16 @@ from decision_brief.application.ports import (
     RunHistorySource,
     UnitOfWork,
 )
+from decision_brief.domain.decision_brief import DecisionBrief
 from decision_brief.domain.errors import BriefNotFound, BriefNotPublished
 from decision_brief.domain.repositories import DecisionBriefRepository
 from decision_brief.domain.services import BriefProjectionBuilder
-from decision_brief.domain.values import BriefStatus, SimulationDisclaimer
+from decision_brief.domain.values import (
+    BriefId,
+    BriefStatus,
+    BriefVersion,
+    SimulationDisclaimer,
+)
 
 
 class PublishDecisionBrief:
@@ -112,9 +118,39 @@ class VersionDecisionBrief:
         return (self._briefs, self._events, self._clock, self._ids, self._uow)
 
     async def execute(self, request: VersionDecisionBriefRequest) -> BriefResult:
-        raise NotImplementedError(
-            "VersionDecisionBrief.execute is implemented by issue-decision-brief-lineage"
+        if not request.reason.strip():
+            raise ValueError("a successor version requires a reason")
+        previous = await self._briefs.get(request.brief_id)
+        if previous is None:
+            raise BriefNotFound(f"brief {request.brief_id} was not found")
+        if not previous.is_published():
+            raise BriefNotPublished(
+                f"brief {request.brief_id} must be published before it can be versioned"
+            )
+        successor = DecisionBrief(
+            id=BriefId(self._ids.new_id("brf")),
+            run_id=previous.run_id,
+            version=BriefVersion(
+                number=previous.version.number + 1,
+                run_id=previous.run_id,
+                snapshot_ref=previous.version.snapshot_ref,
+                generated_at=self._clock.now(),
+                previous_version=previous.version.number,
+                reason=request.reason,
+            ),
+            sections=dict(previous.sections),
+            rejected_proposals=previous.rejected_proposals,
+            disclaimer=previous.disclaimer,
+            outcomes=previous.outcomes,
         )
+        successor.publish()
+        async with self._uow.transaction():
+            previous.supersede_by(successor, reason=request.reason)
+            await self._briefs.save(previous)
+            await self._briefs.save(successor)
+            versioned = previous.events[-1]
+            await self._events.publish([versioned, *successor.events])
+        return BriefResult(brief=successor, citation_count=successor.citation_count())
 
 
 class GetDecisionBrief:

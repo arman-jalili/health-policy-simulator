@@ -20,6 +20,8 @@ from typing import Any
 
 from decision_brief.domain.entities import BriefSection, RejectedProposalRecord
 from decision_brief.domain.errors import (
+    BriefNotPublished,
+    BriefVersionConflict,
     DisclosureMissing,
     IncompleteBrief,
     PublishedBriefIsImmutable,
@@ -29,6 +31,7 @@ from decision_brief.domain.events import (
     BriefBlockedByMissingDisclosure,
     CitationResolutionFailed,
     DecisionBriefPublished,
+    DecisionBriefVersioned,
     DomainEvent,
     RejectedProposalDisclosed,
 )
@@ -204,10 +207,28 @@ class DecisionBrief:
             raise PublishedBriefIsImmutable(str(self.id))
 
     def supersede_by(self, successor: DecisionBrief, *, reason: str) -> DecisionBrief:
-        """Return the successor version N+1 that references this version and the reason (AC 7)."""
-        raise NotImplementedError(
-            "DecisionBrief.supersede_by is implemented by issue-decision-brief-lineage"
-        )
+        """Mark this version superseded by N+1 and return the successor (AC 7).
+
+        The prior version keeps its content and stays retrievable; only its lifecycle moves. A
+        successor is accepted only when it is the next version of the same run and names this
+        version as its predecessor.
+        """
+        if not self.is_published():
+            raise BriefNotPublished(
+                f"brief {self.id} must be published before it can be superseded"
+            )
+        if successor.run_id != self.run_id:
+            raise BriefVersionConflict(self.version.number + 1, successor.version.number)
+        if (
+            successor.version.number != self.version.number + 1
+            or successor.version.previous_version != self.version.number
+            or successor.version.reason != reason
+        ):
+            raise BriefVersionConflict(self.version.number + 1, successor.version.number)
+        # The lifecycle transition is the one legal change to a published version.
+        object.__setattr__(self, "status", BriefStatus.SUPERSEDED)
+        self.events.append(DecisionBriefVersioned(successor.id, self.version.number, reason))
+        return successor
 
     # ── publication gates (one named rule each: they are the audit trail) ──────────────
 

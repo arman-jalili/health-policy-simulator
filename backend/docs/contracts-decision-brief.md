@@ -72,7 +72,7 @@ assert_rejected_proposals_disclosed(measures) -> None   # implemented (#332): ru
 resolve_citations(resolved) -> None                    # implemented (#336): fold resolver output in
 publish() -> None                                      # implemented (#332): all gates, then freeze
 assert_immutable() -> None                             # implemented (#332): published guard
-supersede_by(successor, *, reason) -> DecisionBrief    # stub: lineage issue
+supersede_by(successor, *, reason) -> DecisionBrief    # implemented (#341): N -> SUPERSEDED, return N+1
 ```
 
 `publish()` runs its gates in reading order and only then freezes: completeness →
@@ -87,6 +87,15 @@ recorded in #332; an empty run list is a legitimate "no refusals" result).
 
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
+
+## Lineage (#341)
+
+`VersionDecisionBrief.execute` builds version N+1 from N (same run, same snapshot, `previous_version = N`,
+mandatory reason), publishes it through the same gates, and in one transaction marks N `SUPERSEDED`,
+saves both versions and publishes `DecisionBriefVersioned{brief_id, previous_version, reason}` followed
+by the successor's events. N keeps its content and stays retrievable — only its lifecycle moves.
+`supersede_by` refuses a draft (`BRIEF_NOT_PUBLISHED`), another run, a version that is not N+1 or a
+successor whose `previous_version`/`reason` disagrees (`BRIEF_VERSION_CONFLICT`).
 
 ## Immutability (#340)
 
@@ -164,8 +173,8 @@ matching method signature.
 
 Implemented services: `GetDecisionBrief`, `ListBriefVersions` and `ListCitations` read through
 `DecisionBriefRepository` (`BriefNotFound` for unknown ids; `BriefNotPublished` before publishing).
-`PublishDecisionBrief`, `VersionDecisionBrief` and `DecisionBrief.supersede_by` remain stubs owned by
-their gate issues.
+`PublishDecisionBrief` remains the stub owned by its publication issue; `VersionDecisionBrief` and
+`supersede_by` are implemented (#341).
 
 ## API contract (frozen)
 
