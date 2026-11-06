@@ -1170,7 +1170,7 @@ Track which changes have been synced to implementation:
 | 2026-11-05 | Complete architecture package | evidence-corpus | complete | pass |
 | 2026-11-05 | Complete architecture package | evidence-retrieval | pending | not run |
 | 2026-11-05 | Complete architecture package | stakeholder-model | pending | not run |
-| 2026-11-05 | Complete architecture package | negotiation-session | pending | not run |
+| 2026-11-06 | NegotiationSession implemented, wired and ready (#283-#302) | negotiation-session | complete | pass |
 | 2026-11-05 | Complete architecture package | consensus-analysis | pending | not run |
 | 2026-11-05 | Complete architecture package | decision-brief | pending | not run |
 | 2026-11-05 | Complete architecture package | claim-validation | pending | not run |
