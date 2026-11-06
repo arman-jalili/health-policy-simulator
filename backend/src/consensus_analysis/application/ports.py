@@ -9,15 +9,17 @@ illustrative-value catalogue makes derivation fail closed rather than guess.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
+from consensus_analysis.application.commands import RunClosedRequest
 from consensus_analysis.application.dto import (
     ComparisonEntryResult,
     ModelledEstimate,
     ReferenceFigureView,
+    RunClosedResult,
 )
 from consensus_analysis.domain.consensus_record import ConsensusRecord
 from consensus_analysis.domain.entities import PackageComponent
@@ -82,6 +84,23 @@ class LlmImpactEstimator(Protocol):
     async def estimate(
         self, *, scenario_id: ScenarioId, field: str, context: str
     ) -> ModelledEstimate: ...
+
+
+@runtime_checkable
+class MandateThresholdSource(Protocol):
+    """ACL to the mandate: the threshold is read per run, never defaulted (W8)."""
+
+    async def threshold(self, run_id: RunId) -> ConsensusThreshold: ...
+
+
+@runtime_checkable
+class RunClosedSubscription(Protocol):
+    """Registration point the runtime uses; a handler that is never registered is a defect."""
+
+    def subscribe(
+        self,
+        handler: Callable[[RunClosedRequest], Awaitable[RunClosedResult]],
+    ) -> None: ...
 
 
 @runtime_checkable

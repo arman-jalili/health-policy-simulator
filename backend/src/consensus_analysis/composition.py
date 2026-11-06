@@ -14,11 +14,16 @@ from dataclasses import dataclass
 
 from consensus_analysis.application.estimators import EstimateStrategy
 from consensus_analysis.application.ports import (
+    Clock,
     ComparisonRanker,
+    ComponentCatalogue,
     EventPublisher,
+    IdFactory,
     IllustrativeValueSource,
     LlmImpactEstimator,
+    MandateThresholdSource,
     ProjectionRebuilder,
+    UnitOfWork,
 )
 from consensus_analysis.application.services import (
     AssessImpact,
@@ -37,6 +42,12 @@ from consensus_analysis.domain.repositories import (
     RunLogPort,
     ScenarioRepository,
     StakeholderPowersPort,
+)
+from consensus_analysis.domain.services import (
+    ComponentsCompatible,
+    EstimateValidator,
+    FeasibilityGuard,
+    IllustrativeValueGuard,
 )
 from consensus_analysis.domain.values import BasisKind
 from shared.config import Settings
@@ -65,12 +76,77 @@ def build_container(
     scenarios: ScenarioRepository,
     log: RunLogPort,
     powers: StakeholderPowersPort,
+    mandate: MandateThresholdSource,
     estimation: dict[BasisKind, EstimateStrategy],
     catalogue: IllustrativeValueSource,
+    components: ComponentCatalogue,
     llm: LlmImpactEstimator,
     rebuilder: ProjectionRebuilder,
     ranker: ComparisonRanker,
     events: EventPublisher,
+    clock: Clock,
+    ids: IdFactory,
+    uow: UnitOfWork,
 ) -> ConsensusAnalysisContainer:
-    """Build the container; the runtime integration issue supplies every port."""
-    raise NotImplementedError("consensus-analysis composition is implemented by issue #320")
+    """Build the container from the ports the runtime supplies.
+
+    Nothing is defaulted here: a missing mandate threshold source, rebuild strategy or event
+    publisher stops the boot rather than producing a container that cannot derive.
+    """
+    components_compatible = ComponentsCompatible()
+    validator = EstimateValidator()
+    illustrative = IllustrativeValueGuard()
+    feasibility = FeasibilityGuard()
+    derive = DeriveConsensus(
+        consensus=consensus,
+        log=log,
+        powers=powers,
+        mandate=mandate,
+        rebuilder=rebuilder,
+        events=events,
+        clock=clock,
+        ids=ids,
+        uow=uow,
+    )
+    return ConsensusAnalysisContainer(
+        derive_consensus=derive,
+        get_consensus=GetConsensus(consensus=consensus),
+        list_unresolved_conflicts=ListUnresolvedConflicts(consensus=consensus),
+        compose_compromise_package=ComposeCompromisePackage(
+            packages=packages,
+            consensus=consensus,
+            compatible=components_compatible,
+            catalogue=components,
+            events=events,
+            clock=clock,
+            ids=ids,
+            uow=uow,
+        ),
+        list_packages=ListPackages(packages=packages),
+        assess_impact=AssessImpact(
+            packages=packages,
+            scenarios=scenarios,
+            estimation=estimation,
+            validator=validator,
+            illustrative=illustrative,
+            catalogue=catalogue,
+            feasibility=feasibility,
+            events=events,
+            ids=ids,
+            uow=uow,
+        ),
+        compare_scenarios=CompareScenarios(
+            packages=packages,
+            scenarios=scenarios,
+            consensus=consensus,
+            ranker=ranker,
+        ),
+        rebuild_projections=RebuildProjections(
+            consensus=consensus,
+            log=log,
+            powers=powers,
+            rebuilder=rebuilder,
+            uow=uow,
+        ),
+        handle_run_closed=HandleRunClosed(derive=derive),
+    )
