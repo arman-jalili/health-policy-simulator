@@ -71,6 +71,7 @@ class TestRecordExtractionFailureModes:
 
         assert error.code == "DOCUMENT_NOT_CITABLE"
         assert error.status_code == 409
+        assert str(error) == "document doc_01J0000000000000000000000A is not citable"
 
     def test_quarantine_reason_carries_the_measured_quality(self) -> None:
         from evidence_corpus.domain.values import ExtractionMethod, ExtractionQuality
