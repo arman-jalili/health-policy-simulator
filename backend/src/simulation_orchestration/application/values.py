@@ -182,6 +182,7 @@ class NegotiationTurnCommand:
     round: int
     actor_id: str
     invocation_id: InvocationId
+    text: str = ""
 
 
 @dataclass(frozen=True, slots=True)

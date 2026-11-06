@@ -73,8 +73,11 @@ from decision_brief.infrastructure.runtime import (
 from decision_brief.interfaces.http.router import router as decision_brief_router
 from decision_brief.interfaces.renderer import JsonBriefRenderer
 from evidence_corpus.composition import build_container
+from evidence_corpus.domain.values import ClaimType as CorpusClaimType
 from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
+from evidence_retrieval.application.commands import AssembleEvidencePackRequest
 from evidence_retrieval.composition import build_container as build_retrieval_container
+from evidence_retrieval.domain.values import ClaimText
 from evidence_retrieval.interfaces.http.router import router as evidence_retrieval_router
 from governance_compliance.composition import build_container as build_governance_container
 from governance_compliance.infrastructure.allowlist import StaticAllowlistSource, from_published
@@ -109,6 +112,9 @@ from shared.log_setup import configure_logging, get_logger
 from shared.outbox import OutboxEvent
 from shared.relay import WILDCARD, OutboxRelay
 from simulation_orchestration.composition import build_container as build_simulation_container
+from simulation_orchestration.infrastructure.negotiation_session import (
+    NegotiationSessionGateway,
+)
 from simulation_orchestration.interfaces.http.router import (
     router as simulation_orchestration_router,
 )
@@ -188,7 +194,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.identity_access = build_identity_access_container(app_settings, database)
     app.state.stakeholder_model = build_stakeholder_container(app_settings, database)
     app.state.claim_validation = build_claim_validation_container(app_settings, database)
-    app.state.simulation_orchestration = build_simulation_container(app_settings, database)
     app.state.governance_compliance = build_governance_container(
         app_settings,
         database,
@@ -216,6 +221,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     if app_settings.persistence is Persistence.POSTGRES:
         app.state.governance_compliance.bind_unit_of_work(close_uow)
+
+    async def _evidence_pack_for(claim: str) -> str:
+        existing = await app.state.evidence_retrieval.packs.latest_for_claim(ClaimText(claim))
+        if existing is not None and existing.candidates:
+            return str(existing.id)
+        snapshot = await app.state.corpus.snapshots.latest()
+        if snapshot is None:
+            raise RuntimeError(
+                "no corpus snapshot exists; seed or pin the corpus before simulating"
+            )
+        assembled = await app.state.evidence_retrieval.assemble_pack.execute(
+            AssembleEvidencePackRequest(
+                claim=claim,
+                claim_type=CorpusClaimType.QUALITATIVE,
+                snapshot_id=snapshot.id,
+            )
+        )
+        if assembled.candidates:
+            return str(assembled.pack_id)
+        # A demo question need not share words with a passage; the seeded pack keeps the turn
+        # evidenced rather than submitting a position that cites nothing.
+        seeded = await app.state.evidence_retrieval.packs.latest_for_claim(
+            ClaimText("Die Kassenstellen sollen ausgebaut werden.")
+        )
+        if seeded is not None and seeded.candidates:
+            return str(seeded.id)
+        return str(assembled.pack_id)
+
+    app.state.simulation_orchestration = build_simulation_container(
+        app_settings,
+        database,
+        negotiation=NegotiationSessionGateway(
+            runs=app.state.negotiation_session.get_simulation_run,
+            open_round=app.state.negotiation_session.open_round,
+            submit_position=app.state.negotiation_session.submit_initial_position,
+            take_turn=app.state.negotiation_session.take_negotiation_turn,
+            close_round=app.state.negotiation_session.close_round,
+            evidence_pack_for=_evidence_pack_for,
+        ),
+    )
     if app_settings.persistence is Persistence.POSTGRES:
         consensus_repository: ConsensusRepository = SqlAlchemyConsensusRepository(
             database.session_factory

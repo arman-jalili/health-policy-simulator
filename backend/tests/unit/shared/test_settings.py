@@ -40,6 +40,9 @@ def test_strict_mode_is_allowed_in_production() -> None:
         database_url=DATABASE_URL,
         env="production",
         auth_mode="strict",
+        llm_provider="openai-compatible",
+        llm_base_url="https://llm.example/v1",
+        llm_api_key="test-key",
     )
 
     assert not settings.is_demo
@@ -80,4 +83,7 @@ class TestPersistenceConfiguration:
                 env=environment,
                 auth_mode="strict",
                 persistence="memory",
+                llm_provider="openai-compatible",
+                llm_base_url="https://llm.example/v1",
+                llm_api_key="test-key",
             )

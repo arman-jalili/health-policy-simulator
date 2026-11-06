@@ -73,7 +73,7 @@ async def test_wired_identity_access_runs_end_to_end() -> None:
             readiness = await client.get("/readyz")
             assert readiness.status_code == 200, readiness.text
             assert readiness.json()["checks"]["database"] == "ok"
-            assert readiness.json()["checks"]["llm"] == "not_configured"
+            assert readiness.json()["checks"]["llm"] == "scripted"
 
             created = await client.post(
                 "/api/v1/admin/keys",

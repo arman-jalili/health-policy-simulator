@@ -12,6 +12,7 @@ import pytest
 
 from shared.app import create_app
 from shared.config import Settings
+from shared.demo_seed import seed_demo
 from shared.enums import AuthMode, Persistence
 from simulation_orchestration.application.errors import UnknownModel
 from simulation_orchestration.application.values import GraphState, RunPhase
@@ -29,14 +30,33 @@ def _settings(**overrides: object) -> Settings:
     return Settings(**values)  # type: ignore[arg-type]
 
 
+async def _open_run(
+    client: httpx.AsyncClient, question: str = "Kassenstellen sichern", *, round_cap: int = 1
+) -> str:
+    opened = await client.post(
+        "/api/v1/runs",
+        json={
+            "question": question,
+            "round_cap": round_cap,
+            "stakeholder_ids": ["stk_aerztekammer"],
+        },
+    )
+    assert opened.status_code == 202, opened.text
+    return str(opened.json()["run_id"])
+
+
 async def test_start_emits_progress_without_manual_worker_step() -> None:
     app = create_app(_settings())
+    await seed_demo(app)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
-        started = await client.post("/api/v1/runs/run_1:start", json={"budget": {"max_cost": "1"}})
+        run_id = await _open_run(client)
+        started = await client.post(
+            f"/api/v1/runs/{run_id}:start", json={"budget": {"max_cost": "1"}}
+        )
         assert started.status_code == 202, started.text
         job_id = started.json()["job_id"]
         assert started.json()["status"] == "queued"
@@ -58,7 +78,7 @@ async def test_start_emits_progress_without_manual_worker_step() -> None:
         assert isinstance(sequence, int)
         assert sequence >= 3
 
-        stream = await client.get("/api/v1/runs/run_1/stream")
+        stream = await client.get(f"/api/v1/runs/{run_id}/stream")
         assert stream.status_code == 200, stream.text
         assert stream.headers["content-type"].startswith("text/event-stream")
         assert "event: run.started" in stream.text
@@ -66,7 +86,9 @@ async def test_start_emits_progress_without_manual_worker_step() -> None:
         assert stream.text.index("event: run.started") < stream.text.index("event: run.completed")
 
         last_id = stream.text.rsplit("id: ", 1)[1].split("\n", 1)[0]
-        replay = await client.get("/api/v1/runs/run_1/stream", headers={"Last-Event-ID": last_id})
+        replay = await client.get(
+            f"/api/v1/runs/{run_id}/stream", headers={"Last-Event-ID": last_id}
+        )
         assert replay.status_code == 200, replay.text
         assert replay.text == ""
 
@@ -93,6 +115,7 @@ class _GatedGraph:
 
 async def test_pause_and_resume_through_the_public_api() -> None:
     app = create_app(_settings())
+    await seed_demo(app)
     graph = _GatedGraph()
     cast(Any, app.state.simulation_orchestration.run_simulation_job)._graph = graph
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -100,13 +123,14 @@ async def test_pause_and_resume_through_the_public_api() -> None:
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
-        started = await client.post("/api/v1/runs/run_pause:start", json={})
+        run_id = await _open_run(client, "Pause run")
+        started = await client.post(f"/api/v1/runs/{run_id}:start", json={})
         assert started.status_code == 202, started.text
         job_id = started.json()["job_id"]
         await asyncio.wait_for(graph.started.wait(), timeout=2)
 
         paused = await client.post(
-            "/api/v1/runs/run_pause:pause", json={"action": "pause", "reason": "operator"}
+            f"/api/v1/runs/{run_id}:pause", json={"action": "pause", "reason": "operator"}
         )
         assert paused.status_code == 202, paused.text
         assert paused.json()["status"] == "paused"
@@ -120,7 +144,7 @@ async def test_pause_and_resume_through_the_public_api() -> None:
         assert job["status"] == "paused"
         assert job["checkpoint"]["phase"] == "rounds"
 
-        resumed = await client.post("/api/v1/runs/run_pause:resume", json={"action": "resume"})
+        resumed = await client.post(f"/api/v1/runs/{run_id}:resume", json={"action": "resume"})
         assert resumed.status_code == 202, resumed.text
         assert resumed.json()["status"] == "queued"
 
@@ -131,42 +155,47 @@ async def test_pause_and_resume_through_the_public_api() -> None:
             await asyncio.sleep(0.02)
         assert job["status"] == "completed"
 
-        stream = await client.get("/api/v1/runs/run_pause/stream")
+        stream = await client.get(f"/api/v1/runs/{run_id}/stream")
         assert "event: run.paused" in stream.text
         assert "event: run.resumed" in stream.text
         assert stream.text.index("event: run.paused") < stream.text.index("event: run.resumed")
 
 
-async def test_usage_endpoint_reports_bootstrap_invocations() -> None:
+async def test_usage_endpoint_attributes_invocations_to_real_stakeholders() -> None:
     app = create_app(_settings())
+    await seed_demo(app)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
-        started = await client.post("/api/v1/runs/run_2:start", json={})
+        run_id = await _open_run(client)
+        started = await client.post(f"/api/v1/runs/{run_id}:start", json={})
         job_id = started.json()["job_id"]
         for _ in range(100):
             job = (await client.get(f"/api/v1/jobs/{job_id}")).json()
             if job["status"] == "completed":
                 break
             await asyncio.sleep(0.02)
-        usage = await client.get("/api/v1/runs/run_2/usage")
+        usage = await client.get(f"/api/v1/runs/{run_id}/usage")
         assert usage.status_code == 200, usage.text
-        assert usage.json()["total_invocations"] == 2
+        assert usage.json()["total_invocations"] == 1
         assert Decimal(usage.json()["cost"]) == Decimal("0")
-        assert job["checkpoint"]["budget_used_invocations"] == 2
+        assert job["checkpoint"]["budget_used_invocations"] == 1
+        assert usage.json()["by_stakeholder"][0]["stakeholder"] == "stk_aerztekammer"
 
 
 async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() -> None:
     app = create_app(_settings())
+    await seed_demo(app)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
+        run_id = await _open_run(client, "Budget run", round_cap=2)
         started = await client.post(
-            "/api/v1/runs/run_budget:start", json={"budget": {"max_invocations": 1}}
+            f"/api/v1/runs/{run_id}:start", json={"budget": {"max_invocations": 1}}
         )
         assert started.status_code == 202, started.text
         job_id = started.json()["job_id"]
@@ -180,11 +209,11 @@ async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() 
         assert "invocations budget exhausted" in job["error"]
         assert job["checkpoint"]["budget_used_invocations"] == 1
 
-        usage = await client.get("/api/v1/runs/run_budget/usage")
+        usage = await client.get(f"/api/v1/runs/{run_id}/usage")
         assert usage.json()["total_invocations"] == 1
 
         resumed = await client.post(
-            "/api/v1/runs/run_budget:resume",
+            f"/api/v1/runs/{run_id}:resume",
             json={"action": "resume", "budget": {"max_invocations": 2}},
         )
         assert resumed.status_code == 202, resumed.text
@@ -197,10 +226,10 @@ async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() 
             await asyncio.sleep(0.02)
         assert job["status"] == "completed"
         assert job["checkpoint"]["budget_used_invocations"] == 2
-        usage = await client.get("/api/v1/runs/run_budget/usage")
+        usage = await client.get(f"/api/v1/runs/{run_id}/usage")
         assert usage.json()["total_invocations"] == 2
 
-        stream = await client.get("/api/v1/runs/run_budget/stream")
+        stream = await client.get(f"/api/v1/runs/{run_id}/stream")
         assert "event: run.budget_exhausted" in stream.text
         assert "event: run.stream_closed" in stream.text
         assert '"reason": "run.completed"' in stream.text
@@ -208,16 +237,18 @@ async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() 
 
 async def test_paused_stream_heartbeats_then_marks_max_idle() -> None:
     app = create_app(_settings(simulation_stream_idle_s=0.15, simulation_stream_heartbeat_s=0.03))
+    await seed_demo(app)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
+        run_id = await _open_run(client, "SSE run")
         started = await client.post(
-            "/api/v1/runs/run_sse:start", json={"budget": {"max_invocations": 0}}
+            f"/api/v1/runs/{run_id}:start", json={"budget": {"max_invocations": 0}}
         )
         assert started.status_code == 202, started.text
-        stream = await client.get("/api/v1/runs/run_sse/stream")
+        stream = await client.get(f"/api/v1/runs/{run_id}/stream")
 
     assert ": ping" in stream.text
     assert "event: run.stream_closed" in stream.text
