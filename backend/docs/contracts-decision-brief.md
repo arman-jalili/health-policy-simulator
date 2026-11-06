@@ -51,7 +51,7 @@ Construction invariants (#333) — a value that exists is valid; violations rais
 | Type | Rejected form |
 |---|---|
 | `BriefSection`, `BriefComponentSlot` | ordinal that is not the kind's frozen ordinal |
-| `CitedStatement` | blank text |
+| `CitedStatement` | blank text; `assert_evidence()` refuses an `evidenced` statement with no citation (claim ids never substitute) |
 | `CitationReference` | blank passage id; blank quote when present |
 | `CitationProvenance` | blank outlet/source URI; `page_from < 1`; `page_to < page_from` |
 | `RejectedProposalRecord` | blank measure; no blocking stakeholder |

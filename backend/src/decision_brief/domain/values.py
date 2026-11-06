@@ -134,6 +134,22 @@ class CitedStatement:
         if not self.text.strip():
             raise ValueError("a cited statement requires text")
 
+    @property
+    def is_evidenced(self) -> bool:
+        """Whether this statement claims to be backed by evidence."""
+        return self.status is EvidenceStatus.EVIDENCED
+
+    def assert_evidence(self) -> None:
+        """Refuse a statement that claims evidence without citing a passage (invariant 5).
+
+        Claim ids are a lookup hint, not proof: they never substitute for a citation, which is why
+        this rule only looks at ``citations``.
+        """
+        from decision_brief.domain.errors import StatementWithoutCitation
+
+        if self.is_evidenced and not self.citations:
+            raise StatementWithoutCitation(self.text)
+
 
 @dataclass(frozen=True, slots=True)
 class BriefVersion:
