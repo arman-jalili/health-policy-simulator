@@ -61,6 +61,15 @@ const messages = {
     en: "One PDF path per line. The paths are read by the backend process.",
   },
   "corpus.pathCount": { de: "{count} Pfade", en: "{count} paths" },
+  "corpus.shardPlaceholder": { de: "z. B. pressespiegel-2020", en: "e.g. pressespiegel-2020" },
+  "corpus.pathsPlaceholder": {
+    de: "z. B. material/2020/apa-01.pdf",
+    en: "e.g. material/2020/apa-01.pdf",
+  },
+  "corpus.startDisabled": {
+    de: "Shard-Bezeichnung und mindestens einen Pfad eingeben.",
+    en: "Enter a shard label and at least one path.",
+  },
   "corpus.start": { de: "Stapel starten", en: "Start batch" },
   "corpus.starting": { de: "Stapel läuft …", en: "Batch running …" },
   "corpus.started": { de: "Ingestion-Stapel gestartet.", en: "Ingestion batch started." },
@@ -70,7 +79,12 @@ const messages = {
     en: "Status, counters and the outcome of every file.",
   },
   "corpus.runId": { de: "Lauf-ID", en: "Run ID" },
+  "corpus.runIdPlaceholder": { de: "z. B. run_01…", en: "e.g. run_01…" },
   "corpus.load": { de: "Laden", en: "Load" },
+  "corpus.loadRunDisabled": {
+    de: "Zuerst eine Lauf-ID eingeben.",
+    en: "Enter a run ID first.",
+  },
   "corpus.refresh": { de: "Aktualisieren", en: "Refresh" },
   "corpus.noRun": { de: "Noch kein Lauf geladen.", en: "No run loaded yet." },
   "corpus.history": { de: "Letzte Läufe", en: "Recent runs" },
@@ -98,6 +112,11 @@ const messages = {
   },
   "corpus.snapshotLabel": { de: "Snapshot-Bezeichnung", en: "Snapshot label" },
   "corpus.snapshotLabelHint": { de: "z. B. pressespiegel-2020.", en: "e.g. pressespiegel-2020." },
+  "corpus.snapshotPlaceholder": { de: "z. B. pressespiegel-2020", en: "e.g. pressespiegel-2020" },
+  "corpus.pinDisabled": {
+    de: "Zuerst eine Snapshot-Bezeichnung eingeben.",
+    en: "Enter a snapshot label first.",
+  },
   "corpus.documentIds": { de: "Dokument-IDs (optional)", en: "Document IDs (optional)" },
   "corpus.documentIdsHint": {
     de: "Leer lassen, um alle indexierten Dokumente zu pinnen.",
@@ -114,6 +133,11 @@ const messages = {
   "corpus.passages": { de: "Passagen", en: "Passages" },
   "corpus.embeddingModel": { de: "Embedding-Modell", en: "Embedding model" },
   "corpus.snapshotLookup": { de: "Snapshot suchen", en: "Find snapshot" },
+  "corpus.snapshotIdPlaceholder": { de: "z. B. snp_01…", en: "e.g. snp_01…" },
+  "corpus.loadSnapshotDisabled": {
+    de: "Zuerst eine Snapshot-ID eingeben.",
+    en: "Enter a snapshot ID first.",
+  },
   "corpus.snapshotHistory": { de: "Letzte Snapshots", en: "Recent snapshots" },
   "corpus.noSnapshots": {
     de: "In diesem Browser wurde noch kein Snapshot gepinnt.",
@@ -132,6 +156,14 @@ const messages = {
   "corpus.sourceUriHint": {
     de: "PDF-Pfad, den der Backend-Prozess lesen kann.",
     en: "PDF path the backend process can read.",
+  },
+  "corpus.sourceUriPlaceholder": {
+    de: "z. B. material/2020/apa-01.pdf",
+    en: "e.g. material/2020/apa-01.pdf",
+  },
+  "corpus.extractDisabled": {
+    de: "Quellpfad, Medium/Ausgabe und Medium ausfüllen.",
+    en: "Fill in the source path, outlet and medium.",
   },
   "corpus.outlet": { de: "Medium/Ausgabe", en: "Outlet" },
   "corpus.publishedOn": { de: "Erscheinungsdatum", en: "Published on" },

@@ -272,7 +272,7 @@ export default function CorpusPage() {
                 id="batch-shard"
                 value={shard}
                 onChange={(event) => setShard(event.target.value)}
-                placeholder="pressespiegel-2020"
+                placeholder={t("corpus.shardPlaceholder")}
                 autoComplete="off"
               />
             </Field>
@@ -282,18 +282,25 @@ export default function CorpusPage() {
                 rows={6}
                 value={pathsText}
                 onChange={(event) => setPathsText(event.target.value)}
-                placeholder={"material/2020/apa-01.pdf\nmaterial/2020/apa-02.pdf"}
+                placeholder={t("corpus.pathsPlaceholder")}
                 className="font-mono text-2xs"
               />
             </Field>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="primary" onClick={startHandler} disabled={!canStart} loading={startBatch.isPending}>
+              <Button
+                variant="primary"
+                onClick={startHandler}
+                disabled={!canStart}
+                disabledReason={!canStart ? t("corpus.startDisabled") : undefined}
+                loading={startBatch.isPending}
+              >
                 {startBatch.isPending ? t("corpus.starting") : t("corpus.start")}
               </Button>
               <span className="text-2xs text-ink-muted">
                 {t("corpus.pathCount", { count: paths.length })}
               </span>
             </div>
+            {!canStart && <p className="text-2xs text-ink-muted">{t("corpus.startDisabled")}</p>}
             {startBatch.error !== null && startBatch.error !== undefined && (
               <ErrorState error={startBatch.error} />
             )}
@@ -325,7 +332,7 @@ export default function CorpusPage() {
                 id="document-uri"
                 value={sourceUri}
                 onChange={(event) => setSourceUri(event.target.value)}
-                placeholder="material/2020/apa-01.pdf"
+                placeholder={t("corpus.sourceUriPlaceholder")}
                 className="font-mono text-2xs"
                 autoComplete="off"
               />
@@ -368,7 +375,13 @@ export default function CorpusPage() {
               </Field>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="primary" onClick={extractHandler} disabled={!canExtract} loading={ingest.isPending}>
+              <Button
+                variant="primary"
+                onClick={extractHandler}
+                disabled={!canExtract}
+                disabledReason={!canExtract ? t("corpus.extractDisabled") : undefined}
+                loading={ingest.isPending}
+              >
                 {ingest.isPending ? t("corpus.extracting") : t("corpus.extract")}
               </Button>
               {documentId !== "" && (
@@ -377,6 +390,7 @@ export default function CorpusPage() {
                 </Button>
               )}
             </div>
+            {!canExtract && <p className="text-2xs text-ink-muted">{t("corpus.extractDisabled")}</p>}
             {ingest.error !== null && ingest.error !== undefined && <ErrorState error={ingest.error} />}
             {publish.error !== null && publish.error !== undefined && (
               <ErrorState error={publish.error} />
@@ -431,13 +445,19 @@ export default function CorpusPage() {
                     id="run-lookup"
                     value={runLookup}
                     onChange={(event) => setRunLookup(event.target.value)}
-                    placeholder="run_..."
+                    placeholder={t("corpus.runIdPlaceholder")}
                     className="font-mono text-2xs"
                     autoComplete="off"
                   />
                 </Field>
               </div>
-              <Button onClick={loadRun} disabled={runLookup.trim() === ""}>
+              <Button
+                onClick={loadRun}
+                disabled={runLookup.trim() === ""}
+                disabledReason={
+                  runLookup.trim() === "" ? t("corpus.loadRunDisabled") : undefined
+                }
+              >
                 {t("corpus.load")}
               </Button>
               {runId !== "" && (
@@ -573,7 +593,7 @@ export default function CorpusPage() {
                 id="snapshot-label"
                 value={snapshotLabel}
                 onChange={(event) => setSnapshotLabel(event.target.value)}
-                placeholder="pressespiegel-2020"
+                placeholder={t("corpus.snapshotPlaceholder")}
                 autoComplete="off"
               />
             </Field>
@@ -592,13 +612,20 @@ export default function CorpusPage() {
               />
             </Field>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="primary" onClick={pinHandler} disabled={!canPin} loading={pin.isPending}>
+              <Button
+                variant="primary"
+                onClick={pinHandler}
+                disabled={!canPin}
+                disabledReason={!canPin ? t("corpus.pinDisabled") : undefined}
+                loading={pin.isPending}
+              >
                 {pin.isPending ? t("corpus.pinning") : t("corpus.pin")}
               </Button>
               <Link href="/settings" className="text-2xs">
                 {t("corpus.seedHint")}
               </Link>
             </div>
+            {!canPin && <p className="text-2xs text-ink-muted">{t("corpus.pinDisabled")}</p>}
             {pin.error !== null && pin.error !== undefined && <ErrorState error={pin.error} />}
 
             <div className="flex flex-wrap items-end gap-2 border-t border-line pt-4">
@@ -608,13 +635,21 @@ export default function CorpusPage() {
                     id="snapshot-lookup"
                     value={snapshotLookup}
                     onChange={(event) => setSnapshotLookup(event.target.value)}
-                    placeholder="snp_..."
+                    placeholder={t("corpus.snapshotIdPlaceholder")}
                     className="font-mono text-2xs"
                     autoComplete="off"
                   />
                 </Field>
               </div>
-              <Button onClick={loadSnapshot} disabled={snapshotLookup.trim() === ""}>
+              <Button
+                onClick={loadSnapshot}
+                disabled={snapshotLookup.trim() === ""}
+                disabledReason={
+                  snapshotLookup.trim() === ""
+                    ? t("corpus.loadSnapshotDisabled")
+                    : undefined
+                }
+              >
                 {t("corpus.load")}
               </Button>
             </div>
