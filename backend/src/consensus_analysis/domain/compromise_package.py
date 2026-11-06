@@ -46,7 +46,7 @@ class CompromisePackage:
         cls, *, package_id: PackageId, run_id: RunId, log_position: LogPosition
     ) -> CompromisePackage:
         """Open an empty draft package for one run."""
-        raise NotImplementedError("CompromisePackage.open is implemented by issue #317")
+        return cls(id=package_id, run_id=run_id, log_position=log_position)
 
     def add_component(self, component: PackageComponent) -> None:
         """Add one accepted component, refusing one that conflicts with what is already inside.
@@ -84,7 +84,9 @@ class CompromisePackage:
             if not proposal.reason.strip():
                 raise IncompleteRejectionList(proposal.measure)
             if str(proposal.id) in seen:
-                raise IncompleteRejectionList(proposal.measure)
+                raise IncompleteRejectionList(
+                    proposal.measure, reason="listed twice; a rejection is documented once"
+                )
             seen.add(str(proposal.id))
         self.rejected_proposals = tuple(rejected)
         self.state = PackageState.COMPOSED if self.components else PackageState.ABANDONED

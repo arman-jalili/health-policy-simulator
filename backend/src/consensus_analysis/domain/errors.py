@@ -195,11 +195,12 @@ class IncompleteRejectionList(ValidationFailedError):
 
     code = "INCOMPLETE_REJECTION_LIST"
 
-    def __init__(self, measure: str) -> None:
+    def __init__(self, measure: str, *, reason: str = "missing reason") -> None:
         self.measure = measure
+        self.reason = reason
         super().__init__(
-            f"rejected proposal {measure!r} must state why it was not carried",
-            details=[{"message": "missing reason", "field": measure, "code": self.code}],
+            f"rejected proposal {measure!r}: {reason}",
+            details=[{"message": reason, "field": measure, "code": self.code}],
         )
 
 

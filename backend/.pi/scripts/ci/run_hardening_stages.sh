@@ -262,8 +262,13 @@ run_stage "17" "negotiation_session_proofing" \
     "${SCRIPTS_DIR}/stage_negotiation-session_proofing.sh" \
     "always"
 
-run_stage "18" "decision_brief_proofing" \
+run_stage "18" "consensus_analysis_proofing" \
+    "${SCRIPTS_DIR}/stage_consensus-analysis_proofing.sh" \
+    "always"
+
+run_stage "19" "decision_brief_proofing" \
     "${SCRIPTS_DIR}/stage_decision-brief_proofing.sh" \
+    "always"
     "always"
 
 # ── Summary ──
