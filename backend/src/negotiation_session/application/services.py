@@ -9,6 +9,7 @@ frozen member without a new freeze entry. Business rules stay in the aggregate.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 from collections.abc import Mapping, Sequence
 
@@ -35,6 +36,7 @@ from negotiation_session.application.dto import (
     CloseRoundResult,
     CoalitionResult,
     ConflictTopicResult,
+    HistoryEventResult,
     IntermediateSummaryResult,
     LearningInsightResult,
     MandateResult,
@@ -64,13 +66,28 @@ from negotiation_session.domain.entities import (
     RoundLearning,
 )
 from negotiation_session.domain.errors import SimulationRunNotFound
+from negotiation_session.domain.events import (
+    CoalitionFormed,
+    InitialPositionStated,
+    LoggedEvent,
+    NegotiationPhaseAdvanced,
+    PositionRevised,
+    RoundOpened,
+    SimulationRunClosed,
+    SimulationRunOpened,
+)
 from negotiation_session.domain.repositories import RunEventLog, SimulationRunRepository
 from negotiation_session.domain.simulation_run import SimulationRun
 from negotiation_session.domain.values import (
+    CoalitionId,
     ConflictStatus,
     MandateId,
+    NegotiationPhase,
+    PositionId,
     RunId,
+    StakeholderId,
     StoppingConditionName,
+    TopicRef,
 )
 
 
@@ -396,7 +413,16 @@ class ReplaySimulationHistory:
         self._event_log = event_log
 
     async def execute(self, request: ReplaySimulationHistoryRequest) -> ReplayResult:
-        raise NotImplementedError("ReplaySimulationHistory.execute is implemented by issue #296")
+        run = await self._runs.get(request.run_id)
+        if run is None:
+            raise SimulationRunNotFound(f"no simulation run {request.run_id}")
+        logged = await self._event_log.read(request.run_id, request.until_round)
+        return ReplayResult(
+            run_id=run.id,
+            until_round=request.until_round,
+            events=tuple(_history_event(item) for item in logged),
+            state=_fold_events(run.id, logged, run.round_cap),
+        )
 
 
 # ── Projection helpers ──────────────────────────────────────────────────────
@@ -428,14 +454,16 @@ def _run_result(run: SimulationRun) -> SimulationRunResult:
         round=run.rounds[-1].number if run.rounds else 0,
         round_cap=run.round_cap,
         closed=run.is_closed,
-        bound_stakeholder_ids=tuple(run.bound),
+        bound_stakeholder_ids=tuple(sorted(run.bound)),
         open_position_ids=tuple(
-            position.id
-            for round_ in run.rounds
-            for position in round_.positions.values()
-            if position.is_open
+            sorted(
+                position.id
+                for round_ in run.rounds
+                for position in round_.positions.values()
+                if position.is_open
+            )
         ),
-        coalition_ids=tuple(run.coalitions),
+        coalition_ids=tuple(sorted(run.coalitions)),
     )
 
 
@@ -481,6 +509,60 @@ def _conflict_result(run_id: RunId, conflict: ConflictTopic) -> ConflictTopicRes
         topic=conflict.topic,
         status=conflict.status,
         stances=dict(conflict.stances),
+    )
+
+
+def _history_event(logged: LoggedEvent) -> HistoryEventResult:
+    event = logged.event
+    return HistoryEventResult(
+        sequence=logged.sequence,
+        event_type=getattr(event, "name", type(event).__name__),
+        payload=_payload(event),
+        occurred_at=logged.occurred_at,
+    )
+
+
+def _payload(event: object) -> Mapping[str, object]:
+    return {
+        field.name: getattr(event, field.name)
+        for field in dataclasses.fields(event)  # type: ignore[arg-type]
+    }
+
+
+def _fold_events(
+    run_id: RunId, events: Sequence[LoggedEvent], round_cap: int
+) -> SimulationRunResult:
+    phase = NegotiationPhase.POSITION_FORMATION
+    bound: tuple[StakeholderId, ...] = ()
+    current_round = 0
+    positions: dict[tuple[StakeholderId, TopicRef], PositionId] = {}
+    coalitions: set[CoalitionId] = set()
+    closed = False
+    for logged in events:
+        event = logged.event
+        if isinstance(event, SimulationRunOpened):
+            bound = event.stakeholder_ids
+        elif isinstance(event, RoundOpened):
+            current_round = event.round
+            phase = event.phase
+        elif isinstance(event, InitialPositionStated) or isinstance(event, PositionRevised):
+            positions[(event.stakeholder_id, event.topic)] = event.position_id
+        elif isinstance(event, CoalitionFormed):
+            coalitions.add(event.coalition_id)
+        elif isinstance(event, NegotiationPhaseAdvanced):
+            phase = event.to_phase
+        elif isinstance(event, SimulationRunClosed):
+            phase = event.final_phase
+            closed = True
+    return SimulationRunResult(
+        run_id=run_id,
+        phase=phase,
+        round=current_round,
+        round_cap=round_cap,
+        closed=closed,
+        bound_stakeholder_ids=tuple(sorted(bound)),
+        open_position_ids=tuple(sorted(positions.values())),
+        coalition_ids=tuple(sorted(coalitions)),
     )
 
 

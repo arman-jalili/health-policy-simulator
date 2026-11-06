@@ -50,18 +50,21 @@ def test_offer_lifecycle_is_offered_then_accepted_or_declined() -> None:
 def test_coalitions_publish_offers_and_membership() -> None:
     assert field_names(CoalitionOffered) == [
         "run_id",
+        "round",
         "coalition_id",
         "invited_id",
         "conditions",
     ]
     assert field_names(CoalitionOfferDeclined) == [
         "run_id",
+        "round",
         "coalition_id",
         "stakeholder_id",
         "reason",
     ]
     assert field_names(CoalitionFormed) == [
         "run_id",
+        "round",
         "topic",
         "coalition_id",
         "members",

@@ -197,6 +197,7 @@ class SimulationRun:
                 round=round_.number,
                 stakeholder_id=stakeholder,
                 topic=topic,
+                position_id=recorded.id,
                 stance=stance,
                 evidence_ids=tuple(item.evidence_id for item in recorded.evidence),
             )
@@ -278,6 +279,7 @@ class SimulationRun:
         self.events.append(
             PositionRevised(
                 run_id=self.id,
+                round=round_.number,
                 stakeholder_id=stakeholder,
                 topic=topic,
                 position_id=revised.id,
@@ -311,7 +313,14 @@ class SimulationRun:
             conflict_id=ConflictTopicId(new_id("cft")), topic=topic, stances=stances
         )
         self.conflicts[topic] = conflict
-        self.events.append(ConflictTopicOpened(run_id=self.id, topic=topic, stances=dict(stances)))
+        self.events.append(
+            ConflictTopicOpened(
+                run_id=self.id,
+                round=self.current_round.number if self.rounds else 0,
+                topic=topic,
+                stances=dict(stances),
+            )
+        )
         return conflict
 
     def form_coalition(
@@ -348,6 +357,7 @@ class SimulationRun:
             self.events.append(
                 CoalitionOffered(
                     run_id=self.id,
+                    round=self.current_round.number if self.rounds else 0,
                     coalition_id=coalition_id,
                     invited_id=offer.invited,
                     conditions=offer.conditions,
@@ -356,6 +366,7 @@ class SimulationRun:
         self.events.append(
             CoalitionFormed(
                 run_id=self.id,
+                round=self.current_round.number if self.rounds else 0,
                 topic=topic,
                 coalition_id=coalition_id,
                 members=tuple(coalition.members),
@@ -428,7 +439,12 @@ class SimulationRun:
         self.phase = target
         self.mandate.phase = target
         self.events.append(
-            NegotiationPhaseAdvanced(run_id=self.id, from_phase=previous, to_phase=target)
+            NegotiationPhaseAdvanced(
+                run_id=self.id,
+                round=self.current_round.number if self.rounds else 0,
+                from_phase=previous,
+                to_phase=target,
+            )
         )
 
     def turn_order(self) -> tuple[TurnAssignment, ...]:
