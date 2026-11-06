@@ -159,6 +159,23 @@ class PackageNotComposed(ConflictError):
     code = "PACKAGE_NOT_COMPOSED"
 
 
+class IncompleteComparison(ValidationFailedError):
+    """An alternative cannot be ranked because one of the three dimensions is missing (AC 11)."""
+
+    code = "INCOMPLETE_COMPARISON"
+
+    def __init__(self, package_id: str, missing: Sequence[str]) -> None:
+        self.package_id = package_id
+        self.missing = tuple(missing)
+        super().__init__(
+            f"package {package_id} cannot be compared without {', '.join(self.missing)}",
+            details=[
+                {"message": "dimension missing", "field": dimension, "code": self.code}
+                for dimension in self.missing
+            ],
+        )
+
+
 class PackageStateTransition(ConflictError):
     """A package transition was attempted from a state that forbids it."""
 
