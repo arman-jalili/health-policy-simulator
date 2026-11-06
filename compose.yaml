@@ -45,8 +45,8 @@ services:
         required: true
       - path: demo.env.local
         required: false
-    # Any OpenAI-compatible provider works: set the key in the root .env (LLM_API_KEY=…) and the
-    # endpoint/model in demo.env.local. Nothing here names a vendor.
+    # The live-model credential, endpoint and model all come from demo.env.local (git-ignored), loaded
+    # above via env_file. Nothing here names a vendor and no key is interpolated from the shell.
     environment:
       # Default: the compose database. Override to run the demo against an already-ingested corpus in
       # another PostgreSQL (e.g. DATABASE_URL=postgresql+asyncpg://hps:hps@host.docker.internal:5433/health_policy).
@@ -54,9 +54,6 @@ services:
       # Demo auth: loopback plus the compose bridge. Override AUTH_DEMO_TRUSTED_CIDRS in demo.env.local
       # once you know your subnet (`docker network inspect hps-demo_default`); empty means loopback only.
       AUTH_DEMO_TRUSTED_CIDRS: ${AUTH_DEMO_TRUSTED_CIDRS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
-      # One generic credential for whatever OpenAI-compatible endpoint demo.env.local points at, so the
-      # key never has to touch a tracked file.
-      LLM_API_KEY: ${LLM_API_KEY:-}
     # `host.docker.internal` lets the container reach a PostgreSQL on the host (Docker Desktop/OrbStack).
     extra_hosts:
       - "host.docker.internal:host-gateway"
