@@ -184,12 +184,17 @@ async def test_concurrent_progress_appends_are_gapless_on_postgres(
 
     stored = await progress.list_after(run_id, 0, 100)
     assert [item.sequence for item in stored] == list(range(1, 11))
-    stream = StreamSimulationProgress(progress=progress)
-    replay = [
+    stream = StreamSimulationProgress(progress=progress, idle_timeout_s=0.1, heartbeat_s=0)
+    frames = [
         item
         async for item in stream.execute(
             StreamSimulationProgressRequest(run_id=run_id, last_event_id=stored[4].event_id)
         )
+    ]
+    replay = [
+        item
+        for item in frames
+        if isinstance(item, ProgressEventView) and item.kind is not ProgressKind.STREAM_CLOSED
     ]
     assert [item.sequence for item in replay] == [6, 7, 8, 9, 10]
 

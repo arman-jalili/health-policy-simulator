@@ -27,7 +27,13 @@ from simulation_orchestration.application.dto import (
     PauseResumeResult,
     ProgressEventView,
 )
-from simulation_orchestration.application.values import JobId, PauseAction, RunBudget, RunId
+from simulation_orchestration.application.values import (
+    JobId,
+    PauseAction,
+    ProgressKind,
+    RunBudget,
+    RunId,
+)
 from simulation_orchestration.interfaces.http.deps import (
     SimulationOrchestrationContainer,
     get_container,
@@ -248,16 +254,20 @@ def _job_response(result: JobSnapshotResult) -> JobResponse:
     )
 
 
-async def _sse(events: AsyncIterator[ProgressEventView]) -> AsyncIterator[str]:
-    async for event in events:
+async def _sse(events: AsyncIterator[ProgressEventView | str]) -> AsyncIterator[str]:
+    async for frame in events:
+        if isinstance(frame, str):
+            yield frame
+            continue
         data = json.dumps(
             {
-                "event_id": event.event_id,
-                "run_id": str(event.run_id),
-                "sequence": event.sequence,
-                "kind": event.kind.value,
-                "payload": event.payload,
+                "event_id": frame.event_id,
+                "run_id": str(frame.run_id),
+                "sequence": frame.sequence,
+                "kind": frame.kind.value,
+                "payload": frame.payload,
             },
             default=str,
         )
-        yield f"id: {event.event_id}\nevent: {event.kind.value}\ndata: {data}\n\n"
+        prefix = "" if frame.kind is ProgressKind.STREAM_CLOSED else f"id: {frame.event_id}\n"
+        yield f"{prefix}event: {frame.kind.value}\ndata: {data}\n\n"

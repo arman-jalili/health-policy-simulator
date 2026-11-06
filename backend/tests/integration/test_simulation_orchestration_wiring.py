@@ -183,9 +183,6 @@ async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() 
         usage = await client.get("/api/v1/runs/run_budget/usage")
         assert usage.json()["total_invocations"] == 1
 
-        stream = await client.get("/api/v1/runs/run_budget/stream")
-        assert "event: run.budget_exhausted" in stream.text
-
         resumed = await client.post(
             "/api/v1/runs/run_budget:resume",
             json={"action": "resume", "budget": {"max_invocations": 2}},
@@ -202,6 +199,30 @@ async def test_budget_of_one_pauses_and_resume_with_a_raised_budget_completes() 
         assert job["checkpoint"]["budget_used_invocations"] == 2
         usage = await client.get("/api/v1/runs/run_budget/usage")
         assert usage.json()["total_invocations"] == 2
+
+        stream = await client.get("/api/v1/runs/run_budget/stream")
+        assert "event: run.budget_exhausted" in stream.text
+        assert "event: run.stream_closed" in stream.text
+        assert '"reason": "run.completed"' in stream.text
+
+
+async def test_paused_stream_heartbeats_then_marks_max_idle() -> None:
+    app = create_app(_settings(simulation_stream_idle_s=0.15, simulation_stream_heartbeat_s=0.03))
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+    ):
+        started = await client.post(
+            "/api/v1/runs/run_sse:start", json={"budget": {"max_invocations": 0}}
+        )
+        assert started.status_code == 202, started.text
+        stream = await client.get("/api/v1/runs/run_sse/stream")
+
+    assert ": ping" in stream.text
+    assert "event: run.stream_closed" in stream.text
+    assert '"reason": "max_idle"' in stream.text
+    assert "event: run.completed" not in stream.text
 
 
 def test_unknown_configured_model_fails_at_boot() -> None:

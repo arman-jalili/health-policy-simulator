@@ -138,7 +138,11 @@ def build_container(
     )
     return SimulationOrchestrationContainer(
         run_simulation_job=run_job,
-        stream_simulation_progress=StreamSimulationProgress(progress=progress),
+        stream_simulation_progress=StreamSimulationProgress(
+            progress=progress,
+            idle_timeout_s=settings.simulation_stream_idle_s,
+            heartbeat_s=settings.simulation_stream_heartbeat_s,
+        ),
         pause_or_resume_simulation=PauseOrResumeSimulation(
             jobs=jobs,
             progress=progress,

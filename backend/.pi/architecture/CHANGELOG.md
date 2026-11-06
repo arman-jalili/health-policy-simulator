@@ -48,6 +48,21 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - SSE liveness and unit identity normalisation (#277, #278)
+
+### Changed
+- SSE no longer closes after 0.5 s idle. It waits for a terminal event or
+  `SIMULATION_STREAM_IDLE_S` (default 3600 s), emits `: ping` heartbeats
+  (`SIMULATION_STREAM_HEARTBEAT_S`), and always ends with `run.stream_closed` + reason.
+- A replay whose `Last-Event-ID` is terminal returns immediately; the synthetic close frame omits
+  `id:`. Client disconnect cancels polling and increments `simulation_stream_disconnects_total`.
+- `ResolveMeasureIdentity` normalises its unit fallback and maps `count`/`percent`/`days`; casing no
+  longer changes identity.
+
+### Verification
+- Unit: SSE idle/heartbeat/marker/disconnect; measure-unit casing/idempotence.
+- Integration: paused stream reaches `max_idle` with heartbeat; `Count` verifies against `count`.
+
 ## [2026-11-06] - Simulation metering, idempotency and live SSE (#272-#275)
 
 ### Changed

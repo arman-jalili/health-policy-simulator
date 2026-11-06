@@ -74,6 +74,7 @@ class ProgressKind(StrEnum):
     FAILED = "run.failed"
     BUDGET_EXHAUSTED = "run.budget_exhausted"
     INVOCATION_RECORDED = "invocation.recorded"
+    STREAM_CLOSED = "run.stream_closed"
 
 
 @dataclass(frozen=True, slots=True)

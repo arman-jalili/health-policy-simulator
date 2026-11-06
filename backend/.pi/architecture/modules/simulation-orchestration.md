@@ -71,7 +71,7 @@ the rule and persists. The graph is a sequencer, not a model.
 | ADR | Relevance |
 |---|---|
 | ADR-003 Cross-Context Communication | Graph sequencing vs domain ownership — the central constraint |
-| ADR-004 API Design | SSE with `Last-Event-ID` replay; `202` for long-running work |
+| ADR-004 API Design | SSE replay-then-live with `Last-Event-ID`; heartbeats; `run.stream_closed` reason; `202` for long-running work |
 | ADR-006 Cost Tracking | `AgentInvocation` is owned here and is the reproducibility record |
 | ADR-008 Proportional Modeling Depth | Service depth: no domain model, persistence contract only |
 | ADR-013 SimulationOrchestration Runtime Integration | Router+worker wiring; durable `0302` stores; boot-time model failure |
@@ -352,6 +352,15 @@ test publishes concurrently and asserts `1..N` with no loss and no `IntegrityErr
 `simulation_worker_restarts_total` / `simulation_job_failures_total` exist. A dead worker makes readiness
 non-`ok`; discovering it from "jobs stopped arriving" is a failure of this gate (#235).
 
+## SSE liveness
+
+`StreamSimulationProgress` waits for a terminal event (`run.completed` / `run.failed`) or the
+configured max idle (`SIMULATION_STREAM_IDLE_S`, default 3600 s). While idle it emits `: ping`
+comments (`SIMULATION_STREAM_HEARTBEAT_S`, default 15 s). Every server-initiated close is preceded by
+`event: run.stream_closed` with `payload.reason` (`run.completed`, `run.failed`, or `max_idle`).
+A replay request whose `Last-Event-ID` already points at a terminal event returns immediately.
+Client disconnect cancels the generator and increments `simulation_stream_disconnects_total`.
+
 ## Acceptance Criteria
 
 | # | Component | Criterion | Verify In |
@@ -364,7 +373,7 @@ non-`ok`; discovering it from "jobs stopped arriving" is a failure of this gate 
 | 5 | Pause boundary | Pause during a turn completes or discards the turn atomically; run state unchanged | integration |
 | 6 | Resume | A paused run resumes at the next turn with identical prior state | integration |
 | 7 | Crash recovery | Killing the worker mid-run and restarting neither duplicates arguments nor loses rounds | integration |
-| 8 | SSE ordering | Replay-then-live: events arrive in monotonic `sequence`; reconnect with `Last-Event-ID` replays without gaps; unknown/foreign ids return `400 UNKNOWN_LAST_EVENT_ID` before streaming; terminal event closes the stream | integration |
+| 8 | SSE ordering | Replay-then-live: events arrive in monotonic `sequence`; reconnect with `Last-Event-ID` replays without gaps; unknown/foreign ids return `400 UNKNOWN_LAST_EVENT_ID` before streaming; idle never closes unless `SIMULATION_STREAM_IDLE_S` is exceeded; heartbeats keep the connection visible; the last frame is `run.stream_closed` with a reason | integration |
 | 9 | Prompt versioning | Changing a prompt template creates a new version; old invocations keep their version | unit |
 | 10 | Provider independence | Swapping the LLM adapter requires no change outside `infrastructure/` | architecture test |
 | 11 | Wiring | Worker started by lifespan or compose; `POST :start` emits progress with no manual step; unknown model id fails at boot | integration |
