@@ -95,6 +95,24 @@ Measured live on this stack (9 stakeholders, `deepseek-flash`):
 2 rounds, 18 turns  → 8 916 in / 4 958 out → cost 0.008627 → budget pause at 6 invocations, resume, both rounds closed
 ```
 
+### Umschalten zur Laufzeit (beide Varianten zeigen)
+
+Das Backend hält beide Backends hinter einem Facade-Objekt: das Live-Modell und den deterministischen
+Skript-Stand-in. Der Wechsel gilt sofort, ohne Neustart, und nur für diesen Prozess (ein Neustart stellt
+`LLM_PROVIDER` aus der Umgebung wieder her).
+
+```bash
+make stack-provider     # {"active":"openai-compatible","model":"deepseek-flash","available":[...]}
+make stack-scripted     # Skript: Persona-Policy, Argumente mit [synthetic] … Begründung: …, Kosten 0
+make stack-live-llm     # zurück zum Live-Modell
+```
+
+In der Oberfläche sitzt derselbe Schalter unter **Einstellungen → Modell** („Live-LLM" / „Skript
+(Platzhalter)"), und die Status-Pille der Übersicht (`llm: …`) folgt ihm. Gemessen: ein Skript-Lauf
+kostet 0.000000 bei 9 Invocationen und meldet `model: scripted-local`; ein Live-Lauf kostet 0.006077 bei
+9 Invocationen und meldet `deepseek-flash`. `/usage` nennt immer das Modell, das die Zeilen tatsächlich
+geschrieben hat — nicht das gerade aktive.
+
 Pre-flight before the jury (also proves the pause/resume path):
 
 ```bash

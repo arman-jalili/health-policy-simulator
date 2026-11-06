@@ -91,11 +91,22 @@ async def readyz(request: Request) -> JSONResponse:
     checks["ocr"] = "available" if _ocr_available() else "absent"
     checks["auth_mode"] = settings.auth_mode.value
     checks["auth_demo_trusted"] = ",".join(settings.auth_demo_trusted_cidrs) or "loopback"
-    provider = settings.llm_provider.strip().lower()
-    checks["llm"] = provider
-    checks["llm_model"] = (
-        settings.simulation_model_id if provider == "scripted" else settings.llm_model
+    # Prefer the live switch: a demo can flip the backend at runtime, and readiness must not lie
+    # about what the next turn will use.
+    control = getattr(
+        getattr(request.app.state, "simulation_orchestration", None), "llm_control", None
     )
+    if control is not None:
+        checks["llm"] = control.active()
+        checks["llm_model"] = control.active_model()
+        checks["llm_available"] = ",".join(control.available())
+    else:
+        provider = settings.llm_provider.strip().lower()
+        checks["llm"] = provider
+        checks["llm_model"] = (
+            settings.simulation_model_id if provider == "scripted" else settings.llm_model
+        )
+    provider = checks["llm"]
     if settings.llm_health_url:
         llm_ok, llm_status = await _check_llm(
             settings.llm_health_url, settings.db_connect_timeout_s

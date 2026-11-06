@@ -12,7 +12,12 @@ from shared.db import UnitOfWork as DbUnitOfWork
 from shared.enums import Persistence
 from shared.log_setup import get_logger
 from simulation_orchestration.application.errors import UnknownModel
-from simulation_orchestration.application.ports import LLMClient, NegotiationGateway, WorkerLoop
+from simulation_orchestration.application.ports import (
+    LLMClient,
+    LlmProviderControl,
+    NegotiationGateway,
+    WorkerLoop,
+)
 from simulation_orchestration.application.repositories import (
     InvocationStore,
     JobStore,
@@ -27,16 +32,22 @@ from simulation_orchestration.application.rules import (
 from simulation_orchestration.application.services import (
     CollectUsageReport,
     GetJob,
+    GetLlmProvider,
     PauseOrResumeSimulation,
     RecordAgentInvocation,
     RegisterPromptTemplate,
     ResolvePromptTemplate,
     RunSimulationJob,
+    SelectLlmProvider,
     StreamSimulationProgress,
 )
 from simulation_orchestration.application.values import ModelPrice
 from simulation_orchestration.infrastructure.graph import SequentialWorkflowGraph
-from simulation_orchestration.infrastructure.llm import HttpLlmClient, ScriptedLLMClient
+from simulation_orchestration.infrastructure.llm import (
+    HttpLlmClient,
+    ScriptedLLMClient,
+    SwitchableLlmClient,
+)
 from simulation_orchestration.infrastructure.memory import (
     InMemoryInvocationStore,
     InMemoryJobStore,
@@ -71,6 +82,9 @@ class SimulationOrchestrationContainer:
     register_prompt_template: RegisterPromptTemplate
     resolve_prompt_template: ResolvePromptTemplate
     worker: WorkerLoop
+    select_llm_provider: SelectLlmProvider
+    get_llm_provider: GetLlmProvider
+    llm_control: LlmProviderControl
     model: str = ""
     provider: str = "scripted"
 
@@ -106,14 +120,16 @@ def build_container(
         and not settings.simulation_allow_zero_price
     ):
         raise ValueError("simulation model prices are zero; set SIMULATION_ALLOW_ZERO_PRICE=true")
-    llm: LLMClient
-    if provider == "scripted":
-        llm = ScriptedLLMClient(model_id)
-    else:
-        if settings.llm_base_url is None or settings.llm_api_key is None:
-            raise ValueError("LLM_BASE_URL and LLM_API_KEY are required for a real provider")
-        llm = HttpLlmClient(
-            model_id=model_id,
+    # Both variants live in one facade so a demo can flip between the live model and the
+    # scripted stand-in without a restart. The live variant needs a key and a base URL.
+    # The stand-in always reports the canonical scripted model id, independent of the live model
+    # configured for the demo (the price table keys on it and the UI shows it verbatim).
+    scripted_model = "scripted-local"
+    variants: dict[str, LLMClient] = {"scripted": ScriptedLLMClient(scripted_model)}
+    if settings.llm_base_url is not None and settings.llm_api_key is not None:
+        live_name = provider if provider != "scripted" else "openai-compatible"
+        variants[live_name] = HttpLlmClient(
+            model_id=settings.llm_model,
             base_url=settings.llm_base_url,
             api_key=settings.llm_api_key,
             timeout_s=settings.llm_timeout_s,
@@ -123,15 +139,26 @@ def build_container(
             json_mode=settings.llm_json_mode,
             reasoning_effort=settings.llm_reasoning_effort,
         )
-    prices = StaticPriceTable(
-        {
-            model_id: ModelPrice(
-                model_id=model_id,
-                input_per_1k=Decimal(str(settings.simulation_input_price_per_1k)),
-                output_per_1k=Decimal(str(settings.simulation_output_price_per_1k)),
-            )
-        }
-    )
+    if provider != "scripted" and provider not in variants:
+        raise ValueError("LLM_BASE_URL and LLM_API_KEY are required for a real provider")
+    active_variant = provider if provider in variants else "scripted"
+    llm = SwitchableLlmClient(variants, active=active_variant)
+    price_entries: dict[str, ModelPrice] = {
+        model_id: ModelPrice(
+            model_id=model_id,
+            input_per_1k=Decimal(str(settings.simulation_input_price_per_1k)),
+            output_per_1k=Decimal(str(settings.simulation_output_price_per_1k)),
+        )
+    }
+    # The scripted variant reports its own model id and stays free when a demo switches to it.
+    # Only add it when it is a different model, otherwise it would overwrite configured prices.
+    if scripted_model != model_id:
+        price_entries[scripted_model] = ModelPrice(
+            model_id=scripted_model,
+            input_per_1k=Decimal("0"),
+            output_per_1k=Decimal("0"),
+        )
+    prices = StaticPriceTable(price_entries)
     record_agent_invocation = RecordAgentInvocation(
         invocations=invocations, prices=prices, clock=clock
     )
@@ -148,7 +175,8 @@ def build_container(
                     and settings.simulation_input_price_per_1k == 0
                     and settings.simulation_output_price_per_1k == 0
                 ),
-                scripted=provider == "scripted",
+                # Read the facade, not the boot setting: the demo may switch at runtime.
+                scripted=lambda: llm.active() == "scripted",
             ),
         ]
     )
@@ -186,13 +214,16 @@ def build_container(
         record_agent_invocation=record_agent_invocation,
         get_job=GetJob(jobs=jobs, progress=progress),
         collect_usage_report=CollectUsageReport(
-            invocations=invocations, model=model_id, provider=provider
+            invocations=invocations, model=llm.active_model(), provider=provider
         ),
         register_prompt_template=RegisterPromptTemplate(
             registry=registry, versioning=PromptVersioning(), clock=clock
         ),
         resolve_prompt_template=ResolvePromptTemplate(registry=registry),
         worker=BackgroundWorker(run_job),
+        select_llm_provider=SelectLlmProvider(control=llm),
+        get_llm_provider=GetLlmProvider(control=llm),
+        llm_control=llm,
         model=model_id,
         provider=provider,
     )

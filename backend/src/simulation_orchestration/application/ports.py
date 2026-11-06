@@ -50,6 +50,19 @@ class LLMClient(Protocol):
 
 
 @runtime_checkable
+class LlmProviderControl(Protocol):
+    """Runtime view and switch for the model backend (demo: show both variations live)."""
+
+    def active(self) -> str: ...
+
+    def active_model(self) -> str: ...
+
+    def available(self) -> tuple[str, ...]: ...
+
+    def switch(self, provider: str) -> None: ...
+
+
+@runtime_checkable
 class GraphNode(Protocol):
     """One sequencing step. It receives and returns state; it never mutates domain state."""
 

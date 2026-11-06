@@ -1,5 +1,6 @@
 # Convenience entrypoints. The demo stack lives in compose.yaml (see README.md).
 .PHONY: demo-seed demo-reset demo-walkthrough stack-up stack-down stack-logs stack-seed stack-ingest stack-live stack-check
+.PHONY: stack-scripted stack-live-llm stack-provider
 
 demo-seed:
 	$(MAKE) -C backend demo-seed
@@ -43,3 +44,15 @@ stack-live:
 stack-check:
 	docker compose ps
 	curl -s http://127.0.0.1:3000/api/hps/_platform/readyz | python3 -m json.tool | head -40
+
+# Runtime model switch (no restart): the demo shows both variations live.
+stack-provider:
+	@curl -s http://127.0.0.1:3000/api/hps/simulation/provider | python3 -m json.tool
+
+stack-scripted:
+	@curl -s -X POST http://127.0.0.1:3000/api/hps/simulation/provider \
+	  -H 'content-type: application/json' -d '{"provider":"scripted"}' | python3 -m json.tool
+
+stack-live-llm:
+	@curl -s -X POST http://127.0.0.1:3000/api/hps/simulation/provider \
+	  -H 'content-type: application/json' -d '{"provider":"openai-compatible"}' | python3 -m json.tool

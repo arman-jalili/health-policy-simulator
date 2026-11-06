@@ -23,6 +23,7 @@ from simulation_orchestration.application.commands import (
     RecordAgentInvocationRequest,
     RegisterPromptTemplateRequest,
     ResolvePromptTemplateRequest,
+    SelectLlmProviderRequest,
     StartSimulationRequest,
     StreamSimulationProgressRequest,
 )
@@ -31,6 +32,7 @@ from simulation_orchestration.application.dto import (
     InvocationRecordResult,
     JobRecord,
     JobSnapshotResult,
+    LlmProviderView,
     PauseResumeResult,
     ProgressEventView,
     PromptTemplateResult,
@@ -55,6 +57,7 @@ from simulation_orchestration.application.events import (
 )
 from simulation_orchestration.application.ports import (
     Clock,
+    LlmProviderControl,
     NegotiationGateway,
     PriceTable,
     UnitOfWork,
@@ -596,6 +599,13 @@ class CollectUsageReport:
 
     async def execute(self, request: CollectUsageReportRequest) -> UsageReportResult:
         usage = await self._invocations.usage_for_run(request.run_id)
+        # Report what produced the rows, not what is active now: a demo can switch backends while
+        # runs from the other variant remain in the log.
+        envelopes = await self._invocations.list_for_run(request.run_id)
+        models = {item.model for item in envelopes if item.model}
+        provider = self._provider
+        if len(models) == 1:
+            provider = "scripted" if models == {"scripted-local"} else self._provider
         return UsageReportResult(
             run_id=request.run_id,
             total_invocations=usage.invocations,
@@ -604,8 +614,8 @@ class CollectUsageReport:
             cost=usage.cost,
             by_stakeholder=usage.by_stakeholder,
             by_round=usage.by_round,
-            model=self._model,
-            provider=self._provider,
+            model=", ".join(sorted(models)) or self._model,
+            provider=provider,
         )
 
 
@@ -657,4 +667,33 @@ class ResolvePromptTemplate:
             body=template.body,
             checksum=template.checksum,
             created_at=template.created_at,
+        )
+
+
+class GetLlmProvider:
+    """Read the active model backend and the variants this process can switch to."""
+
+    def __init__(self, *, control: LlmProviderControl) -> None:
+        self._control = control
+
+    def execute(self) -> LlmProviderView:
+        return LlmProviderView(
+            active=self._control.active(),
+            model=self._control.active_model(),
+            available=self._control.available(),
+        )
+
+
+class SelectLlmProvider:
+    """Switch the model backend for subsequent turns (demo: show both variations live)."""
+
+    def __init__(self, *, control: LlmProviderControl) -> None:
+        self._control = control
+
+    def execute(self, request: SelectLlmProviderRequest) -> LlmProviderView:
+        self._control.switch(request.provider)
+        return LlmProviderView(
+            active=self._control.active(),
+            model=self._control.active_model(),
+            available=self._control.available(),
         )

@@ -15,3 +15,11 @@ export const ReadyzSchema = z
   })
   .catchall(z.unknown());
 export type Readyz = z.infer<typeof ReadyzSchema>;
+
+export const LlmProviderSchema = z.object({
+  active: z.string(),
+  model: z.string(),
+  available: z.array(z.string()),
+});
+
+export type LlmProvider = z.infer<typeof LlmProviderSchema>;

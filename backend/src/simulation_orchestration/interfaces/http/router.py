@@ -19,6 +19,7 @@ from simulation_orchestration.application.commands import (
     CollectUsageReportRequest,
     GetJobRequest,
     PauseOrResumeSimulationRequest,
+    SelectLlmProviderRequest,
     StartSimulationRequest,
     StreamSimulationProgressRequest,
 )
@@ -41,6 +42,8 @@ from simulation_orchestration.interfaces.http.deps import (
 from simulation_orchestration.interfaces.http.schemas import (
     GraphStateBody,
     JobResponse,
+    LlmProviderBody,
+    LlmProviderResponse,
     PauseResumeBody,
     PauseResumeResponse,
     RoundUsageItem,
@@ -273,3 +276,33 @@ async def _sse(events: AsyncIterator[ProgressEventView | str]) -> AsyncIterator[
         )
         prefix = "" if frame.kind is ProgressKind.STREAM_CLOSED else f"id: {frame.event_id}\n"
         yield f"{prefix}event: {frame.kind.value}\ndata: {data}\n\n"
+
+
+@router.get(
+    "/simulation/provider",
+    response_model=LlmProviderResponse,
+    summary="Read the active model backend",
+    openapi_extra={"x-required-scope": "runs:read"},
+    responses=READ_ERRORS,
+)
+async def read_llm_provider(
+    container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
+) -> LlmProviderResponse:
+    view = container.get_llm_provider.execute()
+    return LlmProviderResponse(active=view.active, model=view.model, available=list(view.available))
+
+
+@router.post(
+    "/simulation/provider",
+    response_model=LlmProviderResponse,
+    summary="Switch the model backend for subsequent turns",
+    openapi_extra={"x-required-scope": "runs:write"},
+    responses=WRITE_ERRORS,
+)
+async def switch_llm_provider(
+    body: LlmProviderBody,
+    container: Annotated[SimulationOrchestrationContainer, Depends(get_container)],
+) -> LlmProviderResponse:
+    """Flip between the live model and the scripted stand-in; process state, not config."""
+    view = container.select_llm_provider.execute(SelectLlmProviderRequest(provider=body.provider))
+    return LlmProviderResponse(active=view.active, model=view.model, available=list(view.available))

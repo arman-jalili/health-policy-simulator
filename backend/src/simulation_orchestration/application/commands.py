@@ -85,3 +85,10 @@ class ResolvePromptTemplateRequest:
 class ApplyCheckpointRequest:
     job_id: JobId
     state: GraphState
+
+
+@dataclass(frozen=True, slots=True)
+class SelectLlmProviderRequest:
+    """Switch the model backend for this process (in-memory; a restart restores the env default)."""
+
+    provider: str

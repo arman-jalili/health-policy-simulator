@@ -69,3 +69,15 @@ class UnknownLastEventId(ValidationFailedError):
 
     code = "UNKNOWN_LAST_EVENT_ID"
     status_code = 400
+
+
+class UnknownLlmProvider(ValidationFailedError):
+    """The requested provider name is not a known variant."""
+
+    code = "UNKNOWN_LLM_PROVIDER"
+
+
+class LlmProviderUnavailable(ConflictError):
+    """The variant exists conceptually but is not configured (no key/base URL)."""
+
+    code = "LLM_PROVIDER_UNAVAILABLE"

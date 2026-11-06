@@ -10,8 +10,10 @@ from fastapi import Request
 from simulation_orchestration.application.services import (
     CollectUsageReport,
     GetJob,
+    GetLlmProvider,
     PauseOrResumeSimulation,
     RunSimulationJob,
+    SelectLlmProvider,
     StreamSimulationProgress,
 )
 
@@ -22,6 +24,8 @@ class SimulationOrchestrationContainer(Protocol):
     pause_or_resume_simulation: PauseOrResumeSimulation
     get_job: GetJob
     collect_usage_report: CollectUsageReport
+    get_llm_provider: GetLlmProvider
+    select_llm_provider: SelectLlmProvider
     model: str
     provider: str
 

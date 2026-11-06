@@ -90,7 +90,12 @@ async def test_simulation_produces_rounds_positions_arguments_and_a_closed_run()
         assert consensus["records"]
 
 
-async def test_configured_prices_show_a_non_zero_cost_for_the_real_stakeholder() -> None:
+async def test_a_scripted_run_is_free_even_when_prices_are_configured() -> None:
+    """Scripted calls bill nothing: no provider was called, so a price would be invented.
+
+    Configured prices apply to the live variant (issue: runtime model switch). A scripted turn is
+    marked synthetic in its invocation parameters and therefore costs zero by design.
+    """
     app = _app(simulation_input_price_per_1k=1.0, simulation_output_price_per_1k=1.0)
     await seed_demo(app)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -104,11 +109,11 @@ async def test_configured_prices_show_a_non_zero_cost_for_the_real_stakeholder()
         usage = (await client.get(f"/api/v1/runs/{run_id}/usage")).json()
 
     assert usage["total_invocations"] == 1
-    assert float(usage["cost"]) > 0.0
+    assert float(usage["cost"]) == 0.0
     assert usage["model"] == "scripted-local"
     assert usage["provider"] == "scripted"
     assert usage["by_stakeholder"][0]["stakeholder"] == "stk_aerztekammer"
-    assert float(usage["by_stakeholder"][0]["cost"]) > 0.0
+    assert float(usage["by_stakeholder"][0]["cost"]) == 0.0
 
 
 async def test_a_graph_that_cannot_drive_the_run_never_reports_completed() -> None:

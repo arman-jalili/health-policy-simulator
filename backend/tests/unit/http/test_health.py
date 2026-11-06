@@ -41,6 +41,8 @@ async def test_readyz_reports_ready_when_database_answers(
         "auth_demo_trusted": "loopback",
         "llm": "scripted",
         "llm_model": "scripted-local",
+        # No LLM_API_KEY in the test environment: only the scripted variant exists.
+        "llm_available": "scripted",
         "ocr": "available" if __import__("shutil").which("tesseract") else "absent",
         "evidence_retrieval": "ok",
         "evidence_retrieval_mode": "lexical+dense",

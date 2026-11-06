@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getHealth, getReadyz, headOpenApi } from "./api";
+import { getHealth, getLlmProvider, getReadyz, headOpenApi, selectLlmProvider } from "./api";
 
 export function useReadyz() {
   return useQuery({
@@ -25,5 +25,25 @@ export function useOpenApiHead() {
     queryKey: ["openapi", "head"],
     queryFn: ({ signal }) => headOpenApi(signal),
     refetchInterval: 60_000,
+  });
+}
+
+export function useLlmProvider() {
+  return useQuery({
+    queryKey: ["llm-provider"],
+    queryFn: ({ signal }) => getLlmProvider(signal),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useSelectLlmProvider() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: string) => selectLlmProvider(provider),
+    onSuccess: () => {
+      // readiness reports the active backend, so the overview pill must refresh with it
+      void queryClient.invalidateQueries({ queryKey: ["llm-provider"] });
+      void queryClient.invalidateQueries({ queryKey: ["readyz"] });
+    },
   });
 }

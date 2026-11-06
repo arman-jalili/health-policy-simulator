@@ -100,6 +100,19 @@ Failures are explicit: `LlmProviderFailed` (provider error after retries) and
 reason. Inadmissible claims never reach the record: the orchestrated path asks ClaimValidation first
 and keeps only admitted ones, leaving the rest as narrative text.
 
+## Switching the model backend at runtime
+
+`GET /api/v1/simulation/provider` reports `{active, model, available}`; `POST` with
+`{"provider": "scripted" | "openai-compatible"}` switches the backend for subsequent turns.
+
+- Both variants exist only when `LLM_BASE_URL` and a key are configured; without them the live variant
+  is absent from `available` and selecting it is refused with `UNKNOWN_LLM_PROVIDER`.
+- The switch is **process state**: a restart restores `LLM_PROVIDER`. It is not per run — a run that is
+  already executing continues with whatever is active at the moment of each turn.
+- Scripted turns are recorded with `parameters.synthetic = true` and therefore cost `0`; the configured
+  prices apply to the live variant only. `/usage` reports the models recorded on the run's invocations,
+  so a pair of demo runs keeps its own label after switching back and forth.
+
 ## Test database isolation
 
 Integration tests derive `TEST_DATABASE_URL` as `<DATABASE_URL database>_test` when it is not set

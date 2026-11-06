@@ -40,6 +40,8 @@ def test_http_contract_is_exact() -> None:
         ("POST", "/api/v1/runs/{run_id}:resume"),
         ("GET", "/api/v1/runs/{run_id}/usage"),
         ("GET", "/api/v1/jobs/{job_id}"),
+        ("GET", "/api/v1/simulation/provider"),
+        ("POST", "/api/v1/simulation/provider"),
     }
     assert set(routes) == expected
     assert _routes()[("POST", "/api/v1/runs/{run_id}:start")].status_code == 202
@@ -65,6 +67,9 @@ def test_container_and_factory_are_frozen() -> None:
         "register_prompt_template",
         "resolve_prompt_template",
         "worker",
+        "select_llm_provider",
+        "get_llm_provider",
+        "llm_control",
         "model",
         "provider",
     ]
@@ -75,6 +80,8 @@ def test_container_and_factory_are_frozen() -> None:
         "pause_or_resume_simulation",
         "get_job",
         "collect_usage_report",
+        "get_llm_provider",
+        "select_llm_provider",
         "model",
         "provider",
     ]

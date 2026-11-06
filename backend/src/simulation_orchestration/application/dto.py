@@ -155,3 +155,12 @@ class UsageAggregate:
     cost: Decimal
     by_stakeholder: tuple[StakeholderUsage, ...] = ()
     by_round: tuple[RoundUsage, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class LlmProviderView:
+    """What the UI needs to render the switch and explain what is unavailable."""
+
+    active: str
+    model: str
+    available: tuple[str, ...]

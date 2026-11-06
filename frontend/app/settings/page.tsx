@@ -18,7 +18,7 @@ import { getSnapshot } from "@/features/corpus/api";
 import { useAuthorityRules } from "@/features/evidence/hooks";
 import { useAllowlist } from "@/features/governance/hooks";
 import { getHealth, getReadyz, headOpenApi } from "@/features/platform/api";
-import { useReadyz } from "@/features/platform/hooks";
+import { useLlmProvider, useReadyz, useSelectLlmProvider } from "@/features/platform/hooks";
 import { useReferenceFigures } from "@/features/claims/hooks";
 import { useStakeholders } from "@/features/stakeholders/hooks";
 import { useSeed } from "@/features/run/hooks";
@@ -45,6 +45,8 @@ export default function SettingsPage() {
   const { push } = useToast();
   const readyz = useReadyz();
   const seed = useSeed();
+  const llm = useLlmProvider();
+  const switchLlm = useSelectLlmProvider();
   const stakeholders = useStakeholders();
   const allowlist = useAllowlist();
   const figures = useReferenceFigures();
@@ -216,6 +218,51 @@ export default function SettingsPage() {
                 </p>
               )}
             </div>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("settings.model")} description={t("settings.modelHint")} />
+        <CardBody className="space-y-3">
+          {llm.isLoading ? (
+            <LoadingBlock rows={2} />
+          ) : llm.data === undefined ? (
+            <ErrorState error={llm.error} onRetry={() => void llm.refetch()} />
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2" role="group" aria-label={t("settings.model")}>
+                {llm.data.available.map((name) => {
+                  const live = name !== "scripted";
+                  const active = llm.data.active === name;
+                  return (
+                    <Button
+                      key={name}
+                      variant={active ? "primary" : "secondary"}
+                      aria-pressed={active}
+                      loading={switchLlm.isPending && switchLlm.variables === name}
+                      onClick={() => {
+                        switchLlm.mutate(name, {
+                          onSuccess: () => push(t("settings.modelSwitched"), "ok"),
+                          onError: () => push(t("settings.modelSwitchFailed"), "danger"),
+                        });
+                      }}
+                    >
+                      {live ? t("settings.modelLive") : t("settings.modelScripted")}
+                    </Button>
+                  );
+                })}
+              </div>
+              <p className="text-2xs text-ink-muted">
+                {t("settings.modelActive")}: {llm.data.active} · {llm.data.model}
+              </p>
+              <p className="text-2xs text-ink-muted">{t("settings.modelNote")}</p>
+              {switchLlm.error !== null && switchLlm.error !== undefined && (
+                <p role="alert" className="text-2xs text-danger">
+                  {String((switchLlm.error as { message?: string }).message ?? "")}
+                </p>
+              )}
+            </>
           )}
         </CardBody>
       </Card>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from decimal import Decimal
 
@@ -62,14 +63,16 @@ class NegotiationTurnNode:
         llm: LLMClient,
         model: str,
         synthetic: bool,
-        scripted: bool = False,
+        scripted: Callable[[], bool] | None = None,
     ) -> None:
         self._recorder = recorder
         self._negotiation = negotiation
         self._llm = llm
         self._model = model
         self._synthetic = synthetic
-        self._scripted = scripted
+        # Read per call: a demo can switch the backend at runtime, and the echo is only acceptable
+        # while the scripted variant is the one answering.
+        self._is_scripted = scripted or (lambda: synthetic)
 
     async def execute(self, state: GraphState) -> GraphState:
         actor = state.next_actor
@@ -99,17 +102,18 @@ class NegotiationTurnNode:
             '"claims" (array of factual statements you would defend, or []), and '
             '"argument" (3-5 sentences, concrete, no personal names, no quotations).'
         )
+        is_scripted = self._is_scripted()
         started = time.perf_counter()
         response = await self._llm.complete(
             LLMRequest(
                 model=self._model,
                 prompt=prompt,
                 prompt_ref=_PROMPT,
-                parameters={"synthetic": self._synthetic},
+                parameters={"synthetic": is_scripted},
             )
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
-        decision = _decision(response.text, briefing, synthetic=self._scripted, prompt=prompt)
+        decision = _decision(response.text, briefing, synthetic=is_scripted, prompt=prompt)
         invocation_id = invocation_identity(state.run_id, state.round, actor, "stakeholder-turn")
         await self._recorder.execute(
             RecordAgentInvocationRequest(
@@ -120,7 +124,7 @@ class NegotiationTurnNode:
                 purpose="stakeholder_turn",
                 model=response.model,
                 prompt=_PROMPT,
-                parameters={"synthetic": self._synthetic, "topic": briefing.topic},
+                parameters={"synthetic": is_scripted, "topic": briefing.topic},
                 evidence_pack_ids=(briefing.evidence_pack_id,),
                 input_tokens=response.input_tokens,
                 output_tokens=response.output_tokens,

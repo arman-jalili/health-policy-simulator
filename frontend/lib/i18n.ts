@@ -504,6 +504,23 @@ const messages = {
   "settings.authMode": { de: "Authentifizierungsmodus", en: "Authentication mode" },
   "settings.latency": { de: "Latenz", en: "Latency" },
   "settings.version": { de: "Version", en: "Version" },
+  "settings.model": { de: "Modell", en: "Model" },
+  "settings.modelHint": {
+    de: "Welches Backend die nächsten Turns schreibt. Der Wechsel gilt sofort und nur für diesen Prozess.",
+    en: "Which backend writes the next turns. The switch applies immediately, for this process only.",
+  },
+  "settings.modelLive": { de: "Live-LLM", en: "Live LLM" },
+  "settings.modelScripted": { de: "Skript (Platzhalter)", en: "Scripted (placeholder)" },
+  "settings.modelActive": { de: "Aktiv", en: "Active" },
+  "settings.modelNote": {
+    de: "Skript liefert deterministische Platzhalter aus den Persona-Karten; Live-LLM schreibt echte Begründungen. Ein Neustart stellt den Standard aus der Umgebung wieder her.",
+    en: "Scripted produces deterministic placeholders from the persona cards; the live LLM writes real reasoning. A restart restores the environment default.",
+  },
+  "settings.modelSwitched": { de: "Modell gewechselt.", en: "Model switched." },
+  "settings.modelSwitchFailed": {
+    de: "Wechsel nicht möglich — Variante nicht konfiguriert.",
+    en: "Switch not possible — variant is not configured.",
+  },
   "settings.bootstrap": { de: "Demo-Bootstrap (Seed)", en: "Demo bootstrap (seed)" },
   "settings.seedTextarea": { de: "Inhalt von demo-seed.json", en: "Contents of demo-seed.json" },
   "settings.seedFile": { de: "Datei wählen", en: "Choose file" },

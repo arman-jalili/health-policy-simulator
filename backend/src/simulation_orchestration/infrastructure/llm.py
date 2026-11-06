@@ -14,7 +14,9 @@ from collections.abc import Awaitable, Callable, Mapping
 
 import httpx
 
+from shared.log_setup import get_logger
 from simulation_orchestration.application.errors import LlmProviderFailed
+from simulation_orchestration.application.ports import LLMClient
 from simulation_orchestration.application.values import LLMRequest, LLMResponse
 
 Completion = Callable[[LLMRequest], Awaitable[str]]
@@ -125,6 +127,54 @@ class HttpLlmClient:
         )
 
 
+class SwitchableLlmClient:
+    """One ``LLMClient`` facade over the configured model backends.
+
+    The demo shows both variations without a restart: the live provider (``openai-compatible`` or
+    ``azure_ai_foundry``) and the deterministic ``scripted`` stand-in. The active name is process
+    state, not configuration — a restart restores ``LLM_PROVIDER`` from the environment.
+    """
+
+    def __init__(self, variants: dict[str, LLMClient], *, active: str) -> None:
+        if active not in variants:
+            raise ValueError(f"active LLM variant {active!r} is not configured")
+        self._variants = variants
+        self._active = active
+        self.model_id = variants[active].model_id
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        return await self._variants[self._active].complete(request)
+
+    def active(self) -> str:
+        return self._active
+
+    def active_model(self) -> str:
+        return self._variants[self._active].model_id
+
+    def available(self) -> tuple[str, ...]:
+        return tuple(sorted(self._variants))
+
+    def switch(self, provider: str) -> None:
+        from simulation_orchestration.application.errors import (
+            UnknownLlmProvider,
+        )
+
+        name = provider.strip().lower()
+        if name not in self._variants:
+            known = ", ".join(sorted(self._variants))
+            raise UnknownLlmProvider(f"unknown LLM provider {provider!r}; configured: {known}")
+        if name == self._active:
+            return
+        self._active = name
+        self.model_id = self._variants[name].model_id
+        logger.info(
+            "llm_provider_switched",
+            provider=name,
+            model=self.model_id,
+            available=",".join(sorted(self._variants)),
+        )
+
+
 class MappedLLMClient(ScriptedLLMClient):
     """Scripted adapter keyed by ``prompt@version`` for deterministic scenarios."""
 
@@ -142,3 +192,6 @@ class MappedLLMClient(ScriptedLLMClient):
             output_tokens=max(1, words),
             latency_ms=0,
         )
+
+
+logger = get_logger(__name__)

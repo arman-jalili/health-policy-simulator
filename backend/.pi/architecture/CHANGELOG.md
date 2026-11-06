@@ -48,6 +48,33 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Runtime model switch (live model vs scripted stand-in)
+
+### Changed
+- SimulationOrchestration: both backends live behind `SwitchableLlmClient`; `GET/POST
+  /api/v1/simulation/provider` reads and switches the active variant, `/readyz` reports the active one
+  plus `llm_available`, and the turn node asks the facade per call whether the scripted stand-in is
+  answering (so a switched run no longer fails `LlmOutputUnparseable`).
+- The scripted variant always reports `scripted-local` and is priced at zero; `/usage` names the model
+  recorded on the run's invocations instead of the currently active one.
+
+### Impact Analysis
+- Files affected: `src/simulation_orchestration/{composition.py,application/{ports,errors,commands,dto,services}.py,
+  infrastructure/{llm,negotiation_nodes}.py,interfaces/http/{router,schemas,deps}.py}`,
+  `src/shared/http/health.py`
+- Canonical refs: `.pi/architecture/modules/simulation-orchestration.md`, `docs/configuration.md`
+- Validators: unit `llm-switch` (5), route/container freeze tests updated, suite 1647 + 32 integration
+
+### Migration Steps
+1. None for the database.
+2. Set `LLM_BASE_URL`/`LLM_API_KEY` to make the live variant selectable; otherwise only `scripted` is.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+
+
 ## [2026-11-06] - Live DeepSeek provider: credential fallback, JSON mode, claim filtering
 
 ### Changed

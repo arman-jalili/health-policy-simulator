@@ -90,3 +90,15 @@ class ProgressEventBody(BaseModel):
     sequence: int
     kind: str
     payload: dict[str, object]
+
+
+class LlmProviderBody(BaseModel):
+    """Name of the variant to activate: the live provider or ``scripted``."""
+
+    provider: str = Field(min_length=1, max_length=64)
+
+
+class LlmProviderResponse(BaseModel):
+    active: str
+    model: str
+    available: list[str]
