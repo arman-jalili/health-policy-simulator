@@ -85,7 +85,12 @@ SERVICE_CLASSIFICATION: Mapping[str, str] = MappingProxyType(
         "ProjectionRebuilder": "infrastructure",
     }
 )
-"""Where every service of this context belongs (AC: service classification)."""
+"""Where every service of this context belongs.
+
+Machine-checked by ``tests/unit/consensus-analysis/service-classification``: every entry resolves to
+a class living in the named layer, so the classification cannot drift into a comment. The rebuild
+strategy is the single ``infrastructure`` entry: a port consumed here, implemented there.
+"""
 
 
 class DeriveConsensus:
