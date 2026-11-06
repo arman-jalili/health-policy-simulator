@@ -14,6 +14,8 @@ export ENV=local
 export AUTH_MODE=demo
 export PERSISTENCE=postgres
 export DATABASE_URL="postgresql+asyncpg://hps:hps@localhost:5433/health_policy"
+# Step 2 pipes the seed's stdout into a JSON file; at INFO the log records land there too (#419).
+export LOG_LEVEL=ERROR
 
 alembic upgrade head
 ```
