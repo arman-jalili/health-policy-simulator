@@ -182,6 +182,10 @@ async def readyz(request: Request) -> JSONResponse:
         checks["governance_provenance"] = getattr(
             request.app.state, "governance_provenance", "deferred"
         )
+        checks["governance_provenance_producer"] = getattr(
+            request.app.state, "governance_provenance_producer", "unbound"
+        )
+    checks["attribution"] = "client-declared"
 
     if failures:
         raise ServiceUnavailableError(

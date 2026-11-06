@@ -1,8 +1,9 @@
-# Issue Groups — 2026-11-06 (round lifecycle / analysis chain)
+# Issue Groups — 2026-11-06 (demo chain correctness)
 
 | Group | Issues | Component | Branch | Order |
 |---|---|---|---|---|
-| Runtime chain | #404, #405, #406, #407, #408, #409 | negotiation-session → consensus-analysis → decision-brief → readiness/docs | `feat/404-409-runtime-chain` | #404 → #405 → #406 → #407 → #408 → #409 |
+| Demo chain | #411, #412, #413, #414 | evidence-retrieval → governance/brief → consensus → demo bootstrap | `fix/411-414-demo-chain` | #411 → #412 → #413 → #414 |
 
-Dependency order is the run lifecycle itself: a run must open/close before the closed-run subscriber,
-derived consensus, brief gates and readiness can be verified. #409 records the resulting state.
+#411 unblocks pack assembly in the mandatory PostgreSQL family. #412 makes the brief gate's input a
+producer inside the round lifecycle. #413 makes an empty closed run a domain outcome. #414 packages the
+whole path as an idempotent seed plus an HTTP walkthrough.

@@ -30,11 +30,11 @@ Deferred bindings: `.pi/architecture/DEFERRED.md` **D-007**
 
 | Symptom | Code | Cause | Action |
 |---|---|---|---|
-| 503 on publish | `BRIEF_GATE_UNAVAILABLE` | history, consensus or provenance port not bound (D-007) | close D-007; never bind a fake gate |
+| 503 on publish | `BRIEF_GATE_UNAVAILABLE` | history, consensus or provenance port not bound | fix the composition root; never bind a fake gate |
 | 409 on publish | `BRIEF_SOURCE_INCOMPLETE` | run not closed / no derived consensus | finish the run; publish after close |
 | 422 | `INCOMPLETE_BRIEF` | fewer than eight sections | fix the projection; the missing kinds are named |
 | 422 | `UNRESOLVED_CITATION` | a citation did not resolve | check the passage exists in the pinned snapshot; publication is blocked and `CitationResolutionFailed` is recorded |
-| 422 | `DISCLOSURE_MISSING` | rejected proposals or disclaimer absent | disclose the run's refusals; use `SimulationDisclaimer.canonical` |
+| 422 | `DISCLOSURE_MISSING` | an open position has no provenance row | close the round again so `CloseRound` re-discloses; the explicit `POST /positions/{id}/provenance` remains for audits |
 | 422 | `STATEMENT_WITHOUT_CITATION` | `evidenced` statement without a passage | add the citation or mark it `narrative`/`unsupported` |
 | 422 | `BLOCKED_OUTCOME_MISRENDERED` | a vetoed topic stated as consensus | state it `blocked` with the blockers |
 | 409 | `PUBLISHED_BRIEF_IMMUTABLE` | in-place change of a published brief | create a version (`POST /briefs/{id}:version`) |

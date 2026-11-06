@@ -9,7 +9,8 @@ Contract: `docs/contracts-governance-compliance.md`
 2. `alembic upgrade head` applies `0305_governance_compliance`.
 3. Boot loads the nine StakeholderModel institutions into the allowlist. Empty, duplicate or
    person-shaped entries abort construction.
-4. `/readyz` reports `governance_compliance: ok` and `governance_allowlist: 9`.
+4. `/readyz` reports `governance_compliance: ok`, `governance_allowlist: 9`,
+   `governance_provenance: wired` and `governance_provenance_producer: close_round`.
 
 ## Failure modes
 
@@ -19,7 +20,7 @@ Contract: `docs/contracts-governance-compliance.md`
 | Boot `ALLOWLIST_CONTAINS_PERSON` | Person title in a canonical name | Correct the persona; restart |
 | `GOVERNANCE_GUARD_UNAVAILABLE` | Container not mounted | Fix composition; writes must fail closed |
 | `GUARD_VERDICT_REQUIRED` | Write attempted without a verdict | Route the write through the guard |
-| `PROVENANCE_INCOMPLETE` | Evidence, arguments or invocation missing | Complete the run; do not publish |
+| `PROVENANCE_INCOMPLETE` | Evidence, arguments or invocation missing | Take the turn that supplies the invocation, then close the round again; disclosure runs on close |
 | Duplicate violation row | Bypass of `violation_hash` | Use `RecordGovernanceViolation` |
 | Guard latency spike | regex/allowlist resolver (no model, no network) | Check `governance_guard_checks_total`; the guard is local and deterministic — a spike means CPU/GC, not a provider |
 

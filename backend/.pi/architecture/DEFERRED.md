@@ -204,8 +204,9 @@ repository. A missing run still fails closed with a named reason.
 
 **Status:** Closed by #407 (history/consensus/provenance gates bound; 0502 + shared outbox).
 **Verified 2026-11-06 (`adafc3b`):** a brief publishes (`201`) and lists one version — but only after a
-manual `POST /positions/{id}/provenance` per position, because no negotiation use case writes the
-disclosure record the gate reads. That producer gap is **#412**, not a reopen of D-007.
+manual `POST /positions/{id}/provenance` per position, because no negotiation use case wrote the
+disclosure record the gate reads. **Closed by #412:** `CloseRound` now discloses every open position in
+the close transaction; the explicit route remains for re-disclosure.
 **Owner:** consensus-analysis epic + governance-compliance epic
 **Recorded:** 2026-11-06 · epic decision-brief (#330), issue #346
 **Estimate:** 4–6 h once the two upstream contexts publish the missing reads
