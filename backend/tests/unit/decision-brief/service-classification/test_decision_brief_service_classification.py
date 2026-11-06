@@ -85,6 +85,7 @@ def test_every_service_is_classified() -> None:
     assert set(SERVICE_CLASSIFICATION) == {
         *(service.__name__ for service in APPLICATION_SERVICES),
         *(service.__name__ for service in DOMAIN_SERVICES),
+        "SectionAssembler",
         "CitationResolver",
         "ProvenanceDisclosureGate",
         "BriefRenderer",
