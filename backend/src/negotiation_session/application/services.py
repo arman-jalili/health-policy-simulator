@@ -59,7 +59,6 @@ from negotiation_session.application.mappers import (
 )
 from negotiation_session.application.ports import (
     ClaimVerdictGate,
-    Clock,
     EventPublisher,
     EvidencePackReader,
     GovernanceGuard,
@@ -119,8 +118,7 @@ from shared.errors import ValidationFailedError
 class TranslateQuestionToMandate:
     """Moderator policy: turn a policy question into a bounded, immutable mandate."""
 
-    def __init__(self, *, clock: Clock, ids: IdFactory) -> None:
-        self._clock = clock
+    def __init__(self, *, ids: IdFactory) -> None:
         self._ids = ids
 
     async def execute(self, request: TranslateQuestionToMandateRequest) -> MandateResult:
@@ -169,7 +167,6 @@ class OpenSimulationRun:
         event_log: RunEventLog,
         events: EventPublisher,
         stakeholders: StakeholderDirectory,
-        clock: Clock,
         ids: IdFactory,
         uow: UnitOfWork,
     ) -> None:
@@ -177,7 +174,6 @@ class OpenSimulationRun:
         self._event_log = event_log
         self._events = events
         self._stakeholders = stakeholders
-        self._clock = clock
         self._ids = ids
         self._uow = uow
 
@@ -222,7 +218,6 @@ class SubmitInitialPosition:
         events: EventPublisher,
         evidence: EvidencePackReader,
         guard: GovernanceGuard,
-        ids: IdFactory,
         uow: UnitOfWork,
     ) -> None:
         self._runs = runs
@@ -230,7 +225,6 @@ class SubmitInitialPosition:
         self._events = events
         self._evidence = evidence
         self._guard = guard
-        self._ids = ids
         self._uow = uow
 
     async def execute(self, request: SubmitInitialPositionRequest) -> PositionResult:
@@ -267,7 +261,6 @@ class TakeNegotiationTurn:
         claims: ClaimVerdictGate,
         guard: GovernanceGuard,
         invocations: InvocationLookup,
-        ids: IdFactory,
         uow: UnitOfWork,
     ) -> None:
         self._runs = runs
@@ -277,7 +270,6 @@ class TakeNegotiationTurn:
         self._claims = claims
         self._guard = guard
         self._invocations = invocations
-        self._ids = ids
         self._uow = uow
 
     async def execute(self, request: TakeNegotiationTurnRequest) -> ArgumentResult:
@@ -323,17 +315,13 @@ class RevisePosition:
         runs: SimulationRunRepository,
         event_log: RunEventLog,
         events: EventPublisher,
-        evidence: EvidencePackReader,
         guard: GovernanceGuard,
-        ids: IdFactory,
         uow: UnitOfWork,
     ) -> None:
         self._runs = runs
         self._event_log = event_log
         self._events = events
-        self._evidence = evidence
         self._guard = guard
-        self._ids = ids
         self._uow = uow
 
     async def execute(self, request: RevisePositionRequest) -> PositionResult:
@@ -365,13 +353,11 @@ class RecordAbstention:
         runs: SimulationRunRepository,
         event_log: RunEventLog,
         events: EventPublisher,
-        ids: IdFactory,
         uow: UnitOfWork,
     ) -> None:
         self._runs = runs
         self._event_log = event_log
         self._events = events
-        self._ids = ids
         self._uow = uow
 
     async def execute(self, request: RecordAbstentionRequest) -> SimulationRunResult:
@@ -391,13 +377,11 @@ class TrackConflictTopic:
         runs: SimulationRunRepository,
         event_log: RunEventLog,
         events: EventPublisher,
-        ids: IdFactory,
         uow: UnitOfWork,
     ) -> None:
         self._runs = runs
         self._event_log = event_log
         self._events = events
-        self._ids = ids
         self._uow = uow
 
     async def execute(self, request: TrackConflictTopicRequest) -> ConflictTopicResult:
@@ -448,13 +432,11 @@ class CloseRound:
         runs: SimulationRunRepository,
         event_log: RunEventLog,
         events: EventPublisher,
-        ids: IdFactory,
         uow: UnitOfWork,
     ) -> None:
         self._runs = runs
         self._event_log = event_log
         self._events = events
-        self._ids = ids
         self._uow = uow
 
     async def execute(self, request: CloseRoundRequest) -> CloseRoundResult:
