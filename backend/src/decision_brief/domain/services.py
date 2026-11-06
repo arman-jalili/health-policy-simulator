@@ -84,9 +84,7 @@ class ReproductionCheck:
     differing is a second source of truth and is refused, naming the section.
     """
 
-    def assert_reproduces(
-        self, published: DecisionBrief, regenerated: DecisionBrief
-    ) -> None:
+    def assert_reproduces(self, published: DecisionBrief, regenerated: DecisionBrief) -> None:
         """Raise ``BriefReproductionMismatch`` at the first section that does not reproduce."""
         for kind in sorted(SectionKind, key=lambda item: SECTION_ORDINAL[item]):
             published_section = published.sections.get(kind)
