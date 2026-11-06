@@ -33,7 +33,7 @@ async def test_a_run_can_be_opened_and_replayed_through_the_public_api(
     events = await client.get(f"/api/v1/runs/{run_id}/events")
     assert events.status_code == 200
     payload = events.json()
-    assert [item["event_type"] for item in payload["items"]][0] == "SimulationRunOpened"
+    assert next(item["event_type"] for item in payload["items"]) == "SimulationRunOpened"
     assert payload["state"]["run_id"] == run_id
 
     stream: RunProgressStream = app.state.negotiation_session.progress_stream
