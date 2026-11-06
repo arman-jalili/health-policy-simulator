@@ -2,9 +2,10 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Implemented (contract frozen #331; gates, lineage, rendering, wiring and proofing landed
+in #332–#348; upstream ports fail closed per D-007)
 **Depends:** ConsensusAnalysis (conformist — consensus records + derived artefacts), NegotiationSession (run history), EvidenceCorpus (provenance resolution), GovernanceCompliance (provenance disclosure)
-**Last reviewed:** 2026-11-05
+**Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description

@@ -1277,7 +1277,7 @@ Track which changes have been synced to implementation:
 | 2026-11-05 | Complete architecture package | stakeholder-model | pending | not run |
 | 2026-11-06 | NegotiationSession implemented, wired and ready (#283-#302) | negotiation-session | complete | pass |
 | 2026-11-05 | Complete architecture package | consensus-analysis | pending | not run |
-| 2026-11-05 | Complete architecture package | decision-brief | pending | not run |
+| 2026-11-06 | DecisionBrief implemented, wired and proofed (#331-#348) | decision-brief | complete | pass |
 | 2026-11-05 | Complete architecture package | claim-validation | pending | not run |
 | 2026-11-05 | Complete architecture package | governance-compliance | pending | not run |
 | 2026-11-05 | Complete architecture package | simulation-orchestration | pending | not run |
@@ -1287,7 +1287,7 @@ Track which changes have been synced to implementation:
 
 ---
 
-*Last updated: 2026-11-05*
+*Last updated: 2026-11-06*
 *Framework version: 1.2.0*
 
 ## 2026-11-05 — EvidenceCorpus implemented
@@ -1301,3 +1301,30 @@ Track which changes have been synced to implementation:
   payloads, error codes, port implementations and invariants; wired into CI and the hardening stages.
 - Observability: `GET /metrics` (Prometheus text) with request, duration and domain-event counters.
 - Known deferral: document/article/passage persistence is in-memory; SQLAlchemy adapters are stubs.
+
+---
+
+## 2026-11-06 — DecisionBrief implemented (epic #330)
+
+- Contract frozen (#331): eight `SectionKind` values at fixed ordinals, evidence/lifecycle/outcome
+  vocabularies, aggregate surface, twelve error codes, five domain events, application ports and
+  use-case stubs, five routes with enforced scopes, JSON document schema `1.0`.
+- Aggregate gates (#332): completeness, statement evidence, citation integrity (with
+  `CitationResolutionFailed`), rejected-proposal disclosure, disclaimer, outcome honesty; a blocked
+  attempt keeps its audit events and never half-publishes.
+- Value objects validate at construction (#333); citation resolution folds in through the corpus
+  `ResolvePassage` ACL (#336); rejections are disclosed in section 5 and audited (#337); the
+  disclaimer wording is fixed (#338); the evidence rule lives on the statement (#339).
+- Published versions are read-only — attribute writes and every mapping mutator raise (#340);
+  lineage creates N+1 referencing N with a mandatory reason (#341); reproduction compares everything
+  but narrative wording (#342); a vetoed topic can only be stated as blocked (#343).
+- JSON rendering (#344) validates against `BriefResponse`; wiring (#345) mounts the router, binds
+  the container and fails closed on an unwired gate; runtime integration (#346) binds the real
+  projection adapter.
+- Proofing (#347): `.pi/scripts/ci/check_decision-brief_contracts.sh` (149 checks) plus the coverage
+  stage `stage_decision-brief_proofing.sh`, registered as hardening stage 18.
+- Known deferrals (**D-007**): run-history and consensus ACLs, the run-level provenance gate,
+  persistence (migration `0502_decision_brief` is reserved) and the outbox binding. Publication
+  returns `BRIEF_GATE_UNAVAILABLE`/`BRIEF_SOURCE_INCOMPLETE` rather than skipping a gate.
+- Operations: `docs/runbook-decision-brief.md`, `docs/dr-plan-decision-brief.md`; `/readyz` reports
+  `decision_brief` and `decision_brief_gates`.

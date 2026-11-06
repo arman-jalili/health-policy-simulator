@@ -104,6 +104,14 @@ async def readyz(request: Request) -> JSONResponse:
                 )
             )
 
+    decision_brief = getattr(request.app.state, "decision_brief", None)
+    if decision_brief is not None:
+        unwired = decision_brief.unwired_gates()
+        # Fail-closed gates are a deliberate state, not an outage: publication refuses rather than
+        # skips a gate, so readiness reports the state without failing the probe (D-007).
+        checks["decision_brief"] = "degraded" if unwired else "ok"
+        checks["decision_brief_gates"] = ",".join(unwired) if unwired else "wired"
+
     stakeholder = getattr(request.app.state, "stakeholder_model", None)
     if stakeholder is not None:
         institution_count = len(stakeholder.allowlist.institutions)

@@ -49,6 +49,16 @@ class DecisionBriefContainer:
     list_citations: ListCitations
     renderer: BriefRenderer
 
+    def unwired_gates(self) -> tuple[str, ...]:
+        """Names of publication ports still bound to a fail-closed stand-in (D-007)."""
+        return tuple(
+            sorted(
+                type(collaborator).__name__
+                for collaborator in self.publish_decision_brief.collaborators()
+                if type(collaborator).__name__.startswith("Unwired")
+            )
+        )
+
 
 def build_container(
     settings: Settings,
