@@ -72,11 +72,14 @@ the rule and persists. The graph is a sequencer, not a model.
 |---|---|
 | Graph | `SequentialWorkflowGraph` over `NegotiationPrepareNode` + `NegotiationTurnNode` |
 | Nodes drive the run | **yes**: `NegotiationSessionGateway` opens the round, submits an evidenced position, takes one turn per actor and closes the round when everyone is accounted for. `POST /runs/{id}:start` leaves real `RoundOpened`, `InitialPositionStated`, `ArgumentSubmitted`, `RoundClosed` and `SimulationRunClosed` events |
+| Decisions | model JSON (`stance`, `proposal`, `claims`, `argument`) is parsed and validated; missing/invalid output uses a deterministic non-unanimous fallback, never a hard-coded SUPPORT (#423). Topics are short agenda labels, round learning is derived from the actual contributions, and invocation records carry the evidence pack used |
+| Prompt context | persona name, short topic, evidence pack id + passage ids, current stances and previous-round learning; a prompt test asserts all three key inputs (#423) |
 | Job status | `completed` only when the run is `CLOSED`; a gateway/provider failure retries and then becomes `failed`/`dead_letter` |
 | LLM | `LLM_PROVIDER=scripted` (local only) or `openai-compatible` (`HttpLlmClient`: `/chat/completions`, real usage tokens, latency, retries on 429/5xx/timeout, named `LLM_PROVIDER_FAILED`) |
 | Metering | one invocation per real stakeholder turn, deterministic `invocation_id`; scripted calls are explicitly synthetic and zero-cost |
 | Config | `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, timeout/retries/temperature/max output tokens; a real provider without key/base URL aborts boot |
-| Readiness | `/readyz` reports `llm: scripted` or `llm: openai-compatible` plus `llm_model`; scripted outside `ENV=local` is refused at boot |
+| Readiness | `/readyz` reports `llm: scripted`, `llm: openai-compatible`, or `llm: azure_ai_foundry` plus `llm_model`; scripted outside `ENV=local` is refused at boot |
+| Stream route | `GET /runs/{id}/stream` is the job-progress feed; negotiation events use `GET /runs/{id}/negotiation/stream` (#420) |
 
 ## Related ADRs
 
