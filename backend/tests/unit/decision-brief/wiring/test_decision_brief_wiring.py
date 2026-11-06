@@ -17,6 +17,7 @@ import httpx
 import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
+from tests.conftest import StubDatabase
 from tests.unit.decision_brief_contract_helpers import (
     SRC,
     annotation_names,
@@ -502,6 +503,9 @@ def test_readiness_reports_decision_brief_and_its_unwired_gates() -> None:
             persistence=Persistence.MEMORY,
         )
     )
+    # /readyz pings the database before it reports any other check, and this test lives in the
+    # database-less unit suite: use the shared stub rather than a live PostgreSQL.
+    app.state.db = StubDatabase()
 
     with TestClient(app) as client:
         body = client.get("/readyz").json()

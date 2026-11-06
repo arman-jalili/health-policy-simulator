@@ -105,7 +105,7 @@ def _run() -> SimulationRun:
 
 
 async def test_translate_question_builds_a_bounded_mandate() -> None:
-    service = TranslateQuestionToMandate(clock=FixedClock(), ids=FixedIds())
+    service = TranslateQuestionToMandate(ids=FixedIds())
     result = await service.execute(
         TranslateQuestionToMandateRequest(question="How to stabilise costs?", round_cap=4)
     )

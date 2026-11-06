@@ -15,7 +15,6 @@ from typing import cast
 
 from negotiation_session.application.ports import (
     ClaimVerdictGate,
-    Clock,
     EvidencePackReader,
     GovernanceGuard,
     IdFactory,
@@ -130,19 +129,17 @@ def build_container(
     event_log = InMemoryRunEventLog()
     broker: RunProgressStream = progress or InMemoryProgressBroker()
     publisher = _ProgressEventPublisher(broker)
-    clock: Clock = SystemClock()
     ids: IdFactory = UuidFactory()
     uow: UnitOfWork = _NullUnitOfWork()
 
     return NegotiationSessionContainer(
-        translate_question_to_mandate=TranslateQuestionToMandate(clock=clock, ids=ids),
+        translate_question_to_mandate=TranslateQuestionToMandate(ids=ids),
         select_relevant_stakeholders=SelectRelevantStakeholders(stakeholders=stakeholders),
         open_simulation_run=OpenSimulationRun(
             runs=runs,
             event_log=event_log,
             events=publisher,
             stakeholders=stakeholders,
-            clock=clock,
             ids=ids,
             uow=uow,
         ),
@@ -152,7 +149,6 @@ def build_container(
             events=publisher,
             evidence=evidence,
             guard=governance,
-            ids=ids,
             uow=uow,
         ),
         take_negotiation_turn=TakeNegotiationTurn(
@@ -163,28 +159,25 @@ def build_container(
             claims=claims,
             guard=governance,
             invocations=invocations,
-            ids=ids,
             uow=uow,
         ),
         revise_position=RevisePosition(
             runs=runs,
             event_log=event_log,
             events=publisher,
-            evidence=evidence,
             guard=governance,
-            ids=ids,
             uow=uow,
         ),
         record_abstention=RecordAbstention(
-            runs=runs, event_log=event_log, events=publisher, ids=ids, uow=uow
+            runs=runs, event_log=event_log, events=publisher, uow=uow
         ),
         track_conflict_topic=TrackConflictTopic(
-            runs=runs, event_log=event_log, events=publisher, ids=ids, uow=uow
+            runs=runs, event_log=event_log, events=publisher, uow=uow
         ),
         form_coalition=FormCoalition(
             runs=runs, event_log=event_log, events=publisher, ids=ids, uow=uow
         ),
-        close_round=CloseRound(runs=runs, event_log=event_log, events=publisher, ids=ids, uow=uow),
+        close_round=CloseRound(runs=runs, event_log=event_log, events=publisher, uow=uow),
         get_simulation_run=GetSimulationRun(runs=runs),
         list_rounds=ListRounds(runs=runs),
         list_conflict_topics=ListConflictTopics(runs=runs),

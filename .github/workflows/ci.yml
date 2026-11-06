@@ -78,6 +78,12 @@ jobs:
         run: bash .pi/scripts/ci/check_claim-validation_contracts.sh
       - name: GovernanceCompliance contract proofing
         run: bash .pi/scripts/ci/check_governance-compliance_contracts.sh
+      - name: NegotiationSession contract proofing
+        run: bash .pi/scripts/ci/check_negotiation-session_contracts.sh
+      - name: ConsensusAnalysis contract proofing
+        run: bash .pi/scripts/ci/check_consensus-analysis_contracts.sh
+      - name: DecisionBrief contract proofing
+        run: bash .pi/scripts/ci/check_decision-brief_contracts.sh
 
   migrations:
     name: Migrations (PostgreSQL 16 + pgvector)
