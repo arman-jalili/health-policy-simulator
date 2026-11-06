@@ -35,6 +35,7 @@ def test_aggregate_and_service_expose_the_revision_seam() -> None:
 def test_rejection_and_revision_are_both_audited_events() -> None:
     assert field_names(PositionRevised) == [
         "run_id",
+        "round",
         "stakeholder_id",
         "topic",
         "position_id",

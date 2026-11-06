@@ -63,6 +63,7 @@ class InitialPositionStated:
     round: int
     stakeholder_id: StakeholderId
     topic: TopicRef
+    position_id: PositionId
     stance: ArgumentStance
     evidence_ids: tuple[EvidencePackId, ...]
 
@@ -88,6 +89,7 @@ class PositionRevised:
 
     name: ClassVar[str] = "PositionRevised"
     run_id: RunId
+    round: int
     stakeholder_id: StakeholderId
     topic: TopicRef
     position_id: PositionId
@@ -114,6 +116,7 @@ class ConflictTopicOpened:
 
     name: ClassVar[str] = "ConflictTopicOpened"
     run_id: RunId
+    round: int
     topic: TopicRef
     stances: Mapping[StakeholderId, ArgumentStance]
 
@@ -124,6 +127,7 @@ class CoalitionOffered:
 
     name: ClassVar[str] = "CoalitionOffered"
     run_id: RunId
+    round: int
     coalition_id: CoalitionId
     invited_id: StakeholderId
     conditions: str
@@ -135,6 +139,7 @@ class CoalitionOfferDeclined:
 
     name: ClassVar[str] = "CoalitionOfferDeclined"
     run_id: RunId
+    round: int
     coalition_id: CoalitionId
     stakeholder_id: StakeholderId
     reason: str
@@ -146,6 +151,7 @@ class CoalitionFormed:
 
     name: ClassVar[str] = "CoalitionFormed"
     run_id: RunId
+    round: int
     topic: TopicRef
     coalition_id: CoalitionId
     members: tuple[StakeholderId, ...]
@@ -203,6 +209,7 @@ class NegotiationPhaseAdvanced:
 
     name: ClassVar[str] = "NegotiationPhaseAdvanced"
     run_id: RunId
+    round: int
     from_phase: NegotiationPhase
     to_phase: NegotiationPhase
 
