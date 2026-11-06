@@ -2,9 +2,9 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Contract Frozen (implementation pending)
 **Depends:** EvidenceRetrieval (ACL — `EvidencePack` → `ClaimEvidence`), StakeholderModel (partnership — `StakeholderProfileView`), ClaimValidation (partnership — verdicts gate claims), GovernanceCompliance (ACL — output guard), SimulationOrchestration (ACL — command invocation)
-**Last reviewed:** 2026-11-05
+**Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description
@@ -15,6 +15,54 @@ evidence, revise positions, form coalitions and the run closes under an explicit
 **Modeling Depth:** tactical (core domain)
 **Subdomain Rationale:** The negotiation state machine and its invariants are the heart of the domain.
 **Context Map:** EvidenceRetrieval → ACL; StakeholderModel → partnership; open-host → ConsensusAnalysis; ClaimValidation → partnership; GovernanceCompliance → ACL; SimulationOrchestration → ACL.
+
+## Contract Freeze (issue #282)
+
+All public interfaces for this epic are frozen before implementation. The frozen surface lives in:
+
+| Surface | File |
+|---|---|
+| Value objects, enums, ids and the vector-free `ClaimEvidence` | `src/negotiation_session/domain/values.py` |
+| Owned entities (`NegotiationMandate`, `Position`, `Argument`, `ConflictTopic`, `Coalition`, `CoalitionOffer`, `RoundLearning`, `NegotiationRound`) | `domain/entities.py` |
+| `SimulationRun` aggregate commands and guards | `domain/simulation_run.py` |
+| Domain services (`EvaluateStoppingCondition`, `DetectArgumentContradiction`, turn-order strategies) | `domain/services.py` |
+| Domain events, `LoggedEvent` and the event union | `domain/events.py` |
+| Stable error codes | `domain/errors.py` |
+| Repository ports (`SimulationRunRepository`, `RunEventLog`) | `domain/repositories.py` (re-exported by `infrastructure/repository/ports.py`) |
+| Commands and result DTOs / read projections | `application/commands.py`, `application/dto.py` |
+| Service interfaces and classification | `application/services.py` (`SERVICE_CLASSIFICATION`) |
+| ACL and technical ports | `application/ports.py` |
+| SSE frame contract | `application/progress.py` |
+| ACL mappers (evidence, stakeholder, claim verdict, guard) | `infrastructure/acl.py` |
+| Concrete HTTP router and schemas | `interfaces/http/router.py`, `interfaces/http/schemas.py` |
+| Published views for other contexts | `interfaces/published.py` |
+| Composition factory and container | `composition.py` |
+
+**Frozen API:** `POST /api/v1/runs` (202), `GET /api/v1/runs/{run_id}`,
+`GET /api/v1/runs/{run_id}/events`, `GET /api/v1/runs/{run_id}/rounds`,
+`POST /api/v1/runs/{run_id}/positions` (201), `POST /api/v1/runs/{run_id}/turns` (201),
+`POST /api/v1/runs/{run_id}/positions/{position_id}:revise` (200),
+`POST /api/v1/runs/{run_id}/abstentions` (204), `GET /api/v1/runs/{run_id}/conflicts`,
+`POST /api/v1/runs/{run_id}/coalitions` (201), `GET /api/v1/runs/{run_id}/learning`,
+`GET /api/v1/runs/{run_id}/stream` (SSE). Write routes require `runs:write`; read/stream routes
+require `runs:read`.
+
+**Error codes:** `SIMULATION_RUN_NOT_FOUND`, `POSITION_NOT_FOUND`, `ROUND_NOT_FOUND`,
+`PHASE_REGRESSION`, `CLOSED_RUN_IMMUTABLE`, `ROUND_STILL_OPEN`, `ROUND_CLOSE_GUARD_VIOLATION`,
+`ROUND_LEARNING_MISSING`, `REVISION_WITHOUT_CAUSE`, `ARGUMENT_WITHOUT_EVIDENCE`,
+`TURN_NOT_AVAILABLE`, `DUPLICATE_TURN`, `ROUND_CAP_EXCEEDED`, `COALITION_WITHOUT_OFFER`,
+`INVALID_COALITION_OFFER_TRANSITION`, `STAKEHOLDER_NOT_BOUND`, `CLAIM_VERDICT_REJECTED`,
+`GOVERNANCE_GUARD_UNAVAILABLE`.
+
+**ACL note:** the aggregate binds `StakeholderBinding` rather than importing
+`StakeholderProfileView` directly, so `domain/` imports no other context's layers (the
+`check_ddd_structure.sh` dependency-direction guard). `infrastructure/acl.py` owns both mappings:
+`EvidencePackView → ClaimEvidence` and `StakeholderProfileView → StakeholderBinding`.
+
+**Freeze policy:** signatures, field names, enum values, event payloads, route paths and status
+codes are additive-only. Renaming or removing a frozen member requires a new freeze entry. Service,
+entity and mapper bodies raise `NotImplementedError` naming their implementing issue until that
+issue lands.
 
 ## Architecture
 
