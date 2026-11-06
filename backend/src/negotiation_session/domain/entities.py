@@ -329,10 +329,25 @@ class RoundLearning:
         round_number: int,
         insights: Sequence[LearningInsight],
     ) -> RoundLearning:
-        raise NotImplementedError("RoundLearning.capture is implemented by issue #294")
+        return cls(
+            id=learning_id,
+            round_number=round_number,
+            insights=tuple(insights),
+        )
 
     def to_prompt_payload(self) -> Mapping[str, object]:
-        raise NotImplementedError("RoundLearning.to_prompt_payload is implemented by issue #294")
+        """Digest handed to the next round's prompt; derived only from this run's arguments."""
+        return {
+            "round": self.round_number,
+            "insights": [
+                {
+                    "type": insight.insight_type.value,
+                    "statement": insight.statement,
+                    "derived_from": [str(argument_id) for argument_id in insight.derived_from],
+                }
+                for insight in self.insights
+            ],
+        }
 
 
 @dataclass(slots=True)
