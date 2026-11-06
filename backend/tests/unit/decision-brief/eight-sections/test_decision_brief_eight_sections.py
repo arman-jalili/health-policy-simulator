@@ -55,8 +55,9 @@ def test_publish_is_the_frozen_gate_entry_point() -> None:
         version=version,
         sections={},
     )
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(IncompleteBrief) as raised:
         brief.publish()
+    assert raised.value.missing[0] == "question_summary"
 
 
 def test_a_section_records_kind_and_ordinal() -> None:

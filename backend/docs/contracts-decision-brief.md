@@ -47,14 +47,26 @@ fixed disclosure wording.
 ### Aggregate surface
 
 ```text
-missing_sections() -> frozenset[SectionKind]          # implemented: required - present
-unresolved_citations() -> tuple[CitationReference,...] # implemented: reading order
+missing_sections() -> frozenset[SectionKind]           # implemented: required - present
+unresolved_citations() -> tuple[CitationReference,...]  # implemented: reading order
+citation_count() -> int                                # implemented: publication payload
 is_published() -> bool                                 # implemented
-assert_statement_evidence(statement) -> None          # stub: statement-evidence issue
-publish() -> None                                     # stub: eight-sections issue
-assert_immutable() -> None                            # stub: immutability issue
-supersede_by(successor, *, reason) -> DecisionBrief   # stub: lineage issue
+assert_statement_evidence(statement) -> None           # implemented: evidenced needs a citation
+assert_rejected_proposals_disclosed(measures) -> None   # implemented (#332): run disclosure gate
+publish() -> None                                      # implemented (#332): all gates, then freeze
+assert_immutable() -> None                             # implemented (#332): published guard
+supersede_by(successor, *, reason) -> DecisionBrief    # stub: lineage issue
 ```
+
+`publish()` runs its gates in reading order and only then freezes: completeness →
+`IncompleteBrief`; statement evidence → `StatementWithoutCitation`; citation integrity →
+`CitationResolutionFailed` + `UnresolvedCitation`; disclaimer → `BriefBlockedByMissingDisclosure` +
+`DisclosureMissing`. A blocked attempt leaves the brief in `BriefStatus.BLOCKED` with its audit
+events, never partially published.
+
+Rejected-proposal completeness needs the run, so the use case calls
+`assert_rejected_proposals_disclosed(run_rejected_measures)` before `publish()` (additive member,
+recorded in #332; an empty run list is a legitimate "no refusals" result).
 
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
