@@ -236,24 +236,25 @@ export default function SettingsPage() {
             />
           </Field>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex h-9 cursor-pointer items-center rounded-md border border-line-strong bg-surface px-3 text-sm">
-              {t("settings.seedFile")}
-              <input
-                type="file"
-                accept="application/json,.json"
-                className="sr-only"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file === undefined) return;
-                  void file.text().then((text) => {
-                    setSeedText(text);
-                    // Import in one step: the picker used to only fill the textarea, so the
-                    // disabled "load" button looked like a broken file chooser.
-                    importSeed(text);
-                  });
-                }}
-              />
-            </label>
+            {/* A real, visible file input: an sr-only one behind a styled label depends on
+                label-forwarding that some browsers/OS dialogs handle badly, and it read as a dead
+                control. Paste remains the fallback in the textarea above. */}
+            <input
+              type="file"
+              accept="application/json,.json"
+              aria-label={t("settings.seedFile")}
+              className="h-9 max-w-full cursor-pointer rounded-md border border-line-strong bg-surface text-sm text-ink file:mr-3 file:h-9 file:cursor-pointer file:border-0 file:border-r file:border-line-strong file:bg-surface-muted file:px-3 file:text-sm file:text-ink hover:border-accent"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file === undefined) return;
+                void file.text().then((text) => {
+                  setSeedText(text);
+                  // Import in one step: the picker used to only fill the textarea, so the
+                  // disabled "load" button looked like a broken file chooser.
+                  importSeed(text);
+                });
+              }}
+            />
             <Button onClick={() => importSeed()}>
               {t("settings.seedLoad")}
             </Button>
@@ -268,6 +269,12 @@ export default function SettingsPage() {
             </Button>
           </div>
           {seedError !== null && <p role="alert" className="text-2xs text-danger">{seedError}</p>}
+          {seed !== null && (
+            <p role="status" className="text-2xs text-ink-muted">
+              {t("settings.seedStatus")}: {seed.snapshot_id} · {Object.keys(seed.pack_ids).length}{" "}
+              {t("settings.seedPacks")} · {seed.figure_ids.length} {t("settings.seedFigures")}
+            </p>
+          )}
           <p className="text-2xs text-ink-muted">{t("settings.seedCommand")}:</p>
           <code className="block rounded-xs border border-line bg-surface-muted px-2 py-1.5 font-mono text-2xs">
             LOG_LEVEL=ERROR make -s demo-seed &gt; /tmp/demo-seed.json
