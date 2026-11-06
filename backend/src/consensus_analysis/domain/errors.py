@@ -137,6 +137,33 @@ class PackageNotComposed(ConflictError):
     code = "PACKAGE_NOT_COMPOSED"
 
 
+class PackageStateTransition(ConflictError):
+    """A package transition was attempted from a state that forbids it."""
+
+    code = "PACKAGE_STATE_TRANSITION"
+
+    def __init__(self, package_id: str, state: str, attempted: str) -> None:
+        self.package_id = package_id
+        self.state = state
+        super().__init__(
+            f"package {package_id} is {state!r}; cannot {attempted}",
+            details=[{"message": f"illegal transition from {state}", "code": self.code}],
+        )
+
+
+class IncompleteRejectionList(ValidationFailedError):
+    """A rejected proposal was submitted without saying why it did not carry (AC 9)."""
+
+    code = "INCOMPLETE_REJECTION_LIST"
+
+    def __init__(self, measure: str) -> None:
+        self.measure = measure
+        super().__init__(
+            f"rejected proposal {measure!r} must state why it was not carried",
+            details=[{"message": "missing reason", "field": measure, "code": self.code}],
+        )
+
+
 class ProjectionRebuildFailed(ConflictError):
     """A rebuild from the run log did not reproduce the persisted rows (AC 4)."""
 

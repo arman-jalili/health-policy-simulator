@@ -199,10 +199,15 @@ class ComponentsCompatible:
     """Specification: two individually accepted components may be combined (invariant 5)."""
 
     def is_satisfied_by(self, *, left: PackageComponent, right: PackageComponent) -> bool:
-        """Return whether the two components can appear in the same package."""
-        raise NotImplementedError(
-            "ComponentsCompatible.is_satisfied_by is implemented by issue #317"
-        )
+        """Return whether the two components can appear in the same package.
+
+        Incompatibility is declared, never inferred: a component names the components it conflicts
+        with, so the rule is symmetric and checkable. Two components are also incompatible when they
+        share an id, because a bundle cannot count the same measure twice.
+        """
+        if left.id == right.id:
+            return False
+        return right.id not in left.conflicts_with and left.id not in right.conflicts_with
 
 
 @dataclass(frozen=True, slots=True)

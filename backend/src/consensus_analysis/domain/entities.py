@@ -126,6 +126,7 @@ class PackageComponent:
     summary: str = ""
     cost_eur: Decimal | None = None
     requires: tuple[ComponentId, ...] = ()
+    conflicts_with: tuple[ComponentId, ...] = ()
 
     def __post_init__(self) -> None:
         _require_text(self.measure, "PackageComponent.measure")

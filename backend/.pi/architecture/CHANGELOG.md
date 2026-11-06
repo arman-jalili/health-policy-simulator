@@ -48,6 +48,39 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ConsensusAnalysis contract amendment: package assembly (#317)
+
+### Changed
+- Module: consensus-analysis
+  - `PackageComponent` gained `conflicts_with`. Incompatibility must be declared to be checkable;
+    inferring it from prose would make `ComponentsCompatible` unimplementable.
+  - New port `ComponentCatalogue` (`components(run_id)`): the aggregate can only combine the
+    components a run actually accepted, so the assembly use case needs a source for them.
+  - `ComposeCompromisePackage` gained the `catalogue` collaborator, and two error codes were added:
+    `PACKAGE_STATE_TRANSITION`, `INCOMPLETE_REJECTION_LIST`.
+
+### Impact Analysis
+- Files affected:
+  - src/consensus_analysis/domain/entities.py
+  - src/consensus_analysis/domain/errors.py
+  - src/consensus_analysis/application/ports.py
+  - src/consensus_analysis/application/services.py
+- Canonical refs to update:
+  - .pi/architecture/modules/consensus-analysis.md#contract-freeze-issue-305
+- Validators required:
+  - ci, tests, architecture
+
+### Migration Steps
+1. Build `PackageComponent` with `conflicts_with` where the policy declares a conflict.
+2. A `ComponentCatalogue` adapter must serve the accepted components of a run.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated
+- [x] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-06] - ConsensusAnalysis contract amendment: rebuild inputs (#312)
 
 ### Changed

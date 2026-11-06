@@ -20,6 +20,7 @@ from consensus_analysis.application.dto import (
     ReferenceFigureView,
 )
 from consensus_analysis.domain.consensus_record import ConsensusRecord
+from consensus_analysis.domain.entities import PackageComponent
 from consensus_analysis.domain.events import DomainEvent
 from consensus_analysis.domain.values import (
     AgendaItem,
@@ -96,6 +97,13 @@ class ProjectionRebuilder(Protocol):
         vetoes: dict[StakeholderId, frozenset[ProposalClass]],
         threshold: ConsensusThreshold,
     ) -> Sequence[ConsensusRecord]: ...
+
+
+@runtime_checkable
+class ComponentCatalogue(Protocol):
+    """Accepted components of a run, with the stakeholders that accepted each one."""
+
+    async def components(self, run_id: RunId) -> Sequence[PackageComponent]: ...
 
 
 @runtime_checkable

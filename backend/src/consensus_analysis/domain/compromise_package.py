@@ -13,7 +13,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from consensus_analysis.domain.entities import PackageComponent, RejectedProposal
-from consensus_analysis.domain.events import DomainEvent
+from consensus_analysis.domain.errors import (
+    IncompatibleComponent,
+    IncompleteRejectionList,
+    PackageStateTransition,
+)
+from consensus_analysis.domain.events import CompromisePackageComposed, DomainEvent
+from consensus_analysis.domain.services import ComponentsCompatible
 from consensus_analysis.domain.values import (
     ComponentId,
     LogPosition,
@@ -43,16 +49,56 @@ class CompromisePackage:
         raise NotImplementedError("CompromisePackage.open is implemented by issue #317")
 
     def add_component(self, component: PackageComponent) -> None:
-        """Add one accepted component; compatibility is checked before the call (invariant 5)."""
-        raise NotImplementedError("CompromisePackage.add_component is implemented by issue #317")
+        """Add one accepted component, refusing one that conflicts with what is already inside.
+
+        The check lives here rather than only in the use case: a package must not be composable
+        around an incompatible part, whoever assembles it (invariant 5).
+        """
+        if self.state is not PackageState.DRAFT:
+            raise PackageStateTransition(self.id, self.state.value, "add a component")
+        for existing in self.components:
+            if not ComponentsCompatible().is_satisfied_by(left=existing, right=component):
+                raise IncompatibleComponent(
+                    f"component {component.id} conflicts with {existing.id}",
+                    details=[
+                        {
+                            "message": "declared incompatibility",
+                            "field": str(component.id),
+                            "code": "INCOMPATIBLE_COMPONENT",
+                        }
+                    ],
+                )
+        self.components = (*self.components, component)
 
     def compose(self, *, rejected: Sequence[RejectedProposal]) -> None:
-        """Close the draft and document every proposal that did not carry (AC 9)."""
-        raise NotImplementedError("CompromisePackage.compose is implemented by issue #317")
+        """Close the draft and document every proposal that did not carry (AC 9).
+
+        No accepted component means no package: the aggregate becomes ``ABANDONED`` instead of a
+        published empty bundle. Rejections are stored as given and counted once, so a rejection
+        cannot vanish between assembly and the audit row.
+        """
+        if self.state is not PackageState.DRAFT:
+            raise PackageStateTransition(self.id, self.state.value, "compose")
+        seen: set[str] = set()
+        for proposal in rejected:
+            if not proposal.reason.strip():
+                raise IncompleteRejectionList(proposal.measure)
+            if str(proposal.id) in seen:
+                raise IncompleteRejectionList(proposal.measure)
+            seen.add(str(proposal.id))
+        self.rejected_proposals = tuple(rejected)
+        self.state = PackageState.COMPOSED if self.components else PackageState.ABANDONED
+        self.events.append(
+            CompromisePackageComposed(
+                package_id=self.id,
+                component_ids=self.component_ids(),
+                rejected_count=len(self.rejected_proposals),
+            )
+        )
 
     def abandon(self, *, reason: str) -> None:
         """Abandon a draft that produced no accepted component."""
-        raise NotImplementedError("CompromisePackage.abandon is implemented by issue #317")
+        self.state = PackageState.ABANDONED
 
     def component_ids(self) -> tuple[ComponentId, ...]:
         """Return the accepted component ids in composition order, for the audit row."""
@@ -60,4 +106,6 @@ class CompromisePackage:
 
     def drain_events(self) -> tuple[DomainEvent, ...]:
         """Return and clear the pending events for the outbox in the saving transaction."""
-        raise NotImplementedError("CompromisePackage.drain_events is implemented by issue #317")
+        drained = tuple(self.events)
+        self.events.clear()
+        return drained

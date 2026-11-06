@@ -44,17 +44,20 @@ from consensus_analysis.application.estimators import EstimateStrategy
 from consensus_analysis.application.ports import (
     Clock,
     ComparisonRanker,
+    ComponentCatalogue,
     EventPublisher,
     IdFactory,
     IllustrativeValueSource,
     ProjectionRebuilder,
     UnitOfWork,
 )
+from consensus_analysis.domain.compromise_package import CompromisePackage
 from consensus_analysis.domain.consensus_record import ConsensusRecord
-from consensus_analysis.domain.entities import ImpactAssessment
+from consensus_analysis.domain.entities import ImpactAssessment, RejectedProposal
 from consensus_analysis.domain.errors import (
     CompromisePackageNotFound,
     ConsensusAnalysisUnavailable,
+    IncompatibleComponent,
     ProjectionRebuildFailed,
     UnbackedEstimate,
 )
@@ -77,7 +80,11 @@ from consensus_analysis.domain.values import (
     AssessmentId,
     BasisKind,
     EstimatedFigure,
+    LogPosition,
+    PackageId,
+    RejectedProposalId,
     ScenarioId,
+    SupportLevel,
 )
 
 SERVICE_CLASSIFICATION: Mapping[str, str] = MappingProxyType(
@@ -188,6 +195,7 @@ class ComposeCompromisePackage:
         packages: CompromisePackageRepository,
         consensus: ConsensusRepository,
         compatible: ComponentsCompatible,
+        catalogue: ComponentCatalogue,
         events: EventPublisher,
         clock: Clock,
         ids: IdFactory,
@@ -196,6 +204,7 @@ class ComposeCompromisePackage:
         self._packages = packages
         self._consensus = consensus
         self._compatible = compatible
+        self._catalogue = catalogue
         self._events = events
         self._clock = clock
         self._ids = ids
@@ -207,6 +216,7 @@ class ComposeCompromisePackage:
             self._packages,
             self._consensus,
             self._compatible,
+            self._catalogue,
             self._events,
             self._clock,
             self._ids,
@@ -214,7 +224,48 @@ class ComposeCompromisePackage:
         )
 
     async def execute(self, request: ComposeCompromisePackageRequest) -> ComposePackageResult:
-        raise NotImplementedError("ComposeCompromisePackage.execute is implemented by issue #317")
+        """Combine the individually accepted, mutually compatible components (AC 9).
+
+        A component that is not in the run's accepted catalogue cannot enter the bundle: composing
+        around a part nobody accepted is the failure invariant 5 exists to stop.
+        """
+        catalogue = {
+            str(component.id): component
+            for component in await self._catalogue.components(request.run_id)
+        }
+        unknown = [str(item) for item in request.component_ids if str(item) not in catalogue]
+        if unknown:
+            raise IncompatibleComponent(
+                f"components were not individually accepted: {', '.join(sorted(unknown))}",
+                details=[{"message": "not accepted", "field": item} for item in sorted(unknown)],
+            )
+        package = CompromisePackage.open(
+            package_id=PackageId(self._ids.new_id("pkg")),
+            run_id=request.run_id,
+            log_position=LogPosition(0),
+        )
+        for component_id in request.component_ids:
+            package.add_component(catalogue[str(component_id)])
+        package.compose(
+            rejected=tuple(
+                RejectedProposal(
+                    id=RejectedProposalId(self._ids.new_id("rjp")),
+                    measure=str(component_id),
+                    support=SupportLevel(value=0.0),
+                    reason="did not reach the mandate threshold",
+                )
+                for component_id in request.rejected_ids
+            )
+        )
+        async with self._uow.transaction():
+            await self._packages.save(package)
+            await self._events.publish(package.drain_events())
+        return ComposePackageResult(
+            package_id=package.id,
+            component_ids=package.component_ids(),
+            rejected_count=len(package.rejected_proposals),
+            state=package.state,
+        )
 
 
 class ListPackages:
