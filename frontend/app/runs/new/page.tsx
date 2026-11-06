@@ -88,6 +88,7 @@ export default function NewRunPage() {
             round: 0,
             closed: false,
             mandateHash: result.mandate_hash,
+            driver: "manual",
           });
           push(`${t("new.mandateHash")}: ${truncateMiddle(result.mandate_hash, 14, 6)}`, "ok");
           router.push(`/runs/${result.run_id}`);

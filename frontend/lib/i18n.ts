@@ -33,6 +33,16 @@ const messages = {
   "run.round": { de: "Runde {round} / {cap}", en: "Round {round} / {cap}" },
   "run.closed": { de: "Abgeschlossen", en: "Closed" },
   "run.open": { de: "Laufend", en: "Open" },
+  "run.driverManual": { de: "Manuell", en: "Manual" },
+  "run.driverAutomated": { de: "Automatisiert", en: "Automated" },
+  "run.automatedBanner": {
+    de: "Automatisierter Lauf (Platzhalter): Stellungnahmen werden vom Orchestrator gesetzt bzw. bei einem Modell ohne JSON-Antwort deterministisch aus der Persona abgeleitet. Zustimmungswerte sind keine Aussage über die Institutionen (Backend #423/#429).",
+    en: "Automated run (placeholder): statements are set by the orchestrator or, when a model returns no JSON, derived deterministically from the persona. Support values are not a finding about the institutions (backend #423/#429).",
+  },
+  "run.automatedScriptedHint": {
+    de: "Das Modell ist der lokale Scripted-Provider; alle Argumenttexte sind synthetisch markiert.",
+    en: "The model is the local scripted provider; every argument text is labelled synthetic.",
+  },
   "run.notFound": { de: "Diese Verhandlung wurde nicht gefunden.", en: "This run was not found." },
   "run.loadError": { de: "Die Verhandlung konnte nicht geladen werden.", en: "The run could not be loaded." },
   "run.retry": { de: "Erneut laden", en: "Load again" },
@@ -291,6 +301,14 @@ const messages = {
   },
   "consensus.derive": { de: "Konsens ableiten", en: "Derive consensus" },
   "consensus.support": { de: "Zustimmung", en: "Support" },
+  "consensus.automatedSupport": {
+    de: "Zustimmung (automatisch gesetzt)",
+    en: "Support (set automatically)",
+  },
+  "consensus.automatedFootnote": {
+    de: "Hinweis: Dieser Lauf wurde automatisiert erzeugt. Die Balken zeigen Orchestrator-/Persona-Regeln, keine gemessene Zustimmung der Institutionen.",
+    en: "Note: this run was generated automatically. The bars show orchestrator/persona rules, not measured institutional support.",
+  },
   "consensus.threshold": { de: "Schwelle", en: "Threshold" },
   "consensus.supporters": { de: "Zustimmende", en: "Supporters" },
   "consensus.minorities": { de: "Minderheiten", en: "Minorities" },
@@ -566,6 +584,10 @@ const messages = {
   "positions.argumentTextUnavailable": {
     de: "Argumenttexte sind in den Ereignissen nicht enthalten.",
     en: "Argument texts are not included in events.",
+  },
+  "positions.automatedFootnote": {
+    de: "Automatisierter Lauf: Stance-Matrix und Alignment sind aus Orchestrator-Entscheidungen abgeleitet, nicht aus manuellen Aussagen.",
+    en: "Automated run: the stance matrix and alignment are derived from orchestrator decisions, not manual statements.",
   },
   "dashboard.deferredLink": { de: "Bekannte Lücken", en: "Known gaps" },
   "deferred.title": { de: "Bekannte Lücken", en: "Known gaps" },

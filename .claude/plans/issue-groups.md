@@ -13,3 +13,8 @@ outcome was not honest (or not gated).
 
 Dependency: #427 and #429 are independent; #428 is independent but should land in the same PR so
 the new tests actually gate a merge.
+
+## Batch: `fix/431-frontend-provenance`
+
+Single issue, frontend-only: label automated runs, remove stale D-FE-003, and cover the data screens
+with axe.

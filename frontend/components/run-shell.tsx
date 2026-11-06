@@ -8,7 +8,8 @@ import { useSettings } from "@/components/providers";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Tabs } from "@/components/ui/tabs";
 import { ErrorState, LoadingBlock } from "@/components/ui/states";
-import { useRun, useLocalRuns } from "@/features/run/hooks";
+import { RunProvenanceBanner, RunDriverBadge } from "@/features/run/components/run-provenance";
+import { useRun, useLocalRuns, useRunDriver } from "@/features/run/hooks";
 import { enumLabel } from "@/lib/i18n";
 import { truncateMiddle } from "@/lib/format";
 import { updateRunInIndex } from "@/lib/settings";
@@ -21,6 +22,7 @@ export function RunShell({ children }: { readonly children: ReactNode }) {
   const params = useParams<{ runId: string }>();
   const runId = typeof params.runId === "string" ? params.runId : "";
   const run = useRun(runId);
+  const driver = useRunDriver(runId);
   const localRuns = useLocalRuns();
   const entry = localRuns.find((item) => item.runId === runId);
 
@@ -90,6 +92,7 @@ export function RunShell({ children }: { readonly children: ReactNode }) {
             {run.isLoading && <StatusPill>{t("common.loading")}</StatusPill>}
             {run.data !== undefined && (
               <>
+                <RunDriverBadge automated={driver.automated} known={driver.known} />
                 <StatusPill tone={run.data.closed ? "neutral" : "ok"}>
                   {run.data.closed ? t("run.closed") : t("run.open")}
                 </StatusPill>
@@ -135,6 +138,9 @@ export function RunShell({ children }: { readonly children: ReactNode }) {
           </div>
         )}
       </header>
+      <div className="mb-4 space-y-3">
+        <RunProvenanceBanner automated={driver.automated} scripted={driver.scripted} />
+      </div>
       <Tabs items={tabs} />
       <div className="pt-4">{children}</div>
     </div>

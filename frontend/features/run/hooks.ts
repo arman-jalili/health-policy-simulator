@@ -3,21 +3,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { useReadyz } from "@/features/platform/hooks";
+
 import {
   loadRunIndex,
   loadSeed,
+  updateRunInIndex,
   type DemoSeed,
   type RunIndexEntry,
 } from "@/lib/settings";
+import { openEventStream } from "@/lib/sse";
 
 import {
   bindStakeholders,
   closeRound,
   formCoalition,
-  getEvents,
   getConflicts,
+  getEvents,
   getRounds,
   getRun,
+  getUsage,
   openRound,
   openRun,
   pauseRun,
@@ -80,6 +85,34 @@ export function useConflicts(runId: string, status?: string) {
   });
 }
 
+export interface RunDriver {
+  readonly automated: boolean;
+  readonly scripted: boolean;
+  readonly known: boolean;
+}
+
+export function useRunDriver(runId: string): RunDriver {
+  const localRuns = useLocalRuns();
+  const readyz = useReadyz();
+  const usage = useQuery({
+    queryKey: ["run", runId, "usage"],
+    queryFn: ({ signal }) => getUsage(runId, signal),
+    enabled: runId !== "",
+    refetchInterval: 10_000,
+  });
+  const entry = localRuns.find((item) => item.runId === runId);
+  const invoked = usage.data?.by_stakeholder.filter((item) => item.invocations >= 1) ?? [];
+  const automated =
+    entry?.driver === "automated" ||
+    (entry?.driver !== "manual" && invoked.length >= 9);
+  const known = entry?.driver !== undefined || usage.data !== undefined;
+  return {
+    automated,
+    scripted: readyz.data?.checks["llm"] === "scripted",
+    known,
+  };
+}
+
 export function useRunFeed(runId: string): RunFeed {
   const queryClient = useQueryClient();
   const [events, setEvents] = useState<readonly EventItem[]>([]);
@@ -94,14 +127,40 @@ export function useRunFeed(runId: string): RunFeed {
   useEffect(() => {
     if (runId === "") return;
     let cancelled = false;
+    let polling = false;
+    let streamClosed = false;
     const controller = new AbortController();
     let timer: number | undefined;
+    let closeStream: (() => void) | undefined;
     previousCount.current = 0;
     idleTicks.current = 0;
     setEvents([]);
     setError(null);
     setIsLoading(true);
     setPollMode("live");
+
+    const mergeEvent = (incoming: EventItem): void => {
+      setEvents((current) => {
+        const bySequence = new Map(current.map((item) => [item.sequence, item]));
+        bySequence.set(incoming.sequence, incoming);
+        return [...bySequence.values()].sort((a, b) => a.sequence - b.sequence);
+      });
+    };
+
+    const refreshState = async (): Promise<void> => {
+      try {
+        const latest = await getRun(runId, controller.signal);
+        if (cancelled) return;
+        setState(latest);
+        queryClient.setQueryData(["run", runId], latest);
+        if (latest.closed) {
+          setPollMode("closed");
+          closeStream?.();
+        }
+      } catch {
+        // the stream remains the primary signal; the next frame retries the snapshot
+      }
+    };
 
     const schedule = (delay: number): void => {
       if (cancelled) return;
@@ -111,6 +170,7 @@ export function useRunFeed(runId: string): RunFeed {
     };
 
     const tick = async (): Promise<void> => {
+      if (cancelled) return;
       try {
         const data = await getEvents(runId, undefined, controller.signal);
         if (cancelled) return;
@@ -139,10 +199,83 @@ export function useRunFeed(runId: string): RunFeed {
       }
     };
 
-    void tick();
+    const startPolling = (): void => {
+      if (cancelled || polling) return;
+      polling = true;
+      setPollMode("live");
+      void tick();
+    };
+
+    const startStream = (lastEventId: string | undefined): void => {
+      closeStream = openEventStream(`/runs/${encodeURIComponent(runId)}/negotiation/stream`, {
+        ...(lastEventId === undefined ? {} : { lastEventId }),
+        signal: controller.signal,
+        onFrame: (frame) => {
+          if (cancelled) return;
+          try {
+            const payload = JSON.parse(frame.data) as unknown;
+            if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return;
+            const sequence = Number(frame.id);
+            const event: EventItem = {
+              sequence: Number.isFinite(sequence) && sequence > 0 ? sequence : previousCount.current + 1,
+              event_type: frame.event,
+              payload: payload as Record<string, unknown>,
+              occurred_at: null,
+            };
+            previousCount.current = Math.max(previousCount.current + 1, event.sequence);
+            mergeEvent(event);
+            setIsLoading(false);
+            setError(null);
+            setPollMode("live");
+            void refreshState();
+          } catch {
+            // malformed frame: skip it, never drop the rest of the stream
+          }
+        },
+        onError: () => {
+          if (cancelled) return;
+          setPollMode("idle");
+          startPolling();
+        },
+        onClose: () => {
+          if (cancelled || streamClosed) return;
+          streamClosed = true;
+          startPolling();
+        },
+      });
+    };
+
+    const initialize = async (): Promise<void> => {
+      try {
+        const data = await getEvents(runId, undefined, controller.signal);
+        if (cancelled) return;
+        const ordered = [...data.items].sort((a, b) => a.sequence - b.sequence);
+        setEvents(ordered);
+        setState(data.state);
+        setIsLoading(false);
+        setError(null);
+        queryClient.setQueryData(["run", runId], data.state);
+        previousCount.current = ordered.length;
+        if (data.state.closed) {
+          setPollMode("closed");
+          return;
+        }
+        const last = ordered.at(-1)?.sequence;
+        startStream(last === undefined ? undefined : String(last));
+      } catch (caught) {
+        if (cancelled) return;
+        setIsLoading(false);
+        setError(caught);
+        setPollMode("error");
+        startPolling();
+      }
+    };
+
+    void initialize();
     return () => {
       cancelled = true;
       controller.abort();
+      closeStream?.();
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [runId, nonce, queryClient]);
@@ -255,7 +388,10 @@ export function useStartRun(runId: string) {
   const invalidate = useInvalidateRun(runId, ["usage"]);
   return useMutation({
     mutationFn: (body: StartBody) => startRun(runId, body),
-    onSuccess: () => void invalidate(),
+    onSuccess: () => {
+      updateRunInIndex(runId, { driver: "automated" });
+      void invalidate();
+    },
   });
 }
 
