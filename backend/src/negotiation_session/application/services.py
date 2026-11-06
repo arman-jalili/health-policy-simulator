@@ -9,6 +9,7 @@ frozen member without a new freeze entry. Business rules stay in the aggregate.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Sequence
 
 from negotiation_session.application.commands import (
@@ -35,6 +36,7 @@ from negotiation_session.application.dto import (
     CoalitionResult,
     ConflictTopicResult,
     IntermediateSummaryResult,
+    LearningInsightResult,
     MandateResult,
     OpenSimulationRunResult,
     PositionResult,
@@ -55,7 +57,21 @@ from negotiation_session.application.ports import (
     StakeholderDirectory,
     UnitOfWork,
 )
+from negotiation_session.domain.entities import (
+    ConflictTopic,
+    NegotiationMandate,
+    NegotiationRound,
+    RoundLearning,
+)
+from negotiation_session.domain.errors import SimulationRunNotFound
 from negotiation_session.domain.repositories import RunEventLog, SimulationRunRepository
+from negotiation_session.domain.simulation_run import SimulationRun
+from negotiation_session.domain.values import (
+    ConflictStatus,
+    MandateId,
+    RunId,
+    StoppingConditionName,
+)
 
 
 class TranslateQuestionToMandate:
@@ -66,7 +82,24 @@ class TranslateQuestionToMandate:
         self._ids = ids
 
     async def execute(self, request: TranslateQuestionToMandateRequest) -> MandateResult:
-        raise NotImplementedError("TranslateQuestionToMandate.execute is implemented by issue #285")
+        conditions = request.stopping_conditions or (
+            StoppingConditionName.CONSENSUS,
+            StoppingConditionName.ROUND_CAP,
+            StoppingConditionName.DEADLOCK,
+        )
+        mandate = NegotiationMandate(
+            id=MandateId(self._ids.new_id("mnd")),
+            question=request.question,
+            objective=request.question,
+            constraints=request.constraints,
+            round_cap=request.round_cap,
+            stopping_conditions=conditions,
+            profile_version="v1",
+            mandate_hash=hashlib.sha256(
+                f"{request.question}|{request.round_cap}".encode()
+            ).hexdigest(),
+        )
+        return _mandate_result(mandate)
 
 
 class SelectRelevantStakeholders:
@@ -284,7 +317,7 @@ class GetSimulationRun:
         self._runs = runs
 
     async def execute(self, request: GetSimulationRunRequest) -> SimulationRunResult:
-        raise NotImplementedError("GetSimulationRun.execute is implemented by issue #283")
+        return _run_result(await _require_run(self._runs, request.run_id))
 
 
 class ListRounds:
@@ -294,7 +327,9 @@ class ListRounds:
         self._runs = runs
 
     async def execute(self, request: ListRoundsRequest) -> Sequence[RoundSummaryResult]:
-        raise NotImplementedError("ListRounds.execute is implemented by issue #294")
+        run = await _require_run(self._runs, request.run_id)
+        rounds = run.rounds[: max(request.limit, 0)]
+        return tuple(_round_result(run.id, round_) for round_ in rounds)
 
 
 class ListConflictTopics:
@@ -304,7 +339,12 @@ class ListConflictTopics:
         self._runs = runs
 
     async def execute(self, request: ListConflictTopicsRequest) -> Sequence[ConflictTopicResult]:
-        raise NotImplementedError("ListConflictTopics.execute is implemented by issue #284")
+        run = await _require_run(self._runs, request.run_id)
+        return tuple(
+            _conflict_result(run.id, conflict)
+            for conflict in run.conflicts.values()
+            if request.status is None or conflict.status is request.status
+        )
 
 
 class ListRoundLearning:
@@ -314,7 +354,12 @@ class ListRoundLearning:
         self._runs = runs
 
     async def execute(self, request: ListRoundLearningRequest) -> Sequence[RoundLearningResult]:
-        raise NotImplementedError("ListRoundLearning.execute is implemented by issue #294")
+        run = await _require_run(self._runs, request.run_id)
+        return tuple(
+            _learning_result(run.id, round_.number, round_.learning)
+            for round_ in run.rounds
+            if round_.learning is not None
+        )
 
 
 class SummariseIntermediateResult:
@@ -326,8 +371,20 @@ class SummariseIntermediateResult:
     async def execute(
         self, request: SummariseIntermediateResultRequest
     ) -> IntermediateSummaryResult:
-        raise NotImplementedError(
-            "SummariseIntermediateResult.execute is implemented by issue #285"
+        run = await _require_run(self._runs, request.run_id)
+        current = request.round_number or (run.rounds[-1].number if run.rounds else 0)
+        return IntermediateSummaryResult(
+            run_id=run.id,
+            round=current,
+            phase=run.phase,
+            consensus="unmeasured",
+            open_conflicts=tuple(
+                topic
+                for topic, conflict in run.conflicts.items()
+                if conflict.status is ConflictStatus.OPEN
+            ),
+            coalition_ids=tuple(run.coalitions),
+            argument_count=sum(len(round_.arguments) for round_ in run.rounds),
         )
 
 
@@ -340,6 +397,91 @@ class ReplaySimulationHistory:
 
     async def execute(self, request: ReplaySimulationHistoryRequest) -> ReplayResult:
         raise NotImplementedError("ReplaySimulationHistory.execute is implemented by issue #296")
+
+
+# ── Projection helpers ──────────────────────────────────────────────────────
+
+
+async def _require_run(runs: SimulationRunRepository, run_id: RunId) -> SimulationRun:
+    run = await runs.get(run_id)
+    if run is None:
+        raise SimulationRunNotFound(f"no simulation run {run_id}")
+    return run
+
+
+def _mandate_result(mandate: NegotiationMandate) -> MandateResult:
+    return MandateResult(
+        mandate_id=str(mandate.id),
+        question=mandate.question,
+        objective=mandate.objective,
+        constraints=mandate.constraints,
+        round_cap=mandate.round_cap,
+        stopping_conditions=mandate.stopping_conditions,
+        mandate_hash=mandate.mandate_hash,
+    )
+
+
+def _run_result(run: SimulationRun) -> SimulationRunResult:
+    return SimulationRunResult(
+        run_id=run.id,
+        phase=run.phase,
+        round=run.rounds[-1].number if run.rounds else 0,
+        round_cap=run.round_cap,
+        closed=run.is_closed,
+        bound_stakeholder_ids=tuple(run.bound),
+        open_position_ids=tuple(
+            position.id
+            for round_ in run.rounds
+            for position in round_.positions.values()
+            if position.is_open
+        ),
+        coalition_ids=tuple(run.coalitions),
+    )
+
+
+def _round_result(run_id: RunId, round_: NegotiationRound) -> RoundSummaryResult:
+    return RoundSummaryResult(
+        round=round_.number,
+        closed=round_.is_closed,
+        argument_count=len(round_.arguments),
+        abstention_count=len(round_.abstentions),
+        learning=(
+            _learning_result(run_id, round_.number, round_.learning)
+            if round_.learning is not None
+            else None
+        ),
+    )
+
+
+def _learning_result(
+    run_id: RunId, round_number: int, learning: RoundLearning | None
+) -> RoundLearningResult:
+    if learning is None:
+        raise ValueError(f"round {round_number} has no learning record")
+    return RoundLearningResult(
+        learning_id=learning.id,
+        run_id=run_id,
+        round=round_number,
+        insights=tuple(
+            LearningInsightResult(
+                insight_type=insight.insight_type.value,
+                statement=insight.statement,
+                derived_from=insight.derived_from,
+                round_number=insight.round_number,
+            )
+            for insight in learning.insights
+        ),
+    )
+
+
+def _conflict_result(run_id: RunId, conflict: ConflictTopic) -> ConflictTopicResult:
+    return ConflictTopicResult(
+        conflict_id=conflict.id,
+        run_id=run_id,
+        topic=conflict.topic,
+        status=conflict.status,
+        stances=dict(conflict.stances),
+    )
 
 
 # ── Frozen service classification (ADR-008) ─────────────────────────────────
