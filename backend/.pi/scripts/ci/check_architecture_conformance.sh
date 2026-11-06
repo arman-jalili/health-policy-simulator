@@ -745,6 +745,14 @@ echo ""
 check_arch_sanity "" "$PROJECT_LANG"
 check_import_boundaries "$PROJECT_LANG"
 
+if [[ -x ".pi/scripts/ci/check_route_collisions.sh" ]]; then
+    if bash ".pi/scripts/ci/check_route_collisions.sh"; then
+        log_pass "Route collision conformance (no duplicate METHOD+path)"
+    else
+        log_fail "Route collision conformance" "two routers register the same METHOD+path"
+    fi
+fi
+
 echo ""
 echo "═══ Conformance Summary ═══"
 echo -e "  ${GREEN}Pass: ${PASS_COUNT}${NC}"

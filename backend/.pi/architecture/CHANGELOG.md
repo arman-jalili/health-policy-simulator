@@ -1305,6 +1305,17 @@ Track which changes have been synced to implementation:
 
 *Last updated: 2026-11-06*
 
+## 2026-11-06 — Stream route, test isolation, honest automated negotiation (#420–#423)
+
+- **#420:** negotiation SSE moved to `GET /runs/{id}/negotiation/stream`; `/runs/{id}/stream` remains the
+  simulation job-progress feed. Added a dispatch-level test and `check_route_collisions.sh`.
+- **#421:** integration tests derive/use `<database>_test` via `TEST_DATABASE_URL`; destructive fixtures
+  refuse a non-`_test` database unless `ALLOW_DESTRUCTIVE_TESTS=1`. Documented isolation and `make demo-reset`.
+- **#423:** the gateway no longer substitutes `SUPPORT`, a placeholder proposal or the full question as the
+  topic. The node prompts with persona, topic, evidence passage ids, current stances and prior learning,
+  parses structured JSON, uses deterministic mixed fallback stances, derives non-empty round learning and
+  records the evidence pack actually used.
+
 ## 2026-11-06 — Simulation drives the run, real provider adapter (#415–#416)
 
 - **#415:** `NegotiationSessionGateway` replaces the production no-op. The graph prepares from the
