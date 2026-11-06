@@ -111,6 +111,18 @@ class StakeholderNotBound(ValidationFailedError):
     code = "STAKEHOLDER_NOT_BOUND"
 
 
+class EvidencePackNotFound(NotFoundError):
+    """A cited evidence pack is not frozen or not visible to this context."""
+
+    code = "EVIDENCE_PACK_NOT_FOUND"
+
+
+class GovernanceRejected(ValidationFailedError):
+    """The pre-persistence governance guard rejected the text."""
+
+    code = "GOVERNANCE_REJECTED"
+
+
 class ClaimVerdictRejected(ValidationFailedError):
     """A claim was refused by the ClaimValidation verdict gate before acceptance."""
 

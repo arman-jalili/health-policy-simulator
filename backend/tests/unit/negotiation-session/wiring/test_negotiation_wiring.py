@@ -104,6 +104,7 @@ def test_container_and_factory_are_frozen() -> None:
         "list_round_learning",
         "summarise_intermediate_result",
         "replay_simulation_history",
+        "progress_stream",
     ]
 
 

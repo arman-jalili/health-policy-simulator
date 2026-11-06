@@ -33,7 +33,9 @@ from negotiation_session.application.commands import (
 )
 from negotiation_session.application.dto import (
     ArgumentResult,
+    BoundStakeholderResult,
     CloseRoundResult,
+    CoalitionOfferResult,
     CoalitionResult,
     ConflictTopicResult,
     HistoryEventResult,
@@ -47,6 +49,13 @@ from negotiation_session.application.dto import (
     RoundSummaryResult,
     SimulationRunResult,
     StakeholderSelectionResult,
+    StoppingConditionResult,
+)
+from negotiation_session.application.mappers import (
+    binding_from_profile,
+    claim_evidence_from_pack,
+    claim_is_admissible,
+    guard_rejected,
 )
 from negotiation_session.application.ports import (
     ClaimVerdictGate,
@@ -60,12 +69,20 @@ from negotiation_session.application.ports import (
     UnitOfWork,
 )
 from negotiation_session.domain.entities import (
+    Coalition,
     ConflictTopic,
     NegotiationMandate,
     NegotiationRound,
+    Position,
     RoundLearning,
 )
-from negotiation_session.domain.errors import SimulationRunNotFound
+from negotiation_session.domain.errors import (
+    ClaimVerdictRejected,
+    EvidencePackNotFound,
+    GovernanceRejected,
+    SimulationRunNotFound,
+    StakeholderNotBound,
+)
 from negotiation_session.domain.events import (
     CoalitionFormed,
     InitialPositionStated,
@@ -79,16 +96,24 @@ from negotiation_session.domain.events import (
 from negotiation_session.domain.repositories import RunEventLog, SimulationRunRepository
 from negotiation_session.domain.simulation_run import SimulationRun
 from negotiation_session.domain.values import (
+    ClaimEvidence,
     CoalitionId,
     ConflictStatus,
+    ConsensusLevel,
+    EvidencePackId,
+    InvocationId,
     MandateId,
     NegotiationPhase,
     PositionId,
+    Proposal,
     RunId,
+    StakeholderBinding,
     StakeholderId,
+    StoppingCondition,
     StoppingConditionName,
     TopicRef,
 )
+from shared.errors import ValidationFailedError
 
 
 class TranslateQuestionToMandate:
@@ -99,24 +124,7 @@ class TranslateQuestionToMandate:
         self._ids = ids
 
     async def execute(self, request: TranslateQuestionToMandateRequest) -> MandateResult:
-        conditions = request.stopping_conditions or (
-            StoppingConditionName.CONSENSUS,
-            StoppingConditionName.ROUND_CAP,
-            StoppingConditionName.DEADLOCK,
-        )
-        mandate = NegotiationMandate(
-            id=MandateId(self._ids.new_id("mnd")),
-            question=request.question,
-            objective=request.question,
-            constraints=request.constraints,
-            round_cap=request.round_cap,
-            stopping_conditions=conditions,
-            profile_version="v1",
-            mandate_hash=hashlib.sha256(
-                f"{request.question}|{request.round_cap}".encode()
-            ).hexdigest(),
-        )
-        return _mandate_result(mandate)
+        return _mandate_result(_build_mandate(request, self._ids))
 
 
 class SelectRelevantStakeholders:
@@ -128,7 +136,27 @@ class SelectRelevantStakeholders:
     async def execute(
         self, request: SelectRelevantStakeholdersRequest
     ) -> StakeholderSelectionResult:
-        raise NotImplementedError("SelectRelevantStakeholders.execute is implemented by issue #285")
+        words = {word.lower() for word in request.question.split() if len(word) > 3}
+        candidates = await self._stakeholders.candidates()
+        ranked: list[tuple[int, str]] = []
+        for view in candidates:
+            haystack = " ".join(
+                [
+                    view.identity.name,
+                    *(item.topic for item in view.interests),
+                    *(item.topic for item in view.constraints),
+                    *view.mandate_scope.topics,
+                ]
+            ).lower()
+            score = sum(1 for word in words if word in haystack)
+            if score or not words:
+                ranked.append((score, view.stakeholder_id))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        selected = tuple(StakeholderId(value) for _, value in ranked[: request.limit])
+        return StakeholderSelectionResult(
+            stakeholder_ids=selected,
+            rationale=f"matched {len(words)} question terms against institutional profiles",
+        )
 
 
 class OpenSimulationRun:
@@ -154,7 +182,33 @@ class OpenSimulationRun:
         self._uow = uow
 
     async def execute(self, request: OpenSimulationRunRequest) -> OpenSimulationRunResult:
-        raise NotImplementedError("OpenSimulationRun.execute is implemented by issue #283")
+        candidate_ids = request.stakeholder_ids or tuple(
+            StakeholderId(view.stakeholder_id)
+            for view in (await self._stakeholders.candidates())[:12]
+        )
+        bound: dict[StakeholderId, StakeholderBinding] = {}
+        for stakeholder in candidate_ids:
+            view = await self._stakeholders.profile(stakeholder)
+            if view is None:
+                raise StakeholderNotBound(f"stakeholder {stakeholder} is not registered")
+            bound[stakeholder] = binding_from_profile(view)
+        mandate = _build_mandate(
+            TranslateQuestionToMandateRequest(
+                question=request.question, round_cap=request.round_cap
+            ),
+            self._ids,
+        )
+        run = SimulationRun.open(
+            run_id=RunId(self._ids.new_id("run")), mandate=mandate, bound=bound
+        )
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return OpenSimulationRunResult(
+            run_id=run.id,
+            phase=run.phase,
+            mandate=_mandate_result(mandate),
+            bound=tuple(_bound_result(binding) for binding in bound.values()),
+        )
 
 
 class SubmitInitialPosition:
@@ -180,7 +234,24 @@ class SubmitInitialPosition:
         self._uow = uow
 
     async def execute(self, request: SubmitInitialPositionRequest) -> PositionResult:
-        raise NotImplementedError("SubmitInitialPosition.execute is implemented by issue #289")
+        run = await _require_run(self._runs, request.run_id)
+        evidence = await _resolve_evidence(self._evidence, request.evidence_ids)
+        await _guard_text(
+            self._guard,
+            _proposal_text(request.proposal),
+            run.id,
+            request.stakeholder_id,
+        )
+        position = run.submit_initial_position(
+            request.stakeholder_id,
+            request.topic,
+            request.stance,
+            request.proposal,
+            evidence,
+        )
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return _position_result(run.id, position)
 
 
 class TakeNegotiationTurn:
@@ -210,7 +281,37 @@ class TakeNegotiationTurn:
         self._uow = uow
 
     async def execute(self, request: TakeNegotiationTurnRequest) -> ArgumentResult:
-        raise NotImplementedError("TakeNegotiationTurn.execute is implemented by issue #290")
+        run = await _require_run(self._runs, request.run_id)
+        evidence = await _resolve_evidence(self._evidence, request.evidence_ids)
+        for claim in request.claims:
+            verdict = await self._claims.verdict_for(claim)
+            if not claim_is_admissible(verdict):
+                raise ClaimVerdictRejected(
+                    f"claim {claim.text!r} was not admitted by its verdict ({verdict.verdict})"
+                )
+        await _guard_text(
+            self._guard,
+            request.text,
+            run.id,
+            request.stakeholder_id,
+            request.invocation_id,
+        )
+        if request.invocation_id is None:
+            raise ValidationFailedError("an argument requires its invocation id (ADR-006)")
+        await self._invocations.require(run.id, request.invocation_id)
+        argument = run.take_turn(
+            request.stakeholder_id,
+            request.target,
+            request.stance,
+            request.text,
+            request.claims,
+            evidence,
+            unsupported=request.unsupported,
+            invocation_id=request.invocation_id,
+        )
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return _argument_result(run.id, argument)
 
 
 class RevisePosition:
@@ -236,7 +337,23 @@ class RevisePosition:
         self._uow = uow
 
     async def execute(self, request: RevisePositionRequest) -> PositionResult:
-        raise NotImplementedError("RevisePosition.execute is implemented by issue #288")
+        run = await _require_run(self._runs, request.run_id)
+        current = run.position_by_id(request.position_id)
+        await _guard_text(
+            self._guard,
+            request.reason.driver or "position revision",
+            run.id,
+            current.stakeholder,
+        )
+        position = run.revise_position(
+            current.stakeholder,
+            current.topic,
+            request.stance,
+            request.reason,
+        )
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return _position_result(run.id, position)
 
 
 class RecordAbstention:
@@ -258,7 +375,11 @@ class RecordAbstention:
         self._uow = uow
 
     async def execute(self, request: RecordAbstentionRequest) -> SimulationRunResult:
-        raise NotImplementedError("RecordAbstention.execute is implemented by issue #287")
+        run = await _require_run(self._runs, request.run_id)
+        run.record_abstention(request.stakeholder_id, request.topic)
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return _run_result(run)
 
 
 class TrackConflictTopic:
@@ -280,7 +401,11 @@ class TrackConflictTopic:
         self._uow = uow
 
     async def execute(self, request: TrackConflictTopicRequest) -> ConflictTopicResult:
-        raise NotImplementedError("TrackConflictTopic.execute is implemented by issue #284")
+        run = await _require_run(self._runs, request.run_id)
+        conflict = run.track_conflict(request.topic, request.stances)
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return _conflict_result(run.id, conflict)
 
 
 class FormCoalition:
@@ -302,7 +427,16 @@ class FormCoalition:
         self._uow = uow
 
     async def execute(self, request: FormCoalitionRequest) -> CoalitionResult:
-        raise NotImplementedError("FormCoalition.execute is implemented by issue #293")
+        run = await _require_run(self._runs, request.run_id)
+        coalition = run.form_coalition(
+            topic=request.topic,
+            member_ids=request.member_ids,
+            proposal=request.proposal,
+            coalition_id=CoalitionId(self._ids.new_id("coa")),
+        )
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return _coalition_result(run.id, coalition)
 
 
 class CloseRound:
@@ -324,7 +458,17 @@ class CloseRound:
         self._uow = uow
 
     async def execute(self, request: CloseRoundRequest) -> CloseRoundResult:
-        raise NotImplementedError("CloseRound.execute is implemented by issue #287")
+        run = await _require_run(self._runs, request.run_id)
+        run.close_round(request.learning)
+        condition = run.evaluate_stopping(_consensus(request.convergence))
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return CloseRoundResult(
+            run_id=run.id,
+            round=run.rounds[-1].number,
+            learning=_learning_result(run.id, run.rounds[-1].number, request.learning),
+            stopping_condition=_stopping_result(condition),
+        )
 
 
 class GetSimulationRun:
@@ -423,6 +567,148 @@ class ReplaySimulationHistory:
             events=tuple(_history_event(item) for item in logged),
             state=_fold_events(run.id, logged, run.round_cap),
         )
+
+
+async def _resolve_evidence(
+    reader: EvidencePackReader, pack_ids: Sequence[EvidencePackId]
+) -> list[ClaimEvidence]:
+    references: list[ClaimEvidence] = []
+    for pack_id in pack_ids:
+        view = await reader.frozen_pack(pack_id)
+        if view is None:
+            raise EvidencePackNotFound(f"no frozen evidence pack {pack_id}")
+        references.extend(claim_evidence_from_pack(view))
+    return references
+
+
+async def _guard_text(
+    guard: GovernanceGuard,
+    text: str,
+    run_id: RunId,
+    stakeholder_id: StakeholderId,
+    invocation_id: InvocationId | None = None,
+) -> None:
+    verdict = await guard.enforce(
+        text, run_id=run_id, stakeholder_id=stakeholder_id, invocation_id=invocation_id
+    )
+    if guard_rejected(verdict):
+        raise GovernanceRejected(
+            "governance guard rejected the text: " + ", ".join(verdict.violations)
+        )
+
+
+def _proposal_text(proposal: Proposal) -> str:
+    return " ".join([proposal.summary, *(component.measure for component in proposal.components)])
+
+
+def _consensus(value: str) -> ConsensusLevel:
+    try:
+        return ConsensusLevel(value.lower())
+    except ValueError:
+        return ConsensusLevel.NONE
+
+
+async def _persist(
+    run: SimulationRun,
+    runs: SimulationRunRepository,
+    event_log: RunEventLog,
+    events: EventPublisher,
+) -> None:
+    drained = run.drain_events()
+    await event_log.append(run.id, drained)
+    await runs.save(run)
+    await events.publish(drained)
+
+
+def _build_mandate(
+    request: TranslateQuestionToMandateRequest, ids: IdFactory
+) -> NegotiationMandate:
+    conditions = request.stopping_conditions or (
+        StoppingConditionName.CONSENSUS,
+        StoppingConditionName.ROUND_CAP,
+        StoppingConditionName.DEADLOCK,
+    )
+    return NegotiationMandate(
+        id=MandateId(ids.new_id("mnd")),
+        question=request.question,
+        objective=request.question,
+        constraints=request.constraints,
+        round_cap=request.round_cap,
+        stopping_conditions=conditions,
+        profile_version="v1",
+        mandate_hash=hashlib.sha256(f"{request.question}|{request.round_cap}".encode()).hexdigest(),
+    )
+
+
+def _bound_result(binding: StakeholderBinding) -> BoundStakeholderResult:
+    return BoundStakeholderResult(
+        stakeholder_id=binding.stakeholder_id,
+        institution_name=binding.institution_name,
+        institution_code=binding.institution_code,
+        profile_version=binding.profile_version,
+        persona_version=binding.persona_version,
+    )
+
+
+def _position_result(run_id: RunId, position: Position) -> PositionResult:
+    return PositionResult(
+        position_id=position.id,
+        run_id=run_id,
+        round=position.round_number,
+        stakeholder_id=position.stakeholder,
+        topic=position.topic,
+        stance=position.stance,
+        proposal=position.proposal,
+        evidence_ids=tuple(item.evidence_id for item in position.evidence),
+        supersedes=position.supersedes,
+        revision=position.revision,
+    )
+
+
+def _argument_result(run_id: RunId, argument: object) -> ArgumentResult:
+    from negotiation_session.domain.entities import Argument
+
+    if not isinstance(argument, Argument):
+        raise TypeError("expected an Argument")
+    return ArgumentResult(
+        argument_id=argument.id,
+        run_id=run_id,
+        round=argument.round_number,
+        stakeholder_id=argument.stakeholder,
+        target=argument.target,
+        stance=argument.stance,
+        evidence_ids=tuple(item.evidence_id for item in argument.evidence),
+        unsupported=argument.unsupported,
+        invocation_id=argument.invocation_id,
+    )
+
+
+def _coalition_result(run_id: RunId, coalition: Coalition) -> CoalitionResult:
+    return CoalitionResult(
+        coalition_id=coalition.id,
+        run_id=run_id,
+        topic=coalition.topic,
+        proposal=coalition.proposal,
+        members=tuple(coalition.members),
+        offers=tuple(
+            CoalitionOfferResult(
+                offer_id=offer.id,
+                invited_id=offer.invited,
+                conditions=offer.conditions,
+                status=offer.status,
+                decline_reason=offer.decline_reason,
+            )
+            for offer in coalition.offers.values()
+        ),
+    )
+
+
+def _stopping_result(condition: StoppingCondition) -> StoppingConditionResult:
+    return StoppingConditionResult(
+        name=condition.name,
+        fired=condition.fired,
+        parameters=condition.parameters,
+    )
 
 
 # ── Projection helpers ──────────────────────────────────────────────────────
