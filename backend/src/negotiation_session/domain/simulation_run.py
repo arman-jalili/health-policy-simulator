@@ -315,6 +315,8 @@ class SimulationRun:
     def close_round(self, learning: RoundLearning) -> None:
         self._assert_mutable()
         round_ = self.current_round
+        if round_.is_closed:
+            raise RoundStillOpen(f"round {round_.number} is already closed")
         round_.assert_everyone_accounted_for(self.bound)
         round_.attach_learning(learning)
         round_.close()

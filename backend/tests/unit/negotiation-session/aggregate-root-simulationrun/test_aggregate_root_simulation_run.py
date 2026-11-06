@@ -190,8 +190,13 @@ def test_close_round_refuses_an_unaccounted_stakeholder() -> None:
 def test_close_round_succeeds_when_everyone_spoke_or_abstained() -> None:
     run = _run()
     round_ = run.open_round()
-    run.submit_initial_position(
-        STAKEHOLDER_A, TOPIC, ArgumentStance.SUPPORT, _proposal(), [_evidence()]
+    run.take_turn(
+        STAKEHOLDER_A,
+        TargetRef(topic=TOPIC),
+        ArgumentStance.SUPPORT,
+        "We need a cap.",
+        (),
+        [_evidence()],
     )
     run.record_abstention(STAKEHOLDER_B, TOPIC)
     run.close_round(_learning())

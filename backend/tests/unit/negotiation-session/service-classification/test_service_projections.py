@@ -34,6 +34,7 @@ from negotiation_session.domain.values import (
     StakeholderBinding,
     StakeholderId,
     StoppingConditionName,
+    TargetRef,
     TopicRef,
 )
 
@@ -89,6 +90,14 @@ def _run() -> SimulationRun:
         Proposal(summary="A"),
         [ClaimEvidence(evidence_id=EvidencePackId("pack_1"), passage_id="psg_1", stance="support")],
     )
+    run.take_turn(
+        STAKEHOLDER_A,
+        TargetRef(topic=TOPIC),
+        ArgumentStance.SUPPORT,
+        "We need a cap.",
+        (),
+        [ClaimEvidence(evidence_id=EvidencePackId("pack_1"), passage_id="psg_1", stance="support")],
+    )
     run.record_abstention(STAKEHOLDER_B, TOPIC)
     run.track_conflict(TOPIC, {STAKEHOLDER_A: ArgumentStance.SUPPORT})
     run.close_round(RoundLearning(id=LearningId("lrn_1"), round_number=1))
@@ -133,7 +142,7 @@ async def test_read_services_project_rounds_conflicts_and_learning() -> None:
     assert len(rounds) == 1
     assert rounds[0].round == 1
     assert rounds[0].closed
-    assert rounds[0].argument_count == 0
+    assert rounds[0].argument_count == 1
     assert rounds[0].abstention_count == 1
 
     conflicts = await ListConflictTopics(runs=repository).execute(
