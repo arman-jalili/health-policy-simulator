@@ -67,6 +67,7 @@ citation_count() -> int                                # implemented: publicatio
 is_published() -> bool                                 # implemented
 assert_statement_evidence(statement) -> None           # implemented: evidenced needs a citation
 assert_rejected_proposals_disclosed(measures) -> None   # implemented (#332): run disclosure gate
+resolve_citations(resolved) -> None                    # implemented (#336): fold resolver output in
 publish() -> None                                      # implemented (#332): all gates, then freeze
 assert_immutable() -> None                             # implemented (#332): published guard
 supersede_by(successor, *, reason) -> DecisionBrief    # stub: lineage issue
@@ -84,6 +85,15 @@ recorded in #332; an empty run list is a legitimate "no refusals" result).
 
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
+
+## Citation gate (#336)
+
+`EvidenceCorpusCitationResolver` is the concrete `CitationResolver` adapter: it calls the corpus
+`ResolvePassage` use case per passage id and maps `PassageView` → `CitationProvenance` + quote. A
+passage the corpus does not know becomes `unresolved` — provenance is never invented. The aggregate
+folds the result in with `resolve_citations(resolved)`: references whose passage id was not resolved
+stay unresolved, so `publish()` still raises `UnresolvedCitation` and emits
+`CitationResolutionFailed`. Resolving on a published brief raises `PublishedBriefIsImmutable`.
 
 ## Domain projections (input contracts, frozen)
 

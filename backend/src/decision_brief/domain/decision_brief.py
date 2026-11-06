@@ -15,7 +15,7 @@ measures before it calls ``publish``.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from decision_brief.domain.entities import BriefSection, RejectedProposalRecord
 from decision_brief.domain.errors import (
@@ -90,6 +90,27 @@ class DecisionBrief:
     def is_published(self) -> bool:
         """Whether the artefact is frozen and read-only (AC 6)."""
         return self.status is BriefStatus.PUBLISHED
+
+    def resolve_citations(self, resolved: Sequence[CitationReference]) -> None:
+        """Apply resolved citations by passage id; anything absent stays unresolved (AC 2).
+
+        The citation gate does not invent provenance: it only folds what the resolver returned into
+        the statements, which is why an unresolved passage still blocks ``publish`` afterwards.
+        """
+        self.assert_immutable()
+        by_passage = {str(citation.passage_id): citation for citation in resolved}
+        for kind, section in tuple(self.sections.items()):
+            statements = tuple(
+                replace(
+                    statement,
+                    citations=tuple(
+                        by_passage.get(str(citation.passage_id), citation)
+                        for citation in statement.citations
+                    ),
+                )
+                for statement in section.statements
+            )
+            self.sections[kind] = replace(section, statements=statements)
 
     def assert_statement_evidence(self, statement: CitedStatement) -> None:
         """Raise ``StatementWithoutCitation`` for an evidenced statement with no citation (AC 5)."""
