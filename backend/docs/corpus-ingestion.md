@@ -69,9 +69,18 @@ starting, and prefer a curated subset for the demo (see below).
 
 ## Scanned documents
 
-`PyMuPdfExtractor` refuses a PDF without a text layer (`ExtractionFailed: no text layer found; route to OCR`).
-The OCR adapter (`TesseractOcrExtractor`) needs `pytesseract` + `Pillow` and runs at ~300 dpi, i.e. seconds per
-page. Check before planning:
+`PyMuPdfExtractor` refuses a PDF without a text layer (`ExtractionFailed: no text layer found; route to OCR`),
+and a **sparse** text layer is routed to OCR too (a one-line cover page is enough). The OCR adapter
+(`TesseractOcrExtractor`) needs the Python packages `pytesseract` + `Pillow` **and the `tesseract` system
+binary**; it runs at ~300 dpi, i.e. seconds per page. Without the binary every OCR-routed file fails — through
+`POST /corpus/ingestion-runs` that failure is reported as a bare `failed` count with no reason (#427).
+
+```bash
+# is the OCR stack usable? (the script will not tell you — see #427)
+python -c "import pytesseract; print(pytesseract.get_tesseract_version())" || echo "OCR unavailable"
+```
+
+Check the text layer before planning:
 
 ```bash
 python - <<'PY'
