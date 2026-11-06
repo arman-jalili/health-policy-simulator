@@ -107,8 +107,23 @@ class MajorityHolds:
         proposal: str,
         stances: Mapping[StakeholderId, StanceSnapshot],
     ) -> MajorityPosition:
-        """Record the carried stance; it never upgrades a partial outcome to consensus."""
-        raise NotImplementedError("MajorityHolds.majority_of is implemented by issue #316")
+        """Record the carried stance; it never upgrades a partial outcome to consensus.
+
+        The supporters are the recorded holders that approve, in log order, and the support level is
+        the weighted measure. Recording a majority with no supporters is refused by
+        ``MajorityPosition.carry``: a "majority" nobody holds is the manufactured agreement this
+        context exists to prevent.
+        """
+        supporters = tuple(
+            snapshot.stakeholder
+            for snapshot in ordered(stances)
+            if snapshot.recorded and snapshot.supports
+        )
+        return MajorityPosition.carry(
+            proposal=proposal,
+            supporters=supporters,
+            support=SupportLevel.weighted(stances),
+        )
 
 
 @dataclass(frozen=True, slots=True)
