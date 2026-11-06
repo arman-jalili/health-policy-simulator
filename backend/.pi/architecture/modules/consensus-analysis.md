@@ -2,9 +2,9 @@
 
 ## Module Status
 
-**Status:** Planned
+**Status:** Contract Frozen (implementation pending)
 **Depends:** NegotiationSession (open-host — published session events are the derivation input), StakeholderModel (veto rights and negotiating power)
-**Last reviewed:** 2026-11-05
+**Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description
@@ -28,6 +28,55 @@ positions, unresolved conflicts, compromise packages and impact assessments. Nev
 **All artefacts here are derived.** They hold no input state; recalculation from the run log must
 reproduce them (invariant 1). They exist as persisted projections so the brief can be rendered
 without recomputation, not because they are authoritative.
+
+## Contract Freeze (issue #305)
+
+All public interfaces for this epic are frozen before implementation. The frozen surface lives in
+`src/consensus_analysis/`:
+
+| Surface | File |
+|---|---|
+| Ids, value objects, enums (`SupportLevel`, `ConsensusThreshold`, `VetoBlockedOutcome`, `UnresolvedConflict`, `EstimateBasis`, `DerivationInput`, `EstimateLimitation`, `FeasibilityRating`, `UncertaintyLabel`, `ConsensusOutcome`) | `domain/values.py` |
+| Owned entities (`MajorityPosition`, `MinorityPosition`, `PackageComponent`, `RejectedProposal`, `ImpactAssessment`) | `domain/entities.py` |
+| `ConsensusRecord` aggregate (`determine`, history assertion, digest) | `domain/consensus_record.py` |
+| `CompromisePackage` aggregate (`add_component`, `compose` with documented rejections) | `domain/compromise_package.py` |
+| `Scenario` aggregate (`define`, `assess`) | `domain/scenario.py` |
+| Domain services: `ConsensusRule` (`NotVetoed` → `ThresholdMet` → `MajorityHolds`), `MinorityCapture`, `ComponentsCompatible`, `EstimateValidator`, `IllustrativeValueGuard`, `FeasibilityGuard` | `domain/services.py` |
+| Nine domain events and the event union | `domain/events.py` |
+| Eleven stable error codes | `domain/errors.py` |
+| Repository and derivation ports (`ConsensusRepository`, `CompromisePackageRepository`, `ScenarioRepository`, `RunLogPort`, `StakeholderPowersPort`) | `domain/repositories.py` (re-exported by `infrastructure/repository/ports.py`) |
+| Commands and result DTOs, local ACL records | `application/commands.py`, `application/dto.py` |
+| Nine application services and `SERVICE_CLASSIFICATION` | `application/services.py` |
+| ACL, metered estimation, rebuild and ranking ports | `application/ports.py` |
+| Estimation strategies (`Measured`, `Derived`, `Modelled`, `Assumed`) | `application/estimators.py` |
+| ACL mappers (veto map, reference figure) and the illustrative-value catalogue | `infrastructure/acl.py` |
+| Concrete HTTP router and schemas | `interfaces/http/router.py`, `interfaces/http/schemas.py`, `interfaces/http/deps.py` |
+| `ConsensusView` and the per-artefact views consumed by DecisionBrief | `interfaces/published.py` |
+| Composition factory and container | `composition.py` |
+
+**Frozen API:** `POST /api/v1/runs/{run_id}/analysis:derive`,
+`GET /api/v1/runs/{run_id}/consensus`, `GET /api/v1/runs/{run_id}/conflicts/open`,
+`POST /api/v1/runs/{run_id}/packages` (201), `GET /api/v1/runs/{run_id}/packages`,
+`POST /api/v1/packages/{package_id}/scenarios` (201), `GET /api/v1/packages/{package_id}/comparison`.
+Write routes require `runs:write`; read routes require `runs:read`.
+
+**Error codes:** `STANCE_NOT_IN_HISTORY`, `UNBACKED_ESTIMATE`, `ILLUSTRATIVE_VALUE_REFUSED`,
+`FEASIBILITY_CONTRADICTS_VETO`, `INCOMPATIBLE_COMPONENT`, `PACKAGE_NOT_COMPOSED`,
+`PROJECTION_REBUILD_FAILED`, `CONSENSUS_NOT_FOUND`, `COMPROMISE_PACKAGE_NOT_FOUND`,
+`SCENARIO_NOT_FOUND`, `CONSENSUS_ANALYSIS_UNAVAILABLE`.
+
+**Domain purity:** the domain declares its own `ProposalClass` mirror and binds `StanceSnapshot`
+with a `recorded` flag, so `domain/` imports no other context's layers. `infrastructure/acl.py` owns
+the reconciliation with `StakeholderProfileView.veto_rights` and `ClaimVerdictView`.
+
+**Reachability:** each use case publishes `collaborators()`, the frozen list of ports the
+composition root must supply. It is what keeps the W8 gate meaningful while the bodies are stubs;
+implementing issues replace it with real call sites.
+
+**Freeze policy:** signatures, field names, enum values, event payloads, route paths and status
+codes are additive-only. Renaming or removing a frozen member requires a new freeze entry. The 83
+structural contract checks in `tests/unit/consensus-analysis/` pass at freeze time; behaviour is
+proved by the implementing issues.
 
 ## Related ADRs
 
