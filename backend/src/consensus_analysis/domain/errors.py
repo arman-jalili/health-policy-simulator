@@ -35,6 +35,20 @@ class StanceNotInHistory(ValidationFailedError):
         )
 
 
+class UnknownVetoClass(ValidationFailedError):
+    """A veto right named a class this context cannot represent, so it cannot be evaluated (AC 1).
+
+    Dropping it would silently restore consensus for a class an institution may block.
+    """
+
+    code = "UNKNOWN_VETO_CLASS"
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+        details = [{"message": "unknown proposal class in veto right", "field": "proposal_class"}]
+        super().__init__(f"veto right names an unknown proposal class {value!r}", details=details)
+
+
 class UnbackedEstimate(ValidationFailedError):
     """A figure claimed a computed basis without enumerating its inputs (invariant 7, AC 5)."""
 
