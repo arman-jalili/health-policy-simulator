@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Contract Frozen (implementation pending)
+**Status:** Implemented and wired (memory persistence; SQLAlchemy adapters and migrations 0401/0402 deferred)
 **Depends:** EvidenceRetrieval (ACL — `EvidencePack` → `ClaimEvidence`), StakeholderModel (partnership — `StakeholderProfileView`), ClaimValidation (partnership — verdicts gate claims), GovernanceCompliance (ACL — output guard), SimulationOrchestration (ACL — command invocation)
 **Last reviewed:** 2026-11-06
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
