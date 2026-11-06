@@ -86,6 +86,15 @@ recorded in #332; an empty run list is a legitimate "no refusals" result).
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
 
+## Rejected-proposal disclosure (#337)
+
+`SectionAssembler.assemble` renders every record of `RunProjection.rejected_proposals` inside
+section 5 (`compromise_proposals`) as `"<measure> — rejected — blocked by <blockers>: <reasons>"`, and
+`SectionAssembler.rejected_proposals(run)` carries the records onto the brief so
+`assert_rejected_proposals_disclosed(run_rejected_measures)` can compare. Publication appends one
+`RejectedProposalDisclosed{brief_id, measure, blocker_ids}` per disclosed record before
+`DecisionBriefPublished`, so a tidy result cannot hide a refusal.
+
 ## Citation gate (#336)
 
 `EvidenceCorpusCitationResolver` is the concrete `CitationResolver` adapter: it calls the corpus

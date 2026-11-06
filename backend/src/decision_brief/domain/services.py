@@ -14,7 +14,7 @@ from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
 from decision_brief.domain.decision_brief import DecisionBrief
-from decision_brief.domain.entities import BriefSection
+from decision_brief.domain.entities import BriefSection, RejectedProposalRecord
 from decision_brief.domain.projections import (
     ClaimVerdictProjection,
     CompromiseRecord,
@@ -109,7 +109,10 @@ class SectionAssembler:
             ),
             SectionKind.COMPROMISES: self._section(
                 SectionKind.COMPROMISES,
-                tuple(self._compromise(item) for item in run.compromises),
+                (
+                    *(self._compromise(item) for item in run.compromises),
+                    *(self._rejection(item) for item in run.rejected_proposals),
+                ),
             ),
             SectionKind.CONSENSUS: self._section(
                 SectionKind.CONSENSUS, self._consensus_statements(run, consensus)
@@ -165,6 +168,18 @@ class SectionAssembler:
         if item.opponents:
             parts.append(f"opposed by {', '.join(item.opponents)}")
         return self._narrative(" — ".join(parts))
+
+    def rejected_proposals(self, run: RunProjection) -> tuple[RejectedProposalRecord, ...]:
+        """The run's refusals, carried onto the brief so the disclosure gate can check them."""
+        return run.rejected_proposals
+
+    def _rejection(self, item: RejectedProposalRecord) -> CitedStatement:
+        blockers = ", ".join(item.blocking_stakeholders)
+        reasons = "; ".join(item.reasons)
+        detail = f" — blocked by {blockers}" if blockers else ""
+        if reasons:
+            detail = f"{detail}: {reasons}" if detail else f" — {reasons}"
+        return self._narrative(f"{item.measure} — rejected{detail}")
 
     def _consensus_statements(
         self, run: RunProjection, consensus: ConsensusProjection

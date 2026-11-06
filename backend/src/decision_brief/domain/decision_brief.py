@@ -30,6 +30,7 @@ from decision_brief.domain.events import (
     CitationResolutionFailed,
     DecisionBriefPublished,
     DomainEvent,
+    RejectedProposalDisclosed,
 )
 from decision_brief.domain.values import (
     REQUIRED_SECTIONS,
@@ -142,6 +143,10 @@ class DecisionBrief:
             self.status = BriefStatus.BLOCKED
             raise
         self.status = BriefStatus.PUBLISHED
+        for record in self.rejected_proposals:
+            self.events.append(
+                RejectedProposalDisclosed(self.id, record.measure, record.blocking_stakeholders)
+            )
         self.events.append(
             DecisionBriefPublished(
                 self.id,
