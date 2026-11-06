@@ -251,6 +251,11 @@ not read as "verified".
 
 **Goal:** Nine institutional agents argue, revise positions with recorded reasons, form coalitions and close under an explicit condition — streamed live.
 
+**Verified 2026-11-06 on `ef2ceb4`:** the aggregate, round, revision, coalition and replay rules are
+implemented and unit-tested (138 contract checks). What is missing is the *write-side API*: `open_round`
+has no caller and `CloseRound` has no route, so no run can progress or close (#404). Persistence is
+memory-only (D-008) and the consensus seam does not exist (D-009).
+
 ### Modules
 
 | Module | Deliverables | Architecture Doc |
@@ -272,20 +277,30 @@ not read as "verified".
 
 ### Acceptance Criteria
 
-- [ ] A round cannot close until every bound stakeholder has a turn or a recorded abstention
-- [ ] A revision without a cited argument or pack id emits `PositionRevisionRejected` and changes nothing
-- [ ] One open position per (stakeholder, topic); revision supersedes
-- [ ] An argument carries evidence or an explicit unsupported flag
-- [ ] `round_cap` reached forces terminal evaluation; phase never regresses
-- [ ] Folding the event log to round N equals live state at round N
-- [ ] A live run streams positions, arguments and revisions; reconnect replays without gaps
-- [ ] Killing the worker mid-round neither duplicates arguments nor loses rounds
+- [x] A round cannot close until every bound stakeholder has a turn or a recorded abstention —
+  domain-tested (`Round.assert_everyone_accounted_for`); **not reachable from the API** (#404)
+- [x] A revision without a cited argument or pack id emits `PositionRevisionRejected` and changes nothing —
+  domain-tested (109 revision/lineage tests)
+- [x] One open position per (stakeholder, topic); revision supersedes — domain-tested
+- [x] An argument carries evidence or an explicit unsupported flag — tested; the API resolves real
+  evidence-pack ids and refuses unknown ones (`EVIDENCE_PACK_NOT_FOUND`)
+- [x] `round_cap` reached forces terminal evaluation; phase never regresses — domain-tested
+- [x] Folding the event log to round N equals live state at round N — tested (replay-equivalence)
+- [ ] A live run streams positions, arguments and revisions; reconnect replays without gaps — **blocked**:
+  no run can open a round, so there is nothing to stream (#404)
+- [ ] Killing the worker mid-round neither duplicates arguments nor loses rounds — **cannot hold**:
+  negotiation state is memory-only (#405, D-008)
 
 ---
 
 ## Phase 5: Analysis & Delivery (Days 11–13.5)
 
 **Goal:** The negotiation becomes a decision artefact: consensus with veto awareness, compromise packages, honest impact, and an eight-section brief.
+
+**Verified 2026-11-06 on `ef2ceb4`:** derivation, veto precedence, packages, scenarios and the eight-section
+brief are implemented and tested (134 + 149 contract checks), and both routers are mounted. The chain is
+not functional: consensus inputs are unavailable stubs (#406) and the brief gates are unwired (D-007,
+#407).
 
 ### Modules
 
@@ -309,15 +324,22 @@ not read as "verified".
 
 ### Acceptance Criteria
 
-- [ ] 7/9 support for a vetoed proposal class yields `VetoBlockedOutcome`, never consensus
-- [ ] An impact figure labelled `derived` without inputs is refused (`UnbackedEstimateBlocked`)
-- [ ] An illustrative documentation value cannot be persisted as a run outcome
-- [ ] Every disapproving stakeholder appears in a recorded minority position
-- [ ] Publishing a brief with 7 sections raises `IncompleteBrief`
-- [ ] An unresolved citation blocks publication (`CitationResolutionFailed`)
-- [ ] A run with a rejected proposal whose brief omits it is blocked (`DisclosureMissing`)
-- [ ] Regenerating a brief from the run log reproduces it (narrative wording excepted)
-- [ ] A veto-blocked topic renders as blocked, never as a recommendation
+- [x] 7/9 support for a vetoed proposal class yields `VetoBlockedOutcome`, never consensus — domain-tested
+  (134 contract checks); the derivation path is wired but its inputs are unavailable (#406)
+- [x] An impact figure labelled `derived` without inputs is refused (`UnbackedEstimateBlocked`) — tested
+- [x] An illustrative documentation value cannot be persisted as a run outcome — tested
+- [x] Every disapproving stakeholder appears in a recorded minority position — tested
+- [x] Publishing a brief with 7 sections raises `IncompleteBrief` — tested
+- [x] An unresolved citation blocks publication (`CitationResolutionFailed`) — tested with the real
+  EvidenceCorpus resolver
+- [x] A run with a rejected proposal whose brief omits it is blocked (`DisclosureMissing`) — tested
+- [x] Regenerating a brief from the run log reproduces it (narrative wording excepted) — tested
+  (`ReproductionCheck`)
+- [x] A veto-blocked topic renders as blocked, never as a recommendation — tested
+
+**System status:** every Phase 5 rule is enforced in the domain. None of them can be exercised end to end
+yet — a run cannot close (#404), consensus has no inputs (#406), and publication is fail-closed by D-007
+(#407). The phase is closed at the module level; it is not functional as a chain.
 
 ---
 

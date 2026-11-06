@@ -149,6 +149,46 @@ and the implementation roadmap's post-hackathon section.*
 
 ---
 
+## D-008 — NegotiationSession durable persistence
+
+**Status:** Deferred (visible, not silent) · tracked by **#405**
+**Recorded:** 2026-11-06 · epic negotiation-session (#281), `main @ ef2ceb4`
+**Estimate:** ~4–5 h
+
+| Aspect | State |
+|---|---|
+| Migrations | `0401`/`0402` are pre-allocated stubs with **no** `create_table` |
+| Adapters | `InMemorySimulationRunRepository` / `InMemoryRunEventLog` for **both** `PERSISTENCE` families |
+| Durability | a run created under `PERSISTENCE=postgres` returns `404` after a restart (verified) |
+| Readiness | `/readyz` does not report the module at all |
+| Gates violated | W2 (memory as the silent default), W3 (no migration owns the tables), W7 (no restart round-trip) |
+
+**Trigger:** the first demo or test where a negotiation must span a restart, or the moment Phase 5's
+projection rebuild is exercised on stored runs. Rebuilding a projection from an event log that does not
+survive a restart is not a rebuild.
+
+---
+
+## D-009 — NegotiationSession → ConsensusAnalysis seam
+
+**Status:** Deferred (fails closed) · tracked by **#406**
+**Recorded:** 2026-11-06 · epics negotiation-session (#281) + consensus-analysis (#304)
+**Estimate:** ~6–8 h (three ports + one subscription + `0501` adapters)
+
+| Port | Today |
+|---|---|
+| `RunLogPort` (agenda, stances) | `unavailable_run_log()` → derivation refuses |
+| `StakeholderPowersPort` (veto classes, power) | `unavailable_powers()` |
+| `MandateThresholdSource` (per-run threshold) | `unavailable_mandate()` |
+| `HandleRunClosed` | constructed, **never subscribed and never invoked** |
+| Consensus repositories | in-memory; migration `0501` is a stub |
+
+**Trigger:** closing the first run that should produce a consensus record. Until then
+`POST /runs/{id}/analysis:derive` answers `503 CONSENSUS_ANALYSIS_UNAVAILABLE`, which is honest — but it is
+a dependency gap, not a verdict.
+
+---
+
 ## D-007 — DecisionBrief upstream bindings
 
 **Status:** Deferred (fail-closed, not skipped)

@@ -499,7 +499,7 @@ the LangGraph nodes; no cross-aggregate transaction joining a run with a corpus 
 |---|---|---|
 | Router + SSE | `app.include_router(negotiation_session_router)`; SSE endpoint shares the progress broker with SimulationOrchestration | boot test asserting both route and stream |
 | Composition | ACL adapters wired to EvidenceRetrieval, StakeholderModel, ClaimValidation, GovernanceCompliance — none stubbed | integration test: a run executes with real ports |
-| Persistence | Migrations `0401` (run … round_learning) and `0402` (append-only event log) applied before the router is exposed | run survives restart; `/events` replays |
+| Persistence | **Deferred (D-008, #405).** `0401`/`0402` are stubs and the in-memory adapters back both persistence families, so a run does **not** survive a restart; `/events` replays only within the process | the current behaviour is proven by a restart test asserting `404` |
 | Event log | Every state change appends to the run log in the same transaction | replay fold equality test |
 | Guard on the write path | No argument or position can be persisted without a GovernanceCompliance verdict; the port must not have a permissive default | negative test: guard unreachable ⇒ writes fail, not pass |
 | Orchestrator hook | Graph nodes invoke these application services and hold only ids in graph state | architecture test: no graph state fields for positions/arguments |
@@ -541,7 +541,7 @@ replay ordered by ordinal reproduces the live fold exactly.
 | 11 | Replay equivalence | Folding the event log to round N equals the live state at round N | integration |
 | 12 | ACL purity | No retrieval or vector types appear in `domain/` (import check) | architecture test |
 | 13 | SSE | A live run emits ordered events; reconnecting with `Last-Event-ID` replays without gaps | integration |
-| 14 | Wiring | Router + SSE registered; ACL ports bound to real upstream contexts; a run survives restart and `/events` replays; missing guard blocks writes (fails closed) | integration |
+| 14 | Wiring | Router + SSE registered; ACL ports bound to real upstream contexts; `/events` replays in-process; missing guard blocks writes (fails closed). Durability is **D-008** | integration |
 
 ## Modeling Depth Note (ADR-008)
 
