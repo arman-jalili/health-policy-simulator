@@ -19,6 +19,7 @@ from consensus_analysis.domain.compromise_package import CompromisePackage
 from consensus_analysis.domain.consensus_record import ConsensusRecord
 from consensus_analysis.domain.scenario import Scenario
 from consensus_analysis.domain.values import (
+    AgendaItem,
     ConsensusId,
     LogPosition,
     PackageId,
@@ -73,6 +74,10 @@ class ScenarioRepository(Protocol):
 @runtime_checkable
 class RunLogPort(Protocol):
     """ACL to the closed run log: the single, replayable derivation input."""
+
+    async def agenda(self, run_id: RunId) -> Sequence[AgendaItem]:
+        """Replay the topics of the run with the proposal class each one belongs to."""
+        ...
 
     async def stances(self, run_id: RunId) -> Sequence[StanceSnapshot]:
         """Replay every recorded stance of the run, ordered by log position."""

@@ -29,12 +29,16 @@ def test_a_snapshot_carries_its_log_provenance() -> None:
     assert field_names(StanceSnapshot) == [
         "stakeholder",
         "stance",
+        "topic",
         "weight",
         "recorded",
         "log_position",
     ]
     unrecorded = StanceSnapshot(
-        stakeholder=StakeholderId("stk_1"), stance=Stance.SUPPORT, recorded=False
+        stakeholder=StakeholderId("stk_1"),
+        stance=Stance.SUPPORT,
+        recorded=False,
+        topic=TopicRef("waiting_times"),
     )
     assert unrecorded.recorded is False
     assert unrecorded.log_position is None
@@ -64,6 +68,7 @@ def test_a_recorded_stance_passes_the_assertion() -> None:
             stakeholder: StanceSnapshot(
                 stakeholder=stakeholder,
                 stance=Stance.SUPPORT,
+                topic=TopicRef("waiting_times"),
                 recorded=True,
                 log_position=LogPosition(7),
             )
@@ -75,17 +80,28 @@ def test_a_recorded_stance_passes_the_assertion() -> None:
 def test_a_recorded_stance_without_a_log_position_cannot_be_constructed() -> None:
     """Invariant 2 at construction time: provenance is not optional."""
     with pytest.raises(ValueError, match="log position"):
-        StanceSnapshot(stakeholder=StakeholderId("stk_1"), stance=Stance.SUPPORT, recorded=True)
+        StanceSnapshot(
+            stakeholder=StakeholderId("stk_1"),
+            stance=Stance.SUPPORT,
+            recorded=True,
+            topic=TopicRef("waiting_times"),
+        )
 
 
 def test_every_offending_stance_is_named_not_just_the_first() -> None:
     record = _record(
         {
             StakeholderId("stk_a"): StanceSnapshot(
-                stakeholder=StakeholderId("stk_a"), stance=Stance.SUPPORT, recorded=False
+                stakeholder=StakeholderId("stk_a"),
+                stance=Stance.SUPPORT,
+                recorded=False,
+                topic=TopicRef("waiting_times"),
             ),
             StakeholderId("stk_b"): StanceSnapshot(
-                stakeholder=StakeholderId("stk_b"), stance=Stance.OPPOSE, recorded=False
+                stakeholder=StakeholderId("stk_b"),
+                stance=Stance.OPPOSE,
+                recorded=False,
+                topic=TopicRef("waiting_times"),
             ),
         }
     )
@@ -100,7 +116,10 @@ def test_an_unrecorded_stance_fails_the_assertion_with_its_id() -> None:
     record = _record(
         {
             stakeholder: StanceSnapshot(
-                stakeholder=stakeholder, stance=Stance.SUPPORT, recorded=False
+                stakeholder=stakeholder,
+                stance=Stance.SUPPORT,
+                recorded=False,
+                topic=TopicRef("waiting_times"),
             )
         }
     )

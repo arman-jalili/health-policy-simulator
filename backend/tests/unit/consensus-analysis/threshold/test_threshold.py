@@ -22,6 +22,7 @@ from consensus_analysis.domain.values import (
     Stance,
     StanceSnapshot,
     SupportLevel,
+    TopicRef,
 )
 
 
@@ -68,6 +69,7 @@ def test_abstentions_leave_the_denominator_and_weigh_nothing() -> None:
         return stakeholder, StanceSnapshot(
             stakeholder=stakeholder,
             stance=stance,
+            topic=TopicRef("waiting_times"),
             weight=weight,
             log_position=LogPosition(0),
         )
@@ -102,6 +104,7 @@ def _snapshot(
     return stakeholder, StanceSnapshot(
         stakeholder=stakeholder,
         stance=stance,
+        topic=TopicRef("waiting_times"),
         weight=weight,
         log_position=LogPosition(position),
     )

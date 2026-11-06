@@ -22,6 +22,7 @@ from consensus_analysis.application.dto import (
 from consensus_analysis.domain.consensus_record import ConsensusRecord
 from consensus_analysis.domain.events import DomainEvent
 from consensus_analysis.domain.values import (
+    AgendaItem,
     ConsensusThreshold,
     DocumentedExample,
     ProposalClass,
@@ -90,6 +91,7 @@ class ProjectionRebuilder(Protocol):
         self,
         *,
         run_id: RunId,
+        agenda: Sequence[AgendaItem],
         stances: Sequence[StanceSnapshot],
         vetoes: dict[StakeholderId, frozenset[ProposalClass]],
         threshold: ConsensusThreshold,

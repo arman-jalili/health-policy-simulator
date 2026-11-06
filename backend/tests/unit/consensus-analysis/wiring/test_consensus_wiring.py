@@ -106,6 +106,8 @@ def test_the_domain_layer_imports_no_outer_layer() -> None:
                 "datetime",
                 "decimal",
                 "enum",
+                "hashlib",
+                "json",
                 "shared",
                 "typing",
             } or module.startswith("consensus_analysis.domain"), f"{relative} imports {module}"

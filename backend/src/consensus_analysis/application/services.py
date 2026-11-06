@@ -13,7 +13,8 @@ are still stubs. Implementing issues replace it with real call sites.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import hashlib
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
 from consensus_analysis.application.commands import (
@@ -47,6 +48,8 @@ from consensus_analysis.application.ports import (
     ProjectionRebuilder,
     UnitOfWork,
 )
+from consensus_analysis.domain.consensus_record import ConsensusRecord
+from consensus_analysis.domain.errors import ProjectionRebuildFailed
 from consensus_analysis.domain.repositories import (
     CompromisePackageRepository,
     ConsensusRepository,
@@ -307,7 +310,53 @@ class RebuildProjections:
         return (self._consensus, self._log, self._powers, self._rebuilder, self._uow)
 
     async def execute(self, request: RebuildProjectionsRequest) -> RebuildResult:
-        raise NotImplementedError("RebuildProjections.execute is implemented by issue #312")
+        """Replay the log and prove the persisted rows are reproduced (AC 4).
+
+        The command verifies what exists rather than inventing a projection: with no rows there is
+        nothing to reproduce, and rows disagreeing on their mandate threshold cannot come from one
+        mandate. Both are reported instead of being silently overwritten.
+        """
+        persisted = await self._consensus.for_run(request.run_id)
+        if not persisted:
+            raise ProjectionRebuildFailed(
+                f"run {request.run_id} has no projection rows to reproduce"
+            )
+        shares = {round(row.threshold.required_share, 12) for row in persisted}
+        if len(shares) != 1:
+            raise ProjectionRebuildFailed(
+                f"run {request.run_id} holds {len(shares)} mandate thresholds; "
+                "one run carries one mandate"
+            )
+        agenda = await self._log.agenda(request.run_id)
+        stances = await self._log.stances(request.run_id)
+        stakeholders = sorted(
+            {snapshot.stakeholder for row in persisted for snapshot in row.ordered_stances()},
+            key=str,
+        )
+        vetoes = await self._powers.veto_classes(stakeholders)
+        rebuilt = tuple(
+            await self._rebuilder.rebuild(
+                run_id=request.run_id,
+                agenda=agenda,
+                stances=stances,
+                vetoes=vetoes,
+                threshold=persisted[0].threshold,
+            )
+        )
+        drift = _projection_drift(persisted, rebuilt)
+        if drift:
+            raise ProjectionRebuildFailed(
+                "replayed rows differ from the persisted projection: " + "; ".join(drift),
+                details=[{"message": message} for message in drift],
+            )
+        if not request.verify_only:
+            async with self._uow.transaction():
+                await self._consensus.replace_for_run(request.run_id, rebuilt)
+        return RebuildResult(
+            run_id=request.run_id,
+            records=len(rebuilt),
+            digest=_combined_digest(rebuilt),
+        )
 
 
 class HandleRunClosed:
@@ -322,3 +371,26 @@ class HandleRunClosed:
 
     async def execute(self, request: RunClosedRequest) -> RunClosedResult:
         raise NotImplementedError("HandleRunClosed.execute is implemented by issue #320")
+
+
+def _projection_drift(
+    persisted: Sequence[ConsensusRecord], rebuilt: Sequence[ConsensusRecord]
+) -> list[str]:
+    """Return every difference between the stored rows and a fresh replay, by topic."""
+    stored = {row.topic: row.digest() for row in persisted}
+    replayed = {row.topic: row.digest() for row in rebuilt}
+    drift: list[str] = []
+    for topic in sorted(set(stored) | set(replayed), key=str):
+        if topic not in replayed:
+            drift.append(f"{topic}: persisted but not reproducible from the log")
+        elif topic not in stored:
+            drift.append(f"{topic}: reproducible from the log but missing from the projection")
+        elif stored[topic] != replayed[topic]:
+            drift.append(f"{topic}: replayed content differs")
+    return drift
+
+
+def _combined_digest(records: Sequence[ConsensusRecord]) -> str:
+    """One hash over the whole rebuild, so a caller can compare two rebuilds in a word."""
+    joined = "\n".join(f"{row.topic}:{row.digest()}" for row in records)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()

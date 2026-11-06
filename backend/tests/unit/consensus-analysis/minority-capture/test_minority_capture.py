@@ -9,7 +9,7 @@ from consensus_analysis.domain.consensus_record import ConsensusRecord
 from consensus_analysis.domain.entities import MajorityPosition, MinorityPosition
 from consensus_analysis.domain.events import MinorityPositionRecorded
 from consensus_analysis.domain.services import MajorityHolds, MinorityCapture
-from consensus_analysis.domain.values import StakeholderId, SupportLevel
+from consensus_analysis.domain.values import StakeholderId, SupportLevel, TopicRef
 
 
 def test_a_minority_position_names_its_holders_and_their_reasons() -> None:
@@ -39,13 +39,18 @@ def test_capture_is_a_named_domain_service() -> None:
 
 
 def test_every_disapproving_stakeholder_gets_its_own_position() -> None:
-    from consensus_analysis.domain.values import LogPosition, Stance, StanceSnapshot
+    from consensus_analysis.domain.values import (
+        LogPosition,
+        Stance,
+        StanceSnapshot,
+    )
 
     def snapshot(key: str, stance: Stance, position: int) -> tuple[StakeholderId, StanceSnapshot]:
         stakeholder = StakeholderId(key)
         return stakeholder, StanceSnapshot(
             stakeholder=stakeholder,
             stance=stance,
+            topic=TopicRef("waiting_times"),
             log_position=LogPosition(position),
         )
 

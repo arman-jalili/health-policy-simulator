@@ -152,6 +152,21 @@ class PackageState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class AgendaItem:
+    """One topic of a closed run with the class its proposals belong to.
+
+    The rebuild cannot re-derive an outcome without it: the proposal class decides whether a veto
+    applies, so it is a log fact, not a presentational label.
+    """
+
+    topic: TopicRef
+    proposal_class: ProposalClass
+
+    def __post_init__(self) -> None:
+        _require_text(self.topic, "AgendaItem.topic")
+
+
+@dataclass(frozen=True, slots=True)
 class ConsensusThreshold:
     """Support level required by the mandate, never a default quorum."""
 
@@ -181,11 +196,13 @@ class StanceSnapshot:
 
     stakeholder: StakeholderId
     stance: Stance
+    topic: TopicRef
     weight: float = 1.0
     recorded: bool = True
     log_position: LogPosition | None = None
 
     def __post_init__(self) -> None:
+        _require_text(self.topic, "StanceSnapshot.topic")
         _require_unit_interval(self.weight, "StanceSnapshot.weight")
         if self.recorded and self.log_position is None:
             raise ValueError(
