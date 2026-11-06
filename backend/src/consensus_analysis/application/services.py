@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from types import MappingProxyType
 
 from consensus_analysis.application.commands import (
@@ -29,6 +30,7 @@ from consensus_analysis.application.commands import (
     RunClosedRequest,
 )
 from consensus_analysis.application.dto import (
+    ComparisonEntryResult,
     ComparisonResult,
     ComposePackageResult,
     ConsensusResult,
@@ -58,6 +60,7 @@ from consensus_analysis.domain.errors import (
     CompromisePackageNotFound,
     ConsensusAnalysisUnavailable,
     IncompatibleComponent,
+    IncompleteComparison,
     ProjectionRebuildFailed,
     UnbackedEstimate,
 )
@@ -79,6 +82,7 @@ from consensus_analysis.domain.services import (
 from consensus_analysis.domain.values import (
     AssessmentId,
     BasisKind,
+    ComparisonDimension,
     EstimatedFigure,
     LogPosition,
     PackageId,
@@ -420,7 +424,46 @@ class CompareScenarios:
         return (self._packages, self._scenarios, self._consensus, self._ranker)
 
     async def execute(self, request: CompareScenariosRequest) -> ComparisonResult:
-        raise NotImplementedError("CompareScenarios.execute is implemented by issue #319")
+        """Rank the package's alternatives with all three dimensions present (AC 11).
+
+        An alternative that cannot supply cost or feasibility is refused rather than ranked on the
+        dimensions it happens to have: a partially ranked comparison reads as a verdict on the
+        dimensions it omitted.
+        """
+        package = await self._packages.get(request.package_id)
+        if package is None:
+            raise CompromisePackageNotFound(f"package {request.package_id} not found")
+        scenarios = await self._scenarios.for_package(package.id)
+        records = await self._consensus.for_run(package.run_id)
+        acceptance = min(
+            (record.outcome.support.value for record in records if record.outcome is not None),
+            default=0.0,
+        )
+        cost = _package_cost(package)
+        entries: list[ComparisonEntryResult] = []
+        for scenario in scenarios:
+            feasibility = scenario.assessments[-1].feasibility if scenario.assessments else None
+            missing = [
+                dimension.value
+                for dimension, present in (
+                    (ComparisonDimension.COST, cost is not None),
+                    (ComparisonDimension.FEASIBILITY, feasibility is not None),
+                )
+                if not present
+            ]
+            if missing or feasibility is None or cost is None:
+                raise IncompleteComparison(str(package.id), missing)
+            entries.append(
+                ComparisonEntryResult(
+                    package_id=package.id,
+                    scenario_id=scenario.id,
+                    cost=cost,
+                    acceptance=acceptance,
+                    feasibility=feasibility,
+                    rank=1,
+                )
+            )
+        return ComparisonResult(entries=tuple(self._ranker.rank(entries)))
 
 
 class RebuildProjections:
@@ -530,3 +573,15 @@ def _combined_digest(records: Sequence[ConsensusRecord]) -> str:
     """One hash over the whole rebuild, so a caller can compare two rebuilds in a word."""
     joined = "\n".join(f"{row.topic}:{row.digest()}" for row in records)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
+def _package_cost(package: CompromisePackage) -> Decimal | None:
+    """Total declared cost of the package, or ``None`` when a component left it unquantified."""
+    if not package.components:
+        return None
+    if any(component.cost_eur is None for component in package.components):
+        return None
+    return sum(
+        (component.cost_eur for component in package.components if component.cost_eur is not None),
+        Decimal("0"),
+    )
