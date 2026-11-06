@@ -88,8 +88,21 @@ class TurnOrderPolicy(Protocol):
     ) -> tuple[TurnAssignment, ...]: ...
 
 
+def _topic_for(topics: Sequence[TopicRef]) -> TopicRef:
+    return topics[0] if topics else TopicRef("general")
+
+
+def _assignments(
+    stakeholders: Sequence[StakeholderId], topic: TopicRef
+) -> tuple[TurnAssignment, ...]:
+    return tuple(
+        TurnAssignment(stakeholder=stakeholder, topic=topic, order=index)
+        for index, stakeholder in enumerate(stakeholders)
+    )
+
+
 class RoundRobinTurnOrder:
-    """Deterministic, evenly distributed speaking order."""
+    """Deterministic, evenly distributed speaking order (stable across replays)."""
 
     def assign(
         self,
@@ -98,7 +111,9 @@ class RoundRobinTurnOrder:
         round_number: int,
         topics: Sequence[TopicRef],
     ) -> tuple[TurnAssignment, ...]:
-        raise NotImplementedError("RoundRobinTurnOrder.assign is implemented by issue #291")
+        topic = _topic_for(topics)
+        ordered = sorted(bound, key=lambda stakeholder: (round_number, stakeholder))
+        return _assignments(ordered, topic)
 
 
 class PowerWeightedTurnOrder:
@@ -111,11 +126,17 @@ class PowerWeightedTurnOrder:
         round_number: int,
         topics: Sequence[TopicRef],
     ) -> tuple[TurnAssignment, ...]:
-        raise NotImplementedError("PowerWeightedTurnOrder.assign is implemented by issue #291")
+        topic = _topic_for(topics)
+
+        def weight(stakeholder: StakeholderId) -> tuple[int, int, str]:
+            binding = bound[stakeholder]
+            return (-len(binding.veto_classes), -len(binding.interests), stakeholder)
+
+        return _assignments(sorted(bound, key=weight), topic)
 
 
 class AffectedFirstTurnOrder:
-    """Actors most affected by the topic speak before the others."""
+    """Actors whose mandate covers the topic speak before the others."""
 
     def assign(
         self,
@@ -124,4 +145,12 @@ class AffectedFirstTurnOrder:
         round_number: int,
         topics: Sequence[TopicRef],
     ) -> tuple[TurnAssignment, ...]:
-        raise NotImplementedError("AffectedFirstTurnOrder.assign is implemented by issue #291")
+        topic = _topic_for(topics)
+        affected = {
+            stakeholder for stakeholder, binding in bound.items() if topic in binding.mandate_topics
+        }
+
+        def rank(stakeholder: StakeholderId) -> tuple[int, str]:
+            return (0 if stakeholder in affected else 1, stakeholder)
+
+        return _assignments(sorted(bound, key=rank), topic)
