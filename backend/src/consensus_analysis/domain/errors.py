@@ -9,6 +9,8 @@ the issue whose tests prove it.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from shared.errors import (
     ConflictError,
     NotFoundError,
@@ -21,6 +23,16 @@ class StanceNotInHistory(ValidationFailedError):
     """A stance that is absent from the closed run log was used (invariant 2, AC 3)."""
 
     code = "STANCE_NOT_IN_HISTORY"
+
+    def __init__(self, missing: Sequence[str]) -> None:
+        self.missing = tuple(missing)
+        super().__init__(
+            f"{len(self.missing)} stance(s) are not present in the closed run log",
+            details=[
+                {"message": "stance absent from the run log", "field": stakeholder}
+                for stakeholder in self.missing
+            ],
+        )
 
 
 class UnbackedEstimate(ValidationFailedError):

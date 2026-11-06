@@ -1,4 +1,4 @@
-"""Domain services of ConsensusAnalysis (contract frozen, issue #305).
+"""Domain services of ConsensusAnalysis.
 
 Canonical: ``.pi/architecture/modules/consensus-analysis.md`` (Patterns & OOP Mapping)
 
@@ -9,6 +9,10 @@ outcome can name the competence that blocked it instead of an opaque "no consens
 ``EstimateValidator``, ``IllustrativeValueGuard`` and ``FeasibilityGuard`` are guard services: they
 exist to refuse one specific, expensive mistake (invariants 7, 8 and 10). They are stateless and
 never load or save; the aggregate applies them inside its transaction.
+
+Contract frozen in issue #305. Veto precedence, threshold evaluation and minority capture are
+implemented here by issue #306 because ``ConsensusRecord.determine`` cannot satisfy its acceptance
+criteria without them; the component issues (#309, #310, #316) deepen their proofs.
 """
 
 from __future__ import annotations
@@ -27,8 +31,23 @@ from consensus_analysis.domain.values import (
     ProposalClass,
     StakeholderId,
     StanceSnapshot,
+    SupportLevel,
     UncertaintyLabel,
+    VetoBlockedOutcome,
 )
+
+
+def ordered(stances: Mapping[StakeholderId, StanceSnapshot]) -> tuple[StanceSnapshot, ...]:
+    """Order stances by log position so every derivation is reproducible (roadmap W9)."""
+    return tuple(
+        sorted(
+            stances.values(),
+            key=lambda snapshot: (
+                snapshot.log_position if snapshot.log_position is not None else -1,
+                str(snapshot.stakeholder),
+            ),
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +61,16 @@ class NotVetoed:
         vetoes: Mapping[StakeholderId, frozenset[ProposalClass]],
     ) -> tuple[StakeholderId, ...]:
         """Return every institution whose veto covers the class, in a stable order."""
-        raise NotImplementedError("NotVetoed.holders_for is implemented by issue #309")
+        return tuple(
+            sorted(
+                (
+                    stakeholder
+                    for stakeholder, classes in vetoes.items()
+                    if proposal_class in classes
+                ),
+                key=str,
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +79,7 @@ class ThresholdMet:
 
     def is_satisfied_by(self, *, support_value: float, threshold: ConsensusThreshold) -> bool:
         """Return whether the support level satisfies the mandate threshold."""
-        raise NotImplementedError("ThresholdMet.is_satisfied_by is implemented by issue #310")
+        return support_value >= threshold.required_share
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +107,25 @@ class MinorityCapture:
         objections: Mapping[StakeholderId, str] | None = None,
         proposal: str = "",
     ) -> tuple[MinorityPosition, ...]:
-        """Return one position per dissenting stakeholder; none may be dropped."""
-        raise NotImplementedError("MinorityCapture.capture is implemented by issue #316")
+        """Return one position per dissenting stakeholder; none may be dropped.
+
+        One position per stakeholder — not one per topic — is what makes "every disapproving
+        stakeholder appears in a recorded minority position" checkable rather than aspirational.
+        """
+        stated = objections or {}
+        positions: list[MinorityPosition] = []
+        for snapshot in ordered(stances):
+            if not (snapshot.recorded and snapshot.disapproves):
+                continue
+            reason = stated.get(snapshot.stakeholder, "").strip()
+            positions.append(
+                MinorityPosition(
+                    holders=(snapshot.stakeholder,),
+                    objections=(reason,) if reason else (),
+                    proposal=proposal,
+                )
+            )
+        return tuple(positions)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,8 +143,25 @@ class ConsensusRule:
         threshold: ConsensusThreshold,
         vetoes: Mapping[StakeholderId, frozenset[ProposalClass]],
     ) -> ConsensusOutcome:
-        """Evaluate the specifications in precedence order and return one outcome."""
-        raise NotImplementedError("ConsensusRule.evaluate is implemented by issue #309")
+        """Evaluate the specifications in precedence order and return one outcome.
+
+        Veto first (AC 1): a blocked class is never consensus, whatever the support was. Then the
+        threshold (AC 2), then dissent. Nothing here invents agreement.
+        """
+        support = SupportLevel.weighted(stances)
+        holders = self.veto.holders_for(proposal_class=proposal_class, vetoes=vetoes)
+        if holders:
+            return ConsensusOutcome.veto_blocked(
+                VetoBlockedOutcome(proposal_class=proposal_class, holders=holders), support
+            )
+        if self.threshold.is_satisfied_by(support_value=support.value, threshold=threshold):
+            return ConsensusOutcome.consensus(support)
+        minority = MinorityCapture().capture(stances=stances)
+        if minority:
+            return ConsensusOutcome.partial(
+                support, tuple(holder for position in minority for holder in position.holders)
+            )
+        return ConsensusOutcome.unresolved(support)
 
 
 @dataclass(frozen=True, slots=True)

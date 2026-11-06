@@ -38,14 +38,59 @@ def test_rule_evaluation_takes_every_voice_into_account() -> None:
 def test_veto_blocked_is_a_first_class_outcome() -> None:
     assert ConsensusOutcomeKind.VETO_BLOCKED.value == "veto_blocked"
     assert "VETO_BLOCKED" in ConsensusOutcomeKind.__members__
-    with pytest.raises(NotImplementedError, match="#309"):
-        ConsensusOutcome.veto_blocked(
-            VetoBlockedOutcome(
-                proposal_class=ProposalClass.BUDGET_FRAME,
-                holders=(StakeholderId("stk_bva"),),
-            ),
-            SupportLevel(value=0.78),
+    outcome = ConsensusOutcome.veto_blocked(
+        VetoBlockedOutcome(
+            proposal_class=ProposalClass.BUDGET_FRAME,
+            holders=(StakeholderId("stk_bva"),),
+        ),
+        SupportLevel(value=0.78),
+    )
+    assert outcome.kind is ConsensusOutcomeKind.VETO_BLOCKED
+    assert outcome.support.value == pytest.approx(0.78)
+
+
+def test_the_rule_blocks_a_seven_of_nine_class_that_would_otherwise_carry() -> None:
+    from consensus_analysis.domain.services import ConsensusRule
+    from consensus_analysis.domain.values import (
+        ConsensusThreshold,
+        LogPosition,
+        Stance,
+        StanceSnapshot,
+    )
+
+    def snapshot(index: int, stance: Stance) -> tuple[StakeholderId, StanceSnapshot]:
+        stakeholder = StakeholderId(f"stk_{index}")
+        return stakeholder, StanceSnapshot(
+            stakeholder=stakeholder,
+            stance=stance,
+            log_position=LogPosition(index),
         )
+
+    stances = dict(
+        [snapshot(index, Stance.SUPPORT) for index in range(7)]
+        + [snapshot(7, Stance.OPPOSE), snapshot(8, Stance.OPPOSE)]
+    )
+    outcome = ConsensusRule().evaluate(
+        proposal_class=ProposalClass.BUDGET_FRAME,
+        stances=stances,
+        threshold=ConsensusThreshold.from_mandate(0.6),
+        vetoes={StakeholderId("stk_7"): frozenset({ProposalClass.BUDGET_FRAME})},
+    )
+    assert outcome.kind is ConsensusOutcomeKind.VETO_BLOCKED
+    assert outcome.veto is not None
+    assert outcome.veto.holders == (StakeholderId("stk_7"),)
+
+
+def test_a_veto_holder_is_named_deterministically() -> None:
+    vetoes = {
+        StakeholderId("stk_z"): frozenset({ProposalClass.FEE_SCHEDULE}),
+        StakeholderId("stk_a"): frozenset({ProposalClass.FEE_SCHEDULE}),
+        StakeholderId("stk_m"): frozenset({ProposalClass.HOSPITAL_PLAN}),
+    }
+    assert NotVetoed().holders_for(proposal_class=ProposalClass.FEE_SCHEDULE, vetoes=vetoes) == (
+        StakeholderId("stk_a"),
+        StakeholderId("stk_z"),
+    )
 
 
 def test_veto_holders_must_be_named() -> None:

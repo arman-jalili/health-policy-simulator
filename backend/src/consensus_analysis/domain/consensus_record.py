@@ -1,4 +1,4 @@
-"""``ConsensusRecord`` aggregate root (contract frozen, issue #305).
+"""``ConsensusRecord`` aggregate root (implemented by issue #306).
 
 Canonical: ``.pi/architecture/modules/consensus-analysis.md`` (Aggregate State, Invariants)
 
@@ -14,10 +14,19 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from consensus_analysis.domain.entities import MajorityPosition, MinorityPosition
-from consensus_analysis.domain.events import DomainEvent
+from consensus_analysis.domain.errors import StanceNotInHistory
+from consensus_analysis.domain.events import (
+    ConsensusBlockedByVeto,
+    ConsensusDetermined,
+    DomainEvent,
+    MinorityPositionRecorded,
+    UnresolvedConflictDeclared,
+)
+from consensus_analysis.domain.services import ConsensusRule, MinorityCapture, ordered
 from consensus_analysis.domain.values import (
     ConsensusId,
     ConsensusOutcome,
+    ConsensusOutcomeKind,
     ConsensusThreshold,
     LogPosition,
     ProposalClass,
@@ -27,6 +36,9 @@ from consensus_analysis.domain.values import (
     TopicRef,
     UnresolvedConflict,
 )
+
+_RULE = ConsensusRule()
+"""One stateless rule instance: evaluation depends only on the arguments (no hidden state)."""
 
 
 @dataclass
@@ -61,29 +73,95 @@ class ConsensusRecord:
         log_position: LogPosition,
     ) -> ConsensusRecord:
         """Open the record for one topic; nothing is concluded before ``determine`` (AC 3)."""
-        raise NotImplementedError("ConsensusRecord.open is implemented by issue #306")
+        return cls(
+            id=consensus_id,
+            run_id=run_id,
+            topic=topic,
+            proposal_class=proposal_class,
+            threshold=threshold,
+            stances=dict(stances),
+            vetoes=dict(vetoes),
+            log_position=log_position,
+        )
 
     def determine(self) -> ConsensusOutcome:
         """Derive the outcome: veto first, then threshold, then minority (AC 1, AC 2)."""
-        raise NotImplementedError("ConsensusRecord.determine is implemented by issue #306")
+        self.assert_stances_recorded()
+        outcome = _RULE.evaluate(
+            proposal_class=self.proposal_class,
+            stances=self.stances,
+            threshold=self.threshold,
+            vetoes=self.vetoes,
+        )
+        self.outcome = outcome
+        if outcome.kind is ConsensusOutcomeKind.VETO_BLOCKED:
+            if outcome.veto is not None:
+                self.events.append(
+                    ConsensusBlockedByVeto(
+                        run_id=self.run_id,
+                        topic=self.topic,
+                        proposal_class=self.proposal_class,
+                        holder_ids=outcome.veto.holders,
+                    )
+                )
+            return outcome
+
+        self.events.append(
+            ConsensusDetermined(
+                run_id=self.run_id,
+                topic=self.topic,
+                support=outcome.support.value,
+                threshold=self.threshold.required_share,
+                supporters=self.supporting_stakeholders(),
+            )
+        )
+        for position in MinorityCapture().capture(stances=self.stances):
+            self.record_minority(position)
+
+        if outcome.kind is ConsensusOutcomeKind.UNRESOLVED:
+            apart = self._positions_apart()
+            if len(apart) >= 2:
+                self.declare_unresolved(UnresolvedConflict(topic=self.topic, positions=apart))
+        return outcome
 
     def assert_stances_recorded(self) -> None:
         """Refuse any stance whose log provenance is missing (AC 3)."""
-        raise NotImplementedError(
-            "ConsensusRecord.assert_stances_recorded is implemented by issue #311"
+        missing = tuple(
+            str(snapshot.stakeholder) for snapshot in ordered(self.stances) if not snapshot.recorded
         )
+        if missing:
+            raise StanceNotInHistory(missing)
 
     def record_minority(self, position: MinorityPosition) -> None:
         """Attach a recorded dissent so no disapproving holder is dropped (AC 8)."""
-        raise NotImplementedError("ConsensusRecord.record_minority is implemented by issue #316")
+        if not position.holders:
+            raise ValueError("a minority position must name at least one holder")
+        self.minorities = (*self.minorities, position)
+        self.events.append(
+            MinorityPositionRecorded(
+                run_id=self.run_id,
+                topic=self.topic,
+                holders=position.holders,
+                objection_count=len(position.objections),
+            )
+        )
 
     def declare_unresolved(self, conflict: UnresolvedConflict) -> None:
         """Keep a conflict that is still open at run close (AC 2)."""
-        raise NotImplementedError("ConsensusRecord.declare_unresolved is implemented by issue #306")
+        self.unresolved = (*self.unresolved, conflict)
+        self.events.append(
+            UnresolvedConflictDeclared(
+                run_id=self.run_id,
+                topic=self.topic,
+                positions=conflict.positions,
+            )
+        )
 
     def drain_events(self) -> tuple[DomainEvent, ...]:
         """Return and clear the pending events for the outbox in the saving transaction."""
-        raise NotImplementedError("ConsensusRecord.drain_events is implemented by issue #306")
+        drained = tuple(self.events)
+        self.events.clear()
+        return drained
 
     def digest(self) -> str:
         """Stable hash of the derived content; equal digests prove a rebuild (AC 4)."""
@@ -103,12 +181,12 @@ class ConsensusRecord:
 
     def ordered_stances(self) -> Sequence[StanceSnapshot]:
         """Return the stances ordered by log position, so derivation is order-independent (W9)."""
+        return ordered(self.stances)
+
+    def _positions_apart(self) -> tuple[StanceSnapshot, ...]:
+        """Return the recorded positions that remain apart; abstentions express no conflict."""
         return tuple(
-            sorted(
-                self.stances.values(),
-                key=lambda snapshot: (
-                    snapshot.log_position if snapshot.log_position is not None else -1,
-                    str(snapshot.stakeholder),
-                ),
-            )
+            snapshot
+            for snapshot in self.ordered_stances()
+            if snapshot.recorded and (snapshot.supports or snapshot.disapproves)
         )

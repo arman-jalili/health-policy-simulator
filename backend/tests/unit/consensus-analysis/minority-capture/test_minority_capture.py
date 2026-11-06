@@ -35,8 +35,37 @@ def test_capture_is_a_named_domain_service() -> None:
         "objections",
         "proposal",
     ]
-    with pytest.raises(NotImplementedError, match="#316"):
-        MinorityCapture().capture(stances={})
+    assert MinorityCapture().capture(stances={}) == ()
+
+
+def test_every_disapproving_stakeholder_gets_its_own_position() -> None:
+    from consensus_analysis.domain.values import LogPosition, Stance, StanceSnapshot
+
+    def snapshot(key: str, stance: Stance, position: int) -> tuple[StakeholderId, StanceSnapshot]:
+        stakeholder = StakeholderId(key)
+        return stakeholder, StanceSnapshot(
+            stakeholder=stakeholder,
+            stance=stance,
+            log_position=LogPosition(position),
+        )
+
+    stances = dict(
+        [
+            snapshot("stk_1", Stance.SUPPORT, 0),
+            snapshot("stk_2", Stance.OPPOSE, 1),
+            snapshot("stk_3", Stance.QUALIFY, 2),
+            snapshot("stk_4", Stance.ABSTAIN, 3),
+        ]
+    )
+    positions = MinorityCapture().capture(
+        stances=stances, objections={StakeholderId("stk_2"): "too narrow"}
+    )
+    assert [position.holders for position in positions] == [
+        (StakeholderId("stk_2"),),
+        (StakeholderId("stk_3"),),
+    ]
+    assert positions[0].objections == ("too narrow",)
+    assert positions[1].objections == ()
 
 
 def test_majority_recording_is_separate_from_minority_capture() -> None:

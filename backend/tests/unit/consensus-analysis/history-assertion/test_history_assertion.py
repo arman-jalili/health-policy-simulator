@@ -44,16 +44,37 @@ def test_the_assertion_is_a_named_record_member() -> None:
     assert parameter_names(ConsensusRecord.assert_stances_recorded) == ["self"]
 
 
-def test_the_assertion_is_not_implemented_yet() -> None:
-    record = ConsensusRecord(
-        id=ConsensusId("cns_1"),
+def _record(stances: dict[StakeholderId, StanceSnapshot]) -> ConsensusRecord:
+    return ConsensusRecord.open(
+        consensus_id=ConsensusId("cns_1"),
         run_id=RunId("run_1"),
         topic=TopicRef("waiting_times"),
         proposal_class=ProposalClass.SERVICE_CATALOGUE,
         threshold=ConsensusThreshold(0.5),
-        stances={},
+        stances=stances,
         vetoes={},
         log_position=LogPosition(0),
     )
-    with pytest.raises(NotImplementedError, match="#311"):
+
+
+def test_a_recorded_stance_passes_the_assertion() -> None:
+    stakeholder = StakeholderId("stk_1")
+    record = _record(
+        {stakeholder: StanceSnapshot(stakeholder=stakeholder, stance=Stance.SUPPORT, recorded=True)}
+    )
+    record.assert_stances_recorded()
+
+
+def test_an_unrecorded_stance_fails_the_assertion_with_its_id() -> None:
+    stakeholder = StakeholderId("stk_ghost")
+    record = _record(
+        {
+            stakeholder: StanceSnapshot(
+                stakeholder=stakeholder, stance=Stance.SUPPORT, recorded=False
+            )
+        }
+    )
+    with pytest.raises(StanceNotInHistory) as raised:
         record.assert_stances_recorded()
+    assert raised.value.missing == ("stk_ghost",)
+    assert raised.value.code == "STANCE_NOT_IN_HISTORY"
