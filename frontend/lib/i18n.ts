@@ -82,7 +82,7 @@ const messages = {
   "corpus.accepted": { de: "Akzeptiert", en: "Accepted" },
   "corpus.quarantined": { de: "Quarantäne", en: "Quarantined" },
   "corpus.failed": { de: "Fehlgeschlagen", en: "Failed" },
-  "corpus.failureReason": { de: "Abbruchgrund", en: "Failure reason" },
+  "corpus.failureReason": { de: "Fehlergrund", en: "Error reason" },
   "corpus.outcomes": { de: "Ergebnis pro Datei", en: "Outcome per file" },
   "corpus.path": { de: "Pfad", en: "Path" },
   "corpus.outcome": { de: "Ergebnis", en: "Outcome" },

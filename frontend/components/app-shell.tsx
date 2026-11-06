@@ -23,6 +23,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/runs/new", labelKey: "nav.newRun", match: "/runs" },
   { href: "/stakeholders", labelKey: "nav.stakeholders" },
   { href: "/claims", labelKey: "nav.claims" },
+  { href: "/corpus", labelKey: "nav.corpus" },
   { href: "/health", labelKey: "nav.health" },
   { href: "/settings", labelKey: "nav.settings" },
 ];
@@ -45,6 +46,7 @@ const SIDEBAR_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/stakeholders", labelKey: "nav.stakeholders" },
       { href: "/claims", labelKey: "nav.claims" },
+      { href: "/corpus", labelKey: "nav.corpus" },
     ],
   },
   {
@@ -318,7 +320,7 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
                 {t("footer.system")}
               </h2>
               <ul className="mt-3 space-y-1.5 text-sm">
-                {[NAV_ITEMS[3], NAV_ITEMS[4], NAV_ITEMS[5]].map((item) =>
+                {[NAV_ITEMS[3], NAV_ITEMS[4], NAV_ITEMS[5], NAV_ITEMS[6]].map((item) =>
                   item === undefined ? null : (
                     <li key={item.href}>
                       <Link

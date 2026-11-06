@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 test.skip(process.env.HPS_E2E !== "1", "Set HPS_E2E=1 with a running backend.");
 
 const runId = process.env.HPS_E2E_RUN_ID;
-const routes = ["/", "/settings", "/health", "/claims"];
+const routes = ["/", "/settings", "/health", "/claims", "/corpus"];
 if (runId !== undefined && runId !== "") {
   routes.push(`/runs/${runId}`, `/runs/${runId}/consensus`, `/runs/${runId}/brief`);
 }
