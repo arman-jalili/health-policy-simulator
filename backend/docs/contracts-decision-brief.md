@@ -44,6 +44,20 @@ Domain imports no outer layer and no other bounded context. Upstream published v
 `REQUIRED_SECTIONS` is exactly the eight `SectionKind` members. `DEFAULT_DISCLAIMER_TEXT` is the
 fixed disclosure wording.
 
+Construction invariants (#333) — a value that exists is valid; violations raise `ValueError`:
+
+| Type | Rejected form |
+|---|---|
+| `BriefSection`, `BriefComponentSlot` | ordinal that is not the kind's frozen ordinal |
+| `CitedStatement` | blank text |
+| `CitationReference` | blank passage id; blank quote when present |
+| `CitationProvenance` | blank outlet/source URI; `page_from < 1`; `page_to < page_from` |
+| `RejectedProposalRecord` | blank measure; no blocking stakeholder |
+| `SimulationDisclaimer` | blank text, model or prompt reference |
+| `BriefVersion` | number `< 1`; blank snapshot; naive `generated_at`; successor without an earlier `previous_version` and a reason; reason on version 1 |
+| `ActorSummary` / `PositionStance` / `PositionTimeline` | blank institution/actor/stance; `round_no < 1` |
+| `TopicOutcome` | blank topic; `blocked` without naming a blocker |
+
 ### Aggregate surface
 
 ```text
