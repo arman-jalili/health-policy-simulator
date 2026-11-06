@@ -262,6 +262,20 @@ All five travel through the shared outbox; the two blocked-publication events ar
 
 Error bodies use the shared envelope `{code, message, details, trace_id}`.
 
+## Proofing (#347)
+
+`.pi/scripts/ci/check_decision-brief_contracts.sh` is the deterministic contract check: layer files,
+section kinds, evidence/lifecycle/outcome vocabularies, aggregate gates, the twelve error codes, the
+five events, the application services and ports, the five routes and their scopes, the wire document
+fields, the composition ports, the runtime binding, and one test pointer per acceptance criterion.
+It also fails on any `NotImplementedError` outside the documented upstream ACL adapters and requires
+the D-007 deferral record to exist.
+
+`.pi/scripts/ci/stage_decision-brief_proofing.sh` runs that check plus a real coverage gate
+(`--cov=src/decision_brief --cov-fail-under=80`, currently ~95%) and is registered as hardening
+stage 18 in `run_hardening_stages.sh`. A unit test executes the checker, so a drifting contract
+breaks the suite as well as CI.
+
 ## Runtime integration (#346)
 
 `BriefProjectionAdapter` (infrastructure) is the real `BriefProjectionBuilder`: it runs the pure
