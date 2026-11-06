@@ -48,6 +48,41 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ConsensusAnalysis mounted in the app shell (#321)
+
+### Changed
+- Module: consensus-analysis
+  - `shared/app.py` imports the container factory, builds `app.state.consensus_analysis` and mounts
+    `consensus_analysis_router` (the three additions, alongside the decision-brief block).
+  - In-memory projection adapters (`InMemoryConsensusRepository`, package and scenario stores, event
+    publisher, sequential id factory) so the context is reachable before its tables land.
+  - `UnavailableRunLog`, `UnavailableMandate` and `UnavailablePowers` fail closed with a named
+    reason while NegotiationSession publishes no run-log read model, no per-run threshold and no
+    bulk veto map. Each default they refuse would manufacture agreement.
+  - ADR-016 accepted.
+
+### Impact Analysis
+- Files affected:
+  - src/shared/app.py
+  - src/consensus_analysis/infrastructure/
+  - tests/integration/test_consensus_e2e.py
+- Canonical refs to update:
+  - .pi/architecture/decisions/ADR-016-consensus-analysis-runtime-integration.md
+- Validators required:
+  - ci, tests, architecture, operations
+
+### Migration Steps
+1. Replace the fail-closed sources with the published run-log, threshold and veto adapters.
+2. Register `container.handle_run_closed.execute` on the run-closed notice.
+3. Implement the PostgreSQL projection repositories on migration `0501_consensus_analysis`.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+- [x] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-06] - ConsensusAnalysis contract amendment: derivation inputs (#320)
 
 ### Changed
