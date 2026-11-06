@@ -55,6 +55,7 @@ const messages = {
   "run.closed": { de: "Abgeschlossen", en: "Closed" },
   "run.open": { de: "Laufend", en: "Open" },
   "run.driverManual": { de: "Manuell", en: "Manual" },
+  "run.model": { de: "Modell", en: "Model" },
   "run.driverAutomated": { de: "Automatisiert", en: "Automated" },
   "run.automatedBanner": {
     de: "Automatisierter Lauf (Platzhalter): Stellungnahmen werden vom Orchestrator gesetzt bzw. bei einem Modell ohne JSON-Antwort deterministisch aus der Persona abgeleitet. Zustimmungswerte sind keine Aussage über die Institutionen (Backend #423/#429).",
@@ -77,6 +78,8 @@ const messages = {
   "common.cancel": { de: "Abbrechen", en: "Cancel" },
   "common.save": { de: "Speichern", en: "Save" },
   "common.reset": { de: "Zurücksetzen", en: "Reset" },
+  "common.more": { de: "Mehr anzeigen", en: "Show more" },
+  "common.less": { de: "Weniger anzeigen", en: "Show less" },
   "common.showData": { de: "Daten anzeigen", en: "Show data" },
   "common.hideData": { de: "Daten ausblenden", en: "Hide data" },
   "common.traceId": { de: "Trace-ID", en: "Trace ID" },

@@ -88,6 +88,7 @@ export function useConflicts(runId: string, status?: string) {
 }
 
 export interface RunDriver {
+  readonly model: string | null;
   readonly automated: boolean;
   readonly scripted: boolean;
   readonly known: boolean;
@@ -108,9 +109,16 @@ export function useRunDriver(runId: string): RunDriver {
     entry?.driver === "automated" ||
     (entry?.driver !== "manual" && invoked.length >= 9);
   const known = entry?.driver !== undefined || usage.data !== undefined;
+  // The variant is a property of the run, not of the process: after switching backends the old run
+  // keeps the model that actually wrote its turns.
+  const model = usage.data?.model ?? null;
+  const scriptedFromRun = model !== null && model.startsWith("scripted");
+  const scripted =
+    model !== null ? scriptedFromRun : readyz.data?.checks["llm"] === "scripted";
   return {
     automated,
-    scripted: readyz.data?.checks["llm"] === "scripted",
+    scripted,
+    model,
     known,
   };
 }
@@ -454,10 +462,12 @@ export function useLocalRuns(): readonly RunIndexEntry[] {
     void Promise.allSettled(
       entries.map(async (entry) => {
         try {
-          return { entry, run: await getRun(entry.runId) };
+          const run = await getRun(entry.runId);
+          const usage = await getUsage(entry.runId).catch(() => undefined);
+          return { entry, run, model: usage?.model ?? entry.model ?? null };
         } catch (error) {
           if (error instanceof ApiError && error.status === 404) return { entry, run: null };
-          return { entry, run: undefined };
+          return { entry, run: undefined, model: entry.model ?? null };
         }
       }),
     ).then((results) => {
@@ -466,7 +476,7 @@ export function useLocalRuns(): readonly RunIndexEntry[] {
       let changed = false;
       for (const result of results) {
         if (result.status !== "fulfilled") continue;
-        const { entry, run } = result.value;
+        const { entry, run, model } = result.value;
         if (run === null) {
           changed = true;
           continue;
@@ -476,7 +486,8 @@ export function useLocalRuns(): readonly RunIndexEntry[] {
           continue;
         }
         if (entry.phase !== run.phase || entry.closed !== run.closed) changed = true;
-        kept.push({ ...entry, phase: run.phase, closed: run.closed });
+        if (model !== undefined && entry.model !== model) changed = true;
+        kept.push({ ...entry, phase: run.phase, closed: run.closed, model });
       }
       if (!changed) return;
       saveRunIndex(kept);

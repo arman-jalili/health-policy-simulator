@@ -8,7 +8,7 @@ import { useSettings } from "@/components/providers";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Tabs } from "@/components/ui/tabs";
 import { ErrorState, LoadingBlock } from "@/components/ui/states";
-import { RunProvenanceBanner, RunDriverBadge } from "@/features/run/components/run-provenance";
+import { RunDriverBadge, RunProvenanceBanner } from "@/features/run/components/run-provenance";
 import { useRun, useLocalRuns, useRunDriver } from "@/features/run/hooks";
 import { enumLabel } from "@/lib/i18n";
 import { truncateMiddle } from "@/lib/format";

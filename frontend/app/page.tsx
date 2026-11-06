@@ -54,7 +54,6 @@ export default function DashboardPage() {
                 {t("dashboard.readiness")}: {readyz.data.status}
               </StatusPill>
             )}
-            <StatusPill tone="info">{`llm: ${cap("llm")}`}</StatusPill>
             <StatusPill tone="neutral">{`pricing: ${cap("simulation_pricing")}`}</StatusPill>
           </div>
         }

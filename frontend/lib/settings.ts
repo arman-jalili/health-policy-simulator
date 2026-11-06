@@ -72,6 +72,8 @@ export const RunIndexEntrySchema = z.object({
   closed: z.boolean().nullable(),
   mandateHash: z.string().nullish(),
   driver: z.enum(["manual", "automated"]).optional(),
+  /** Recorded model of the run's invocations ("scripted-local" = placeholder). */
+  model: z.string().nullish(),
 });
 
 export type RunIndexEntry = z.infer<typeof RunIndexEntrySchema>;
