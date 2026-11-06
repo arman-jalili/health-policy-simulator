@@ -2,9 +2,9 @@
 
 Canonical: ``.pi/architecture/modules/negotiation-session.md`` (Service classification, API)
 
-Constructors, service names and ``execute`` signatures are frozen. Bodies raise
-``NotImplementedError`` naming the implementing issue; later issues may not rename or remove a
-frozen member without a new freeze entry. Business rules stay in the aggregate.
+Constructors, service names and ``execute`` signatures are frozen. Later issues may not rename
+or remove a frozen member without a new freeze entry. Business rules stay in the aggregate; the
+services load-mutate-save it or project read models.
 """
 
 from __future__ import annotations
