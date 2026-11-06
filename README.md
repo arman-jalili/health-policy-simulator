@@ -65,13 +65,13 @@ The stack boots with the scripted provider so a rehearsal needs no key. Any **Op
 a local runtime (Ollama, vLLM, LM Studio), or any vendor that exposes the same shape. Nothing in the code
 is bound to one provider.
 
-Two files, both git-ignored:
+One git-ignored file, `demo.env.local` (copy of `demo.env.example`), holds the credential together with
+the endpoint, model and metering — compose loads it into the container, so no key is interpolated from your
+shell:
 
 ```bash
-# .env at the repository root — the key only, read by compose
+# demo.env.local
 LLM_API_KEY=sk-…                    # or any token your endpoint expects
-
-# demo.env.local — the endpoint, model and metering
 LLM_PROVIDER=openai-compatible      # live provider; `scripted` is the placeholder
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
@@ -137,10 +137,11 @@ monthly snapshots. The stack reaches it through `host.docker.internal`, pinned i
 at the repository root so `docker compose up` needs no shell exports:
 
 ```bash
-# .env (git-ignored)
+# .env at the repository root (git-ignored) — infrastructure only, no credentials
 DATABASE_URL=postgresql+asyncpg://hps:hps@host.docker.internal:5433/health_policy
-LLM_API_KEY=sk-…
 ```
+
+The model credential lives in `demo.env.local` (see §3), which compose loads into the container.
 
 ```bash
 docker compose up -d            # backend now talks to the host database
