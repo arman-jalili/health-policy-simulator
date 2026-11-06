@@ -54,6 +54,10 @@ async def test_readyz_reports_ready_when_database_answers(
         "governance_compliance": "ok",
         "governance_allowlist": "9",
         "governance_provenance": "deferred",
+        "decision_brief": "degraded",
+        "decision_brief_gates": (
+            "UnwiredConsensusSource,UnwiredHistorySource,UnwiredProvenanceGate"
+        ),
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1

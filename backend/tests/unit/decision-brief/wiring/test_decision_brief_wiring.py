@@ -16,6 +16,7 @@ from typing import Any, cast
 import httpx
 import pytest
 from fastapi import Request
+from fastapi.testclient import TestClient
 from tests.unit.decision_brief_contract_helpers import (
     SRC,
     annotation_names,
@@ -488,3 +489,35 @@ def test_the_contract_proofing_script_passes() -> None:
 
     assert completed.returncode == 0, completed.stdout
     assert "Failed: 0" in completed.stdout
+
+
+# ── Readiness reports the gate wiring honestly (#348) ──────────────────────────────
+
+
+def test_readiness_reports_decision_brief_and_its_unwired_gates() -> None:
+    app = create_app(
+        Settings(
+            _env_file=None,
+            database_url=DATABASE_URL,
+            persistence=Persistence.MEMORY,
+        )
+    )
+
+    with TestClient(app) as client:
+        body = client.get("/readyz").json()
+
+    assert body["checks"]["decision_brief"] == "degraded"
+    assert "UnwiredProvenanceGate" in body["checks"]["decision_brief_gates"]
+
+
+def test_the_runbook_and_dr_plan_exist_and_name_the_deferral() -> None:
+    root = SRC.parents[1]
+
+    runbook = (root / "docs" / "runbook-decision-brief.md").read_text(encoding="utf-8")
+    dr_plan = (root / "docs" / "dr-plan-decision-brief.md").read_text(encoding="utf-8")
+
+    assert "D-007" in runbook
+    assert "BRIEF_GATE_UNAVAILABLE" in runbook
+    assert "Never** roll back a published brief" in runbook
+    assert "D-007" in dr_plan
+    assert "ReproductionCheck" in dr_plan
