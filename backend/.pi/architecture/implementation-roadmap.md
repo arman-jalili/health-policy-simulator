@@ -297,10 +297,19 @@ rounds (`POST /runs/{id}/rounds`, `POST /runs/{id}/rounds/{n}:close`), PostgreSQ
 
 **Goal:** The negotiation becomes a decision artefact: consensus with veto awareness, compromise packages, honest impact, and an eight-section brief.
 
-**Verified 2026-11-06 on the `#404–#409` branch:** derivation, veto precedence, packages, scenarios and
-the eight-section brief are implemented and tested. The run log, mandate threshold and veto classes are
-bound at runtime; `HandleRunClosed` is subscribed; consensus rows persist through `0501`; the brief's
-history/consensus/provenance gates are bound and `0502` persists published versions.
+**Verified 2026-11-06 on `adafc3b` (live API walkthrough, not only tests):** derivation, veto precedence,
+packages, scenarios and the eight-section brief are implemented and tested. The run log, mandate threshold
+and veto classes are bound at runtime; `HandleRunClosed` is subscribed; consensus rows persist through
+`0501`; the brief's history/consensus/provenance gates are bound and `0502` persists published versions.
+
+**The chain runs end to end** — nine evidenced positions, nine turns, round close, derivation without an
+extra API call, `201` on `POST /runs/{id}/brief`, one listed version — **with two caveats that are now
+issues, not prose:**
+
+| Caveat | Issue |
+|---|---|
+| On `PERSISTENCE=postgres`, `POST /evidence/packs` 500s (retrieval adapter does not await the postgres index writer), so the walkthrough only runs in the memory family | #411 |
+| Publication needs one manual `POST /positions/{id}/provenance` per position; nothing in the round lifecycle writes the disclosure the gate requires | #412 |
 
 ### Modules
 
@@ -325,7 +334,7 @@ history/consensus/provenance gates are bound and `0502` persists published versi
 ### Acceptance Criteria
 
 - [x] 7/9 support for a vetoed proposal class yields `VetoBlockedOutcome`, never consensus — domain-tested
-  (134 contract checks); the derivation path is wired but its inputs are unavailable (#406)
+  (134 contract checks) and reached through the API on a closed run
 - [x] An impact figure labelled `derived` without inputs is refused (`UnbackedEstimateBlocked`) — tested
 - [x] An illustrative documentation value cannot be persisted as a run outcome — tested
 - [x] Every disapproving stakeholder appears in a recorded minority position — tested

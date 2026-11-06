@@ -1,5 +1,17 @@
 # DecisionBrief
 
+### Provenance gate — who writes the disclosure (verified 2026-11-06)
+
+`GovernanceProvenanceGate.assert_disclosed` requires a **stored** provenance record for every open position
+of the run (`GetPositionProvenance` reads the governance store, not the negotiation aggregate). The only
+producer is `POST /api/v1/positions/{position_id}/provenance`; no negotiation use case writes it. So a run
+with nine positions needs nine explicit calls before `POST /runs/{id}/brief` succeeds — verified: `422
+DISCLOSURE_MISSING` before the calls, `201` after them.
+
+This is recorded as **#412**. Until it is fixed, treat "publish a brief" as a two-step ceremony and do not
+describe the gate as automatic. The facts source (`NegotiationProvenanceFacts`, late-bound in
+`shared/app.py`) is real; the *invocation* is what is missing.
+
 ## Module Status
 
 **Status:** Implemented and wired (contract frozen #331; history/consensus/provenance gates bound #407;

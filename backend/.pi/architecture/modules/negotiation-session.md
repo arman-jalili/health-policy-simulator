@@ -514,7 +514,7 @@ Every row is a call-site obligation, not a description: the collaborator must be
 | Collaborator | Invoked from | Observable effect | Fails when |
 |---|---|---|---|
 | `EnforceInstitutionOnlyOutput` | blocking dependency on the argument/position write path | 5xx when the guard is unbound; a violation row otherwise | the guard is constructed and the request path skips it |
-| `AgentInvocation` reference | argument write | `invocation_id` present on every argument | nullable, so cost attribution silently disappears |
+| `AgentInvocation` reference | argument write | an `invocation_id` is present on every argument | nullable, so cost attribution silently disappears. **Verified 2026-11-06:** presence only — `RequiredInvocationLookup` rejects blanks and accepts any other string, so membership in the run is not proven (#414) |
 | debate / abstention policy | round close | abstention recorded for actors who did not speak | a silent skip manufactures quorum |
 | run-log append | every command | replay fold equals live state | the log is written outside the aggregate transaction |
 
