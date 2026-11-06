@@ -21,6 +21,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from consensus_analysis.domain.entities import MajorityPosition, MinorityPosition, PackageComponent
+from consensus_analysis.domain.errors import UnbackedEstimate
 from consensus_analysis.domain.values import (
     ConsensusOutcome,
     ConsensusThreshold,
@@ -181,7 +182,9 @@ class EstimateValidator:
 
     def validate(self, figure: EstimatedFigure) -> None:
         """Raise ``UnbackedEstimate`` when the claimed basis has no inputs (AC 5)."""
-        raise NotImplementedError("EstimateValidator.validate is implemented by issue #313")
+        if figure.basis.is_backed():
+            return
+        raise UnbackedEstimate(figure.field, figure.basis.kind.value)
 
     def label_for(self, basis: EstimateBasis) -> UncertaintyLabel:
         """Return the label a reader must see for this basis; assumed never renders computed."""

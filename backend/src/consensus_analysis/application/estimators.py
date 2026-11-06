@@ -13,7 +13,12 @@ from typing import ClassVar, Protocol, runtime_checkable
 
 from consensus_analysis.application.dto import EstimateRequest
 from consensus_analysis.application.ports import LlmImpactEstimator
-from consensus_analysis.domain.values import BasisKind, EstimatedFigure
+from consensus_analysis.domain.values import (
+    BasisKind,
+    EstimateBasis,
+    EstimatedFigure,
+    UncertaintyLabel,
+)
 
 
 @runtime_checkable
@@ -65,4 +70,19 @@ class AssumedEstimator:
     basis: ClassVar[BasisKind] = BasisKind.ASSUMED
 
     async def estimate(self, request: EstimateRequest) -> EstimatedFigure:
-        raise NotImplementedError("AssumedEstimator.estimate is implemented by issue #313")
+        """Produce the labelled figure an assumption states.
+
+        This is the only strategy that can be honest before any calculation exists: it claims no
+        computation, so there is nothing to underwrite.
+        """
+        if request.assumed_value is None:
+            raise ValueError(
+                f"assumed estimate {request.field!r} needs a value; an assumption without a "
+                "number is a limitation, not a figure"
+            )
+        return EstimatedFigure(
+            field=request.field,
+            value=request.assumed_value,
+            basis=EstimateBasis(kind=BasisKind.ASSUMED),
+            label=UncertaintyLabel.ASSUMED,
+        )

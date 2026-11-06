@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from claim_validation.interfaces.published import ClaimVerdictView
 from consensus_analysis.application.dto import ReferenceFigureView
 from consensus_analysis.domain.errors import UnknownVetoClass
-from consensus_analysis.domain.values import DocumentedExample, ProposalClass
+from consensus_analysis.domain.values import DocumentedExample, ProposalClass, ReferenceFigureId
 from stakeholder_model.interfaces.published import StakeholderProfileView
 
 
@@ -43,9 +43,19 @@ class ReferenceFigureAcl:
     """Map a ClaimValidation verdict to an enumerable derivation input, or to nothing."""
 
     def to_reference_figure(self, verdict: ClaimVerdictView) -> ReferenceFigureView | None:
-        """Return the figure when the verdict carries a verified delta, otherwise ``None``."""
-        raise NotImplementedError(
-            "ReferenceFigureAcl.to_reference_figure is implemented by issue #313"
+        """Return the figure when the verdict carries a verified delta, otherwise ``None``.
+
+        A verdict without a delta resolved a claim but produced no number, so it cannot serve as a
+        derivation input. Returning ``None`` is the honest answer: a measured basis without an input
+        is exactly what ``EstimateValidator`` refuses.
+        """
+        if verdict.delta is None:
+            return None
+        return ReferenceFigureView(
+            reference_figure_id=ReferenceFigureId(verdict.claim_id),
+            value=verdict.delta,
+            unit=verdict.claim_type,
+            source=",".join(verdict.sources),
         )
 
 

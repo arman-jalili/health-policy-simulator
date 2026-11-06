@@ -32,6 +32,8 @@ from consensus_analysis.application.dto import (
     ComparisonResult,
     ComposePackageResult,
     ConsensusResult,
+    EstimatedFigureResult,
+    EstimateRequest,
     PackageListResult,
     RebuildResult,
     RunClosedResult,
@@ -49,7 +51,14 @@ from consensus_analysis.application.ports import (
     UnitOfWork,
 )
 from consensus_analysis.domain.consensus_record import ConsensusRecord
-from consensus_analysis.domain.errors import ProjectionRebuildFailed
+from consensus_analysis.domain.entities import ImpactAssessment
+from consensus_analysis.domain.errors import (
+    CompromisePackageNotFound,
+    ConsensusAnalysisUnavailable,
+    ProjectionRebuildFailed,
+    UnbackedEstimate,
+)
+from consensus_analysis.domain.events import UnbackedEstimateBlocked
 from consensus_analysis.domain.repositories import (
     CompromisePackageRepository,
     ConsensusRepository,
@@ -57,13 +66,19 @@ from consensus_analysis.domain.repositories import (
     ScenarioRepository,
     StakeholderPowersPort,
 )
+from consensus_analysis.domain.scenario import Scenario
 from consensus_analysis.domain.services import (
     ComponentsCompatible,
     EstimateValidator,
     FeasibilityGuard,
     IllustrativeValueGuard,
 )
-from consensus_analysis.domain.values import BasisKind
+from consensus_analysis.domain.values import (
+    AssessmentId,
+    BasisKind,
+    EstimatedFigure,
+    ScenarioId,
+)
 
 SERVICE_CLASSIFICATION: Mapping[str, str] = MappingProxyType(
     {
@@ -260,7 +275,76 @@ class AssessImpact:
         )
 
     async def execute(self, request: AssessImpactRequest) -> ScenarioResult:
-        raise NotImplementedError("AssessImpact.execute is implemented by issue #313")
+        """Define the scenario, estimate every assumption and refuse an unbacked figure (AC 5).
+
+        A refused figure is published as ``UnbackedEstimateBlocked`` *before* the transaction
+        aborts: the refusal is the auditable fact, so losing it because the write rolled back would
+        hide exactly what this guard exists to record.
+        """
+        package = await self._packages.get(request.package_id)
+        if package is None:
+            raise CompromisePackageNotFound(f"package {request.package_id} not found")
+        scenario = Scenario.define(
+            scenario_id=ScenarioId(self._ids.new_id("scn")),
+            package_id=package.id,
+            baseline=request.baseline,
+            horizon=request.horizon,
+            log_position=package.log_position,
+            assumptions=request.assumptions,
+        )
+        figures: list[EstimatedFigure] = []
+        for assumption in request.assumptions:
+            strategy = self._estimation.get(assumption.basis.kind)
+            if strategy is None:
+                raise ConsensusAnalysisUnavailable(
+                    f"no estimation strategy registered for basis {assumption.basis.kind.value!r}"
+                )
+            figure = await strategy.estimate(
+                EstimateRequest(
+                    scenario_id=scenario.id,
+                    field=assumption.statement,
+                    inputs=assumption.basis.inputs,
+                )
+            )
+            try:
+                self._validator.validate(figure)
+            except UnbackedEstimate:
+                await self._events.publish(
+                    (
+                        UnbackedEstimateBlocked(
+                            scenario_id=scenario.id,
+                            field=figure.field,
+                            claimed_basis=figure.basis.kind,
+                        ),
+                    )
+                )
+                raise
+            figures.append(figure)
+        assessment = ImpactAssessment.assess(
+            assessment_id=AssessmentId(self._ids.new_id("imp")),
+            scenario_id=scenario.id,
+            package_id=package.id,
+            figures=tuple(figures),
+        )
+        scenario.assess(assessment)
+        async with self._uow.transaction():
+            await self._scenarios.save(scenario)
+            await self._events.publish(scenario.drain_events())
+        return ScenarioResult(
+            scenario_id=scenario.id,
+            package_id=package.id,
+            figures=tuple(
+                EstimatedFigureResult(
+                    field=figure.field,
+                    value=figure.value,
+                    basis=figure.basis,
+                    label=figure.label,
+                    limitation=figure.limitation,
+                )
+                for figure in figures
+            ),
+            feasibility=assessment.feasibility,
+        )
 
 
 class CompareScenarios:
