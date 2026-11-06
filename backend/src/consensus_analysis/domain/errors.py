@@ -124,6 +124,28 @@ class FeasibilityContradictsVeto(ConflictError):
 
     code = "FEASIBILITY_CONTRADICTS_VETO"
 
+    def __init__(
+        self,
+        proposal_class: str,
+        holders: Sequence[str],
+        *,
+        reason: str = "a veto holder cannot be recorded as consenting",
+    ) -> None:
+        self.proposal_class = proposal_class
+        self.holders = tuple(holders)
+        super().__init__(
+            f"feasibility asserted for {proposal_class!r} while "
+            f"{', '.join(self.holders)} can block it",
+            details=[
+                {
+                    "message": reason,
+                    "field": holder,
+                    "code": "FEASIBILITY_CONTRADICTS_VETO",
+                }
+                for holder in self.holders
+            ],
+        )
+
 
 class IncompatibleComponent(ConflictError):
     """Components accepted individually cannot be combined (invariant 5, AC 9)."""

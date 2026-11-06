@@ -23,6 +23,7 @@ from decimal import Decimal
 
 from consensus_analysis.domain.entities import MajorityPosition, MinorityPosition, PackageComponent
 from consensus_analysis.domain.errors import (
+    FeasibilityContradictsVeto,
     IllustrativeValueRefused,
     MislabeledEstimate,
     UnbackedEstimate,
@@ -34,6 +35,7 @@ from consensus_analysis.domain.values import (
     DocumentedExample,
     EstimateBasis,
     EstimatedFigure,
+    FeasibilityLevel,
     FeasibilityRating,
     ProposalClass,
     StakeholderId,
@@ -272,5 +274,22 @@ class FeasibilityGuard:
         vetoes: Mapping[StakeholderId, frozenset[ProposalClass]],
         proposal_class: ProposalClass,
     ) -> None:
-        """Raise ``FeasibilityContradictsVeto`` when feasibility is asserted against a blocker."""
-        raise NotImplementedError("FeasibilityGuard.assert_consistent is implemented by issue #318")
+        """Raise ``FeasibilityContradictsVeto`` when feasibility is asserted against a blocker.
+
+        Two contradictions are refused, and only when the rating actually asserts feasibility: a
+        consenting institution that can block the class, and an institution listed both as a blocker
+        and as consenting. A rating that admits a dimension is low, or leaves one unknown, asserts
+        nothing and is therefore allowed to name whoever it likes (AC 10, invariant 10).
+        """
+        if not rating.is_fully_rated():
+            return
+        if FeasibilityLevel.LOW in (rating.political, rating.legal, rating.administrative):
+            return
+        holders = {
+            holder for holder in consenting if proposal_class in vetoes.get(holder, frozenset())
+        }
+        contradictions = sorted({*holders, *(set(rating.blockers) & set(consenting))}, key=str)
+        if contradictions:
+            raise FeasibilityContradictsVeto(
+                proposal_class.value, [str(item) for item in contradictions]
+            )
