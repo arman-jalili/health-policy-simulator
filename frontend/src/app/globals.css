@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+/*
+  Design foundation — institutional public-service aesthetic.
+  Reference direction: sozialversicherung.at
+  Restrained surfaces, Austrian red as the single accent, warm paper,
+  slate ink (#475256), serif display type, precise small radii.
+*/
+
+@theme {
+  /* Brand — Austrian institutional red */
+  --color-brand-50: #fcf3f4;
+  --color-brand-100: #f9e1e4;
+  --color-brand-200: #f2c2c8;
+  --color-brand-300: #e896a0;
+  --color-brand-400: #da5e6c;
+  --color-brand-500: #c83243;
+  --color-brand-600: #a81e2e;
+  --color-brand-700: #8a1725;
+  --color-brand-800: #6e141f;
+  --color-brand-900: #57131c;
+  --color-brand-950: #310a10;
+
+  /* Ink — cool slate, anchored on the reference's #475256 */
+  --color-ink-50: #f6f7f7;
+  --color-ink-100: #e9ecec;
+  --color-ink-200: #d3d8d8;
+  --color-ink-300: #b2babb;
+  --color-ink-400: #8b9697;
+  --color-ink-500: #697576;
+  --color-ink-600: #475256;
+  --color-ink-700: #3a4346;
+  --color-ink-800: #2e3538;
+  --color-ink-900: #1f2426;
+  --color-ink-950: #121617;
+
+  /* Semantic surfaces */
+  --color-paper: #fbfaf7;
+  --color-surface: #ffffff;
+  --color-canvas: #f4f3ee;
+  --color-line: #d9d7cf;
+  --color-line-strong: #b9b6ab;
+
+  --color-brand: #a81e2e;
+  --color-brand-strong: #8a1725;
+  --color-brand-soft: #f9e1e4;
+  --color-ink: #1f2426;
+  --color-ink-muted: #5a6567;
+  --color-on-brand: #ffffff;
+
+  /* Typography */
+  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-source-code), ui-monospace, monospace;
+
+  --text-display: 3.25rem;
+  --text-display--line-height: 1.04;
+  --text-display--letter-spacing: -0.025em;
+  --text-display--font-weight: 600;
+
+  --text-headline: 2.25rem;
+  --text-headline--line-height: 1.12;
+  --text-headline--letter-spacing: -0.02em;
+  --text-headline--font-weight: 600;
+
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.3;
+  --text-title--letter-spacing: -0.01em;
+
+  --text-overline: 0.75rem;
+  --text-overline--line-height: 1.2;
+  --text-overline--letter-spacing: 0.14em;
+  --text-overline--font-weight: 600;
+
+  /* Layout */
+  --container-content: 78rem;
+  --container-wide: 90rem;
+
+  /* Radii — public-sector crispness, not pill-shaped */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
+
+  /* Elevation — barely there */
+  --shadow-card:
+    0 1px 1px rgb(18 22 23 / 0.04), 0 2px 6px rgb(18 22 23 / 0.05);
+  --shadow-raised:
+    0 2px 4px rgb(18 22 23 / 0.06), 0 10px 24px rgb(18 22 23 / 0.08);
+  --shadow-inset-line: inset 0 0 0 1px rgb(18 22 23 / 0.06);
+
+  /* Motion */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "kern", "liga", "calt";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-serif);
+    color: var(--color-ink);
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  a {
+    color: var(--color-brand);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-decoration-color: color-mix(in oklab, var(--color-brand) 35%, transparent);
+    text-underline-offset: 0.2em;
+    transition: color 150ms var(--ease-out-quart),
+      text-decoration-color 150ms var(--ease-out-quart);
+  }
+
+  a:hover {
+    color: var(--color-brand-strong);
+    text-decoration-color: currentColor;
+  }
+
+  ::selection {
+    background-color: var(--color-brand);
+    color: var(--color-on-brand);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
