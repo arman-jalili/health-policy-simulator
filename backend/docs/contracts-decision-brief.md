@@ -118,9 +118,15 @@ ConsensusProjection|None`, `CitationResolver.resolve(passage_ids) -> CitationRes
 `ProvenanceDisclosureGate.assert_disclosed(run_id) -> None`.
 
 Service classification (`domain/services.py::SERVICE_CLASSIFICATION`):
-application = the five use cases; domain = `BriefProjectionBuilder`, `ReproductionChecker`,
-`OutcomeHonestyPolicy`; infrastructure = `CitationResolver`, `ProvenanceDisclosureGate`;
-interfaces = `BriefRenderer`.
+application = the five use cases; domain = `BriefProjectionBuilder`, `SectionAssembler`,
+`ReproductionChecker`, `OutcomeHonestyPolicy`; infrastructure = `CitationResolver`,
+`ProvenanceDisclosureGate`; interfaces = `BriefRenderer`.
+
+`SectionAssembler` (#335) is the concrete pure mapping: `assemble(run, consensus)` returns all eight
+sections at their frozen ordinals, `outcomes(run, consensus)` returns blocked topics then open
+disputes. It performs no I/O and reads no unordered collection, so identical projections produce
+identical sections. Statements stay `EVIDENCED` with unresolved `CitationReference`s — resolution is
+the citation gate's job — and a verdict without a citable passage is `UNSUPPORTED`, never `EVIDENCED`.
 
 Classification is machine-checked (#334): a test resolves each classified name to the file that
 defines it and fails when the declared layer is not the owning layer, when a port is not an
