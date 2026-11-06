@@ -106,6 +106,17 @@ class BriefNotPublished(ConflictError):
     code = "BRIEF_NOT_PUBLISHED"
 
 
+class BriefSourceIncomplete(ConflictError):
+    """The run or its derived consensus is not available; nothing can be projected."""
+
+    code = "BRIEF_SOURCE_INCOMPLETE"
+
+    def __init__(self, run_id: str, missing: str) -> None:
+        self.run_id = run_id
+        self.missing = missing
+        super().__init__(f"run {run_id} has no {missing}; the brief cannot be projected")
+
+
 class BriefVersionConflict(ConflictError):
     """A successor must be version N+1 of the same run and reference N (AC 7)."""
 

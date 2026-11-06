@@ -178,6 +178,10 @@ class BriefVersion:
             raise ValueError("only a successor version carries a reason")
 
 
+BRIEF_PROMPT_VERSION: Final[str] = "brief-projection.v1"
+"""Version of the projection prompt/rule set; recorded in every disclaimer (AC 10)."""
+
+
 DEFAULT_DISCLAIMER_TEXT: Final[str] = (
     "This brief reports probabilistic reasoning over a pinned corpus snapshot. "
     "It is not a deterministic forecast and must not be read as established fact."

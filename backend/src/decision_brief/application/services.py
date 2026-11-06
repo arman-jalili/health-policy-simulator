@@ -32,7 +32,11 @@ from decision_brief.application.ports import (
     UnitOfWork,
 )
 from decision_brief.domain.decision_brief import DecisionBrief
-from decision_brief.domain.errors import BriefNotFound, BriefNotPublished
+from decision_brief.domain.errors import (
+    BriefNotFound,
+    BriefNotPublished,
+    BriefSourceIncomplete,
+)
 from decision_brief.domain.repositories import DecisionBriefRepository
 from decision_brief.domain.services import BriefProjectionBuilder
 from decision_brief.domain.values import (
@@ -90,9 +94,32 @@ class PublishDecisionBrief:
         )
 
     async def execute(self, request: PublishDecisionBriefRequest) -> BriefResult:
-        raise NotImplementedError(
-            "PublishDecisionBrief.execute is implemented by issue-decision-brief-eight-sections"
+        run = await self._history.load(request.run_id)
+        if run is None:
+            raise BriefSourceIncomplete(str(request.run_id), "closed run history")
+        consensus = await self._consensus.load(request.run_id)
+        if consensus is None:
+            raise BriefSourceIncomplete(str(request.run_id), "derived consensus")
+        await self._provenance.assert_disclosed(request.run_id)
+        brief = self._projection.build(run=run, consensus=consensus, disclaimer=self._disclaimer)
+        brief.assert_rejected_proposals_disclosed(
+            [record.measure for record in run.rejected_proposals]
         )
+        passage_ids = tuple(
+            dict.fromkeys(
+                citation.passage_id
+                for section in brief.sections.values()
+                for statement in section.statements
+                for citation in statement.citations
+            )
+        )
+        resolution = await self._citations.resolve(passage_ids)
+        brief.resolve_citations(resolution.resolved)
+        brief.publish()
+        async with self._uow.transaction():
+            await self._briefs.save(brief)
+            await self._events.publish(brief.events)
+        return BriefResult(brief=brief, citation_count=brief.citation_count())
 
 
 class VersionDecisionBrief:

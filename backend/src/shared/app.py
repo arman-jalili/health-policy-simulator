@@ -18,6 +18,23 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from claim_validation.composition import build_container as build_claim_validation_container
 from claim_validation.interfaces.http.router import router as claim_validation_router
+from decision_brief.composition import build_container as build_decision_brief_container
+from decision_brief.domain.values import BRIEF_PROMPT_VERSION, SimulationDisclaimer
+from decision_brief.infrastructure.acl import EvidenceCorpusCitationResolver
+from decision_brief.infrastructure.failclosed import (
+    UnwiredConsensusSource,
+    UnwiredHistorySource,
+    UnwiredProjectionBuilder,
+    UnwiredProvenanceGate,
+)
+from decision_brief.infrastructure.repository.memory import InMemoryDecisionBriefRepository
+from decision_brief.infrastructure.runtime import (
+    LoggingEventPublisher,
+    NoopUnitOfWork,
+    UuidFactory,
+)
+from decision_brief.interfaces.http.router import router as decision_brief_router
+from decision_brief.interfaces.renderer import JsonBriefRenderer
 from evidence_corpus.composition import build_container
 from evidence_corpus.interfaces.http.router import router as evidence_corpus_router
 from evidence_retrieval.composition import build_container as build_retrieval_container
@@ -38,6 +55,7 @@ from negotiation_session.infrastructure.upstream import (
     StakeholderProfiles,
 )
 from negotiation_session.interfaces.http.router import router as negotiation_session_router
+from shared.clock import SystemClock
 from shared.config import Settings, get_settings
 from shared.db import Database
 from shared.enums import Persistence
@@ -150,6 +168,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         invocations=RequiredInvocationLookup(),
         progress=app.state.negotiation_progress,
     )
+    app.state.decision_brief = build_decision_brief_container(
+        app_settings,
+        database,
+        briefs=InMemoryDecisionBriefRepository(),
+        history=UnwiredHistorySource(),
+        consensus=UnwiredConsensusSource(),
+        citations=EvidenceCorpusCitationResolver(app.state.corpus.resolve_passage),
+        provenance=UnwiredProvenanceGate(),
+        projection=UnwiredProjectionBuilder(),
+        disclaimer=SimulationDisclaimer.canonical(
+            model_reference=app_settings.simulation_model_id,
+            prompt_version=BRIEF_PROMPT_VERSION,
+        ),
+        events=LoggingEventPublisher(),
+        clock=SystemClock(),
+        ids=UuidFactory(),
+        uow=NoopUnitOfWork(),
+        renderer=JsonBriefRenderer(),
+    )
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -173,6 +210,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(simulation_orchestration_router)
     app.include_router(governance_compliance_router)
     app.include_router(negotiation_session_router)
+    app.include_router(decision_brief_router)
     return app
 
 
