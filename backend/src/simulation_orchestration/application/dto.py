@@ -116,6 +116,8 @@ class UsageReportResult:
     cost: Decimal
     by_stakeholder: tuple[StakeholderUsage, ...]
     by_round: tuple[RoundUsage, ...]
+    model: str = ""
+    provider: str = "scripted"
 
 
 @dataclass(frozen=True, slots=True)

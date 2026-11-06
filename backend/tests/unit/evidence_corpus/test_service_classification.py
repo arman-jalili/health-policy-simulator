@@ -145,7 +145,7 @@ class TestExecutableDomainRules:
             selection.select(
                 PageTextFacts(has_text_layer=True, average_chars_per_page=12, missing_glyph_rate=0)
             )
-            is ExtractionMethod.OCR
+            is ExtractionMethod.NATIVE
         )
         assert (
             selection.select(
@@ -153,7 +153,7 @@ class TestExecutableDomainRules:
                     has_text_layer=True, average_chars_per_page=2500, missing_glyph_rate=0.4
                 )
             )
-            is ExtractionMethod.OCR
+            is ExtractionMethod.NATIVE
         )
 
     def test_page_facts_route_a_clean_text_layer_to_native(self) -> None:

@@ -22,6 +22,8 @@ class SimulationOrchestrationContainer(Protocol):
     pause_or_resume_simulation: PauseOrResumeSimulation
     get_job: GetJob
     collect_usage_report: CollectUsageReport
+    model: str
+    provider: str
 
 
 @dataclass(frozen=True, slots=True)

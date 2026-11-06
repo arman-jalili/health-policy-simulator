@@ -1305,6 +1305,18 @@ Track which changes have been synced to implementation:
 
 *Last updated: 2026-11-06*
 
+## 2026-11-06 — Honest scripted runs, auditable batches and gated proofing (#427–#429)
+
+- Batch ingestion records `(path, outcome, reason)` for every file; `/readyz` reports `ocr`, and a batch that
+  needs an absent OCR stack fails with `OCR_UNAVAILABLE` instead of a bare `failed` count. Sparse text layers
+  are extracted natively rather than routed to OCR, and re-running a shard is idempotent (#427).
+- CI now loops over every `check_*_contracts.sh` / `check_*_contract.py`; a new
+  `check_contract_proofing_gate.py` fails when a module doc lacks proofing or the workflow stops invoking the
+  loops. SimulationOrchestration and EvidenceRetrieval are therefore gated (#428).
+- The scripted provider derives stances from the persona card and writes a labelled `[synthetic]` argument
+  with its reason; actor-hash fallbacks and prompt echoes are gone. Unusable real-provider output fails with
+  `LLM_OUTPUT_UNPARSEABLE`; usage responses expose `model`/`provider` (#429).
+
 ## 2026-11-06 — Corpus ingestion is no longer a dead end (#424)
 
 - `POST /corpus/documents/{id}:segment`, `:index` and `:publish` expose article boundaries and passage

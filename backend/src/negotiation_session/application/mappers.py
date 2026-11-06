@@ -58,6 +58,7 @@ def binding_from_profile(
         institution_name=view.identity.name,
         institution_code=view.identity.code,
         interests=tuple(f"{item.topic}: {item.goal}" for item in view.interests),
+        interest_weights=tuple(item.weight for item in view.interests),
         constraints=tuple(item.statement for item in view.constraints),
         red_lines=view.red_lines,
         veto_classes=tuple(str(item.proposal_class) for item in view.veto_rights),

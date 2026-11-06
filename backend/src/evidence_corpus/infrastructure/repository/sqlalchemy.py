@@ -25,6 +25,8 @@ from evidence_corpus.domain.entities import (
     CorpusSnapshot,
     Document,
     IndexManifest,
+    IngestionOutcome,
+    IngestionOutcomeRecord,
     IngestionRun,
     Passage,
     Publication,
@@ -223,6 +225,14 @@ class SqlAlchemyIngestionRunRepository:
             row.quarantined = run.quarantined
             row.failed = run.failed
             row.failure_reason = run.failure_reason
+            row.outcomes = [
+                {
+                    "path": item.path,
+                    "outcome": item.outcome.value,
+                    "reason": item.reason,
+                }
+                for item in run.outcomes
+            ]
             row.updated_at = datetime.now(tz=UTC)
 
     async def latest(self, shard_label: str) -> IngestionRun | None:
@@ -549,6 +559,14 @@ def _to_run(row: IngestionRunRow) -> IngestionRun:
         quarantined=row.quarantined,
         failed=row.failed,
         failure_reason=row.failure_reason,
+        outcomes=[
+            IngestionOutcomeRecord(
+                path=str(item.get("path", "")),
+                outcome=IngestionOutcome(str(item["outcome"])),
+                reason=str(item["reason"]) if item.get("reason") else None,
+            )
+            for item in (row.outcomes or [])
+        ],
     )
 
 

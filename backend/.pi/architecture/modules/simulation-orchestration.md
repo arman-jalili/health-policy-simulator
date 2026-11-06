@@ -76,6 +76,9 @@ the rule and persists. The graph is a sequencer, not a model.
 | Prompt context | persona name, short topic, evidence pack id + passage ids, current stances and previous-round learning; a prompt test asserts all three key inputs (#423) |
 | Job status | `completed` only when the run is `CLOSED`; a gateway/provider failure retries and then becomes `failed`/`dead_letter` |
 | LLM | `LLM_PROVIDER=scripted` (local only) or `openai-compatible` (`HttpLlmClient`: `/chat/completions`, real usage tokens, latency, retries on 429/5xx/timeout, named `LLM_PROVIDER_FAILED`) |
+| Scripted decisions | the scripted provider never persists a prompt echo and never hashes an actor into a stance; it derives `support/qualify/conditional_accept/oppose` from the persona card and writes a `[synthetic] … Begründung: …` argument (#429) |
+| Unusable output | a real provider that returns prose, a prompt echo, or JSON without a valid stance fails with `LLM_OUTPUT_UNPARSEABLE`; it never guesses a stance |
+| Model provenance | `GET /runs/{id}/usage` returns `model` and `provider`, so a client can label synthetic outcomes |
 | Metering | one invocation per real stakeholder turn, deterministic `invocation_id`; scripted calls are explicitly synthetic and zero-cost |
 | Config | `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, timeout/retries/temperature/max output tokens; a real provider without key/base URL aborts boot |
 | Readiness | `/readyz` reports `llm: scripted`, `llm: openai-compatible`, or `llm: azure_ai_foundry` plus `llm_model`; scripted outside `ENV=local` is refused at boot |

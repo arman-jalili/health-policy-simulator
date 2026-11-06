@@ -38,6 +38,7 @@ async def test_readyz_reports_ready_when_database_answers(
         "database": "ok",
         "llm": "scripted",
         "llm_model": "scripted-local",
+        "ocr": "available" if __import__("shutil").which("tesseract") else "absent",
         "evidence_retrieval": "ok",
         "evidence_retrieval_mode": "lexical+dense",
         "evidence_retrieval_detail": (

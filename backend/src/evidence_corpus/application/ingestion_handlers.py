@@ -22,12 +22,16 @@ from evidence_corpus.application.commands import (
     SegmentArticleRequest,
     StartIngestionRunRequest,
 )
-from evidence_corpus.application.dto import DocumentIngestionResult, IngestionRunView
+from evidence_corpus.application.dto import (
+    DocumentIngestionResult,
+    ExtractionOutcome,
+    IngestionRunView,
+)
 from evidence_corpus.application.extraction_handler import ExtractDocumentTextHandler
 from evidence_corpus.application.indexing_handler import IndexIngestedPassagesHandler
 from evidence_corpus.application.segmentation_handler import SegmentArticleHandler
 from evidence_corpus.domain.entities import Document, IngestionOutcome, IngestionRun, Publication
-from evidence_corpus.domain.errors import RunNotFound
+from evidence_corpus.domain.errors import OcrUnavailable, RunNotFound
 from evidence_corpus.domain.repositories import DocumentRepository, IngestionRunRepository
 from evidence_corpus.domain.values import LANGUAGE_DE_AT, LanguageTag, SourceType
 from shared.ids import new_id
@@ -63,9 +67,18 @@ class IngestDocumentHandler:
         else:
             document = existing
 
-        outcome = await self._extraction.execute(
-            ExtractDocumentTextRequest(document_id=document.id)
-        )
+        if existing is not None and existing.quality is not None:
+            # Re-running a shard is idempotent: the extraction is immutable, so reuse it instead
+            # of raising `AlreadyExtracted` and turning a resume into a failed path.
+            outcome = ExtractionOutcome(
+                document_id=document.id,
+                text=existing.extracted_text or "",
+                quality=existing.quality,
+            )
+        else:
+            outcome = await self._extraction.execute(
+                ExtractDocumentTextRequest(document_id=document.id)
+            )
         # Extraction saves through its own repository read, so the local instance may still hold
         # the pre-extraction state. Re-read the aggregate instead of aliasing repository internals.
         reloaded = await self._documents.get(document.id)
@@ -108,7 +121,7 @@ class StartIngestionRunHandler:
                     IngestDocumentRequest(
                         source_uri=path,
                         publication=PublicationInput(
-                            outlet="batch", published_on=date.today(), medium="file"
+                            outlet="batch", published_on=date.today(), medium="online"
                         ),
                         source_type=SourceType.PRESS_REPORT,
                     )
@@ -117,14 +130,34 @@ class StartIngestionRunHandler:
                 manifest = await self._index.execute(
                     IndexIngestedPassagesRequest(document_id=ingested.document_id)
                 )
+                if manifest.passage_count > 0:
+                    run.record(IngestionOutcome.ACCEPTED, path=path)
+                else:
+                    run.record(
+                        IngestionOutcome.QUARANTINED,
+                        path=path,
+                        reason="no citable passages after extraction/segmentation",
+                    )
+            except OcrUnavailable as error:
                 run.record(
-                    IngestionOutcome.ACCEPTED
-                    if manifest.passage_count > 0
-                    else IngestionOutcome.QUARANTINED
+                    IngestionOutcome.FAILED,
+                    path=path,
+                    reason=f"{error.code}: {error.message}",
                 )
-            except Exception:
-                run.record(IngestionOutcome.FAILED)
-        run.complete()
+            except Exception as error:
+                run.record(
+                    IngestionOutcome.FAILED,
+                    path=path,
+                    reason=f"{type(error).__name__}: {error}",
+                )
+        if (
+            run.attempted
+            and run.failed == run.attempted
+            and all((item.reason or "").startswith(OcrUnavailable.code) for item in run.outcomes)
+        ):
+            run.fail("OCR_UNAVAILABLE: the batch needs tesseract, but the OCR stack is absent")
+        else:
+            run.complete()
         await self._runs.save(run)
         return ingestion_run_view(run)
 
@@ -152,6 +185,8 @@ def ingestion_run_view(run: IngestionRun) -> IngestionRunView:
         accepted=run.accepted,
         quarantined=run.quarantined,
         failed=run.failed,
+        outcomes=tuple(run.outcomes),
+        failure_reason=run.failure_reason,
     )
 
 

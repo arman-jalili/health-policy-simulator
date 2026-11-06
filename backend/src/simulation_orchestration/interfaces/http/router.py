@@ -205,6 +205,8 @@ async def collect_usage_report(
             )
             for item in result.by_round
         ],
+        model=result.model or container.model,
+        provider=result.provider or container.provider,
     )
 
 

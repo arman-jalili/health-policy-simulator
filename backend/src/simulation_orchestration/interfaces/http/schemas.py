@@ -81,6 +81,8 @@ class UsageResponse(BaseModel):
     cost: Decimal
     by_stakeholder: list[StakeholderUsageItem]
     by_round: list[RoundUsageItem]
+    model: str = ""
+    provider: str = "scripted"
 
 
 class ProgressEventBody(BaseModel):

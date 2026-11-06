@@ -753,6 +753,14 @@ if [[ -x ".pi/scripts/ci/check_route_collisions.sh" ]]; then
     fi
 fi
 
+if [[ -f ".pi/scripts/ci/check_contract_proofing_gate.py" ]]; then
+    if python3 ".pi/scripts/ci/check_contract_proofing_gate.py" >/dev/null 2>&1; then
+        log_pass "Contract proofing gate (every module is gated by CI)"
+    else
+        log_fail "Contract proofing gate" "a module doc lacks a contract script or CI loop"
+    fi
+fi
+
 echo ""
 echo "═══ Conformance Summary ═══"
 echo -e "  ${GREEN}Pass: ${PASS_COUNT}${NC}"

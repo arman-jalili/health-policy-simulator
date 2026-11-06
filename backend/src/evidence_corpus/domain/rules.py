@@ -27,11 +27,11 @@ class DefaultCitabilitySpec:
 
 
 class PageFactsOcrSelection:
-    """Route a document to OCR when the page facts show no usable text layer.
+    """Route a document to OCR only when the page facts show no text layer.
 
-    OCR is chosen when the text layer is missing, the page is nearly empty, or the glyph damage is
-    above the same tolerance the quality gate uses. Otherwise native extraction is cheaper and more
-    faithful.
+    A sparse or damaged layer still carries real text. Discarding it in favour of an OCR stack that
+    may not be installed turns a usable (if lower-confidence) document into a failed batch, so the
+    route to OCR is reserved for genuinely empty/scanned pages.
     """
 
     minimum_chars_per_page = MINIMUM_CHARS_PER_PAGE
@@ -39,9 +39,5 @@ class PageFactsOcrSelection:
 
     def select(self, page_facts: PageTextFacts) -> ExtractionMethod:
         if not page_facts.has_text_layer:
-            return ExtractionMethod.OCR
-        if page_facts.average_chars_per_page < self.minimum_chars_per_page:
-            return ExtractionMethod.OCR
-        if page_facts.missing_glyph_rate > self.maximum_glyph_damage:
             return ExtractionMethod.OCR
         return ExtractionMethod.NATIVE

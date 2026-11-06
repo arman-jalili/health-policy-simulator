@@ -277,6 +277,7 @@ class Document:
 | 2 | A Document's authority tier and extraction quality are assigned at ingestion and immutable thereafter | Retroactive authority inflation of weak sources |
 | 3 | Passage offsets must lie within the parent Article text bounds and must not overlap sibling passages | A citation pointing at the wrong sentence |
 | 4 | A Document below the extraction quality threshold cannot produce citable Passages | Citing garbled OCR output as evidence |
+| 4a | Extraction prefers an existing text layer, however sparse; OCR is reserved for a missing text layer and refuses fast with `OCR_UNAVAILABLE` when the stack is absent | Discarding usable text because a system binary is missing (#427) |
 | 5 | A QuotationBlock attributed to a natural person must never enter an EvidencePack; an institution-attributed quotation is retained and citable with its attribution | Quoting real persons, or losing legitimate institutional statements |
 | 6 | Authority is evaluated per claim type (legislation for legal, statistics for quantitative, studies for causal) | A press statement outranking a statute on one global scale |
 | 7 | A Document must record its source type explicitly enough to be placed in a claim-type authority rule; unknown types cannot be promoted to authoritative | Unclassified material quietly becoming authoritative |
@@ -398,7 +399,7 @@ class IngestionRun:
 |---|---|---|---|---|---|
 | POST | `/api/v1/corpus/documents` | `ingest_document` | `{source_uri, publication}` | `202 {document_id, quality, citable}` | `corpus:write` |
 | POST | `/api/v1/corpus/ingestion-runs` | `start_ingestion_run` | `{shard_label, paths[]}` | `202 {run_id}` | `corpus:write` |
-| GET | `/api/v1/corpus/ingestion-runs/{run_id}` | `get_ingestion_run` | — | counts + status | `corpus:read` |
+| GET | `/api/v1/corpus/ingestion-runs/{run_id}` | `get_ingestion_run` | — | counts + status + per-path `{path, outcome, reason}` | `corpus:read` |
 | GET | `/api/v1/documents/{document_id}` | `get_document` | — | document + articles | `corpus:read` |
 | GET | `/api/v1/passages/{passage_id}` | `get_passage` | — | `{text, provenance{outlet,date,page,offsets}, speaker_kind, citable}` | `corpus:read` |
 | POST | `/api/v1/corpus/snapshots` | `pin_corpus_snapshot` | `{document_ids?, label}` | `201 {snapshot_id, manifest_hash}` | `corpus:write` |
@@ -447,7 +448,7 @@ class IngestionRun:
 2. `ExtractionQuality` gate + `Document.record_extraction` invariant tests
 3. `Document` aggregate with article segmentation and citability spec
 4. `ExtractionPort` with native extractor (PyMuPDF) → integration test on 5 real PDFs
-5. OCR fallback adapter + quality comparison metric
+5. OCR fallback adapter + quality comparison metric (OCR only for a missing text layer; `/readyz ocr`)
 6. `ArticleBoundaryStrategy` variants (single article, clipping digest)
 7. `Passage` chunking with offsets + speaker classification (person vs institution)
 8. `ClassifySourceAuthority` + canonical-article linking (content hash + similarity)

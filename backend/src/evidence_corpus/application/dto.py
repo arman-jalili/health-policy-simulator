@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from evidence_corpus.domain.entities import IngestionOutcomeRecord
 from evidence_corpus.domain.values import (
     AuthorityTier,
     ClaimType,
@@ -97,7 +98,7 @@ class DocumentView:
 
 @dataclass(frozen=True, slots=True)
 class IngestionRunView:
-    """Outcome counts and lifecycle of one batch execution."""
+    """Outcome counts, per-path reasons and lifecycle of one batch execution."""
 
     run_id: str
     shard_label: str
@@ -106,6 +107,8 @@ class IngestionRunView:
     accepted: int
     quarantined: int
     failed: int
+    outcomes: tuple[IngestionOutcomeRecord, ...] = ()
+    failure_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
