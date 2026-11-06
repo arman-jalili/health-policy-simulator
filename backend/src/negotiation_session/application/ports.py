@@ -59,6 +59,8 @@ class StakeholderDirectory(Protocol):
 
     async def profile(self, stakeholder_id: StakeholderId) -> StakeholderProfileView | None: ...
 
+    async def candidates(self) -> Sequence[StakeholderProfileView]: ...
+
 
 @runtime_checkable
 class EvidencePackReader(Protocol):

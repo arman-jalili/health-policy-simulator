@@ -28,6 +28,16 @@ from governance_compliance.infrastructure.figures import ClaimValidationFigureVe
 from governance_compliance.interfaces.http.router import router as governance_compliance_router
 from identity_access.composition import build_identity_access_container
 from identity_access.interfaces.http.router import router as identity_access_router
+from negotiation_session.composition import build_container as build_negotiation_container
+from negotiation_session.infrastructure.acl import GovernanceGuardAdapter
+from negotiation_session.infrastructure.progress import InMemoryProgressBroker
+from negotiation_session.infrastructure.upstream import (
+    ClaimVerdicts,
+    RequiredInvocationLookup,
+    RetrievalEvidencePacks,
+    StakeholderProfiles,
+)
+from negotiation_session.interfaces.http.router import router as negotiation_session_router
 from shared.config import Settings, get_settings
 from shared.db import Database
 from shared.enums import Persistence
@@ -127,6 +137,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         figure_verdicts=ClaimValidationFigureVerdicts(app.state.claim_validation.claims),
     )
+    app.state.negotiation_progress = InMemoryProgressBroker()
+    app.state.negotiation_session = build_negotiation_container(
+        app_settings,
+        database,
+        evidence=RetrievalEvidencePacks(app.state.evidence_retrieval),
+        stakeholders=StakeholderProfiles(app.state.stakeholder_model),
+        claims=ClaimVerdicts(app.state.claim_validation),
+        governance=GovernanceGuardAdapter(
+            app.state.governance_compliance.enforce_institution_only_output
+        ),
+        invocations=RequiredInvocationLookup(),
+        progress=app.state.negotiation_progress,
+    )
 
     if app_settings.cors_origins:
         app.add_middleware(
@@ -149,6 +172,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(claim_validation_router)
     app.include_router(simulation_orchestration_router)
     app.include_router(governance_compliance_router)
+    app.include_router(negotiation_session_router)
     return app
 
 

@@ -7,6 +7,7 @@ from typing import Protocol
 
 from fastapi import Request
 
+from negotiation_session.application.ports import RunProgressStream
 from negotiation_session.application.services import (
     CloseRound,
     FormCoalition,
@@ -42,6 +43,7 @@ class NegotiationSessionContainer(Protocol):
     list_round_learning: ListRoundLearning
     summarise_intermediate_result: SummariseIntermediateResult
     replay_simulation_history: ReplaySimulationHistory
+    progress_stream: RunProgressStream
 
 
 @dataclass(frozen=True, slots=True)
