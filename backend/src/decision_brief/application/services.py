@@ -2,9 +2,8 @@
 
 Canonical: ``.pi/architecture/modules/decision-brief.md`` (Service classification, API Endpoints)
 
-Constructors, service names and ``execute`` signatures are frozen. Bodies raise
-``NotImplementedError`` naming the implementing issue; later issues may not rename or remove a
-frozen member without a new freeze entry.
+Constructors, service names and ``execute`` signatures are frozen. Every use case below is
+implemented; later issues may not rename or remove a frozen member without a new freeze entry.
 
 ``collaborators`` is the published wiring contract of each use case: it names every port the
 composition root must supply, and it is what keeps the W8 reachability gate honest while the bodies

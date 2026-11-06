@@ -7,6 +7,7 @@ and an unwired gate stops publication instead of being skipped (AC 11).
 from __future__ import annotations
 
 import inspect
+import subprocess
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -471,3 +472,19 @@ def test_the_runtime_binds_the_real_projection_adapter() -> None:
 
     service = app.state.decision_brief.publish_decision_brief
     assert isinstance(service.collaborators()[5], BriefProjectionAdapter)
+
+
+def test_the_contract_proofing_script_passes() -> None:
+    """The CI proofing script is deterministic and self-contained (issue #347)."""
+    script = SRC.parents[1] / ".pi" / "scripts" / "ci" / "check_decision-brief_contracts.sh"
+
+    # Fixed repository script, fixed interpreter: not untrusted input.
+    completed = subprocess.run(  # noqa: S603
+        ["/bin/bash", str(script)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert "Failed: 0" in completed.stdout
