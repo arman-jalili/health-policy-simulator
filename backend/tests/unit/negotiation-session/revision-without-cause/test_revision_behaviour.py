@@ -9,6 +9,7 @@ from negotiation_session.domain.errors import PositionNotFound, RevisionWithoutC
 from negotiation_session.domain.events import PositionRevised, PositionRevisionRejected
 from negotiation_session.domain.simulation_run import SimulationRun
 from negotiation_session.domain.values import (
+    ArgumentId,
     ArgumentStance,
     ClaimEvidence,
     EvidencePackId,
@@ -78,7 +79,7 @@ def test_a_reason_citing_an_unknown_argument_is_rejected() -> None:
             STAKEHOLDER_A,
             TOPIC,
             ArgumentStance.OPPOSE,
-            RevisionReason(argument_ids=("arg_not_in_run",), driver="invented"),
+            RevisionReason(argument_ids=(ArgumentId("arg_not_in_run"),), driver="invented"),
         )
 
 
