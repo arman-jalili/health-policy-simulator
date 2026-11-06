@@ -2,10 +2,11 @@
 
 Canonical: `.pi/architecture/modules/evidence-corpus.md` (pipeline), `docs/demo-walkthrough.md` (small path).
 
-> **Status: not started (deferred as D-010, `.pi/architecture/DEFERRED.md`).**
-> The operator has a ~3 GB corpus to ingest *after* the frontend is built. Nothing depends on it today: the
-> demo runs on the one-document `demo-corpus-v1` snapshot. When the work is done, record the snapshot label in
-> D-010 and remove the entry.
+> **Status: 2020 Pressespiegel ingested (2026-11-06)** — 231 PDFs, 4,297 indexed paragraph passages,
+> monthly snapshots `pressespiegel-2020-01` … `pressespiegel-2020-12`, annual snapshot `pressespiegel-2020`
+> (`snp_01M6QZB2CNYAP7JV18442G7JVC`), and `samples/pressespiegel-2020-seed.json` with 5 packs.
+> The operator pattern is one snapshot label per folder. D-010 in `.pi/architecture/DEFERRED.md` tracks
+> further corpora.
 >
 > Integration tests derive and use a separate `<database>_test` database (#421). Still run ingest as the last
 > step before a demo so the snapshot you cite is the snapshot you verified.

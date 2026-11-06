@@ -121,12 +121,26 @@ def _chunk_spans(body: str, *, chunk_chars: int, min_chunk_chars: int) -> list[t
     return chunks
 
 
+def _is_whole_body_placeholder(article: Any, *, chunk_chars: int) -> bool:
+    """Segmentation publishes one body-span passage so the API can index a document.
+
+    The offline corpus wants paragraph-sized chunks. A single full-body passage on a long article is
+    that API placeholder, not an operator chunk, so replace it before adding real chunks.
+    """
+    if len(article.passages) != 1 or len(article.body) <= chunk_chars:
+        return False
+    only = article.passages[0]
+    return bool(only.offsets.start == 0 and only.offsets.end == len(article.body))
+
+
 def _add_passages(document: Document, *, chunk_chars: int, min_chunk_chars: int) -> int:
     """Publish chunked passages for every article that has none yet; return how many were added."""
     added = 0
     for article in document.articles:
         if article.passages:
-            continue
+            if not _is_whole_body_placeholder(article, chunk_chars=chunk_chars):
+                continue
+            article.passages.clear()
         for start, end in _chunk_spans(
             article.body, chunk_chars=chunk_chars, min_chunk_chars=min_chunk_chars
         ):
