@@ -44,14 +44,20 @@ class NegotiationPhase(StrEnum):
 
     @property
     def rank(self) -> int:
-        raise NotImplementedError("NegotiationPhase.rank is implemented by issue #286")
+        return _PHASE_RANK[self]
 
     @property
     def is_terminal(self) -> bool:
-        raise NotImplementedError("NegotiationPhase.is_terminal is implemented by issue #286")
+        return self is NegotiationPhase.CLOSED
 
     def can_advance_to(self, target: NegotiationPhase) -> bool:
-        raise NotImplementedError("NegotiationPhase.can_advance_to is implemented by issue #286")
+        """Return whether moving to ``target`` is monotonic (forward-only, no regression)."""
+        return self is not target and _PHASE_RANK[target] > _PHASE_RANK[self]
+
+
+_PHASE_RANK: dict[NegotiationPhase, int] = {
+    phase: index for index, phase in enumerate(NegotiationPhase)
+}
 
 
 class ArgumentStance(StrEnum):
@@ -228,7 +234,10 @@ class RevisionReason:
         argument_ids: Collection[ArgumentId],
         pack_ids: Collection[EvidencePackId],
     ) -> bool:
-        raise NotImplementedError("RevisionReason.cites is implemented by issue #288")
+        """Return whether the reason cites at least one argument or evidence pack."""
+        return bool(set(self.argument_ids) & set(argument_ids)) or bool(
+            set(self.pack_ids) & set(pack_ids)
+        )
 
 
 @dataclass(frozen=True, slots=True)

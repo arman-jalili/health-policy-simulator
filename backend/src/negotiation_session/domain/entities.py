@@ -3,15 +3,22 @@
 Canonical: ``.pi/architecture/modules/negotiation-session.md`` (Owned entities and value objects)
 
 These entities live inside the ``SimulationRun`` aggregate and are only mutated through it.
-Every mutating method raises ``NotImplementedError`` naming the implementing issue; its
-signature and return type are frozen.
+Methods whose component is not implemented yet raise ``NotImplementedError`` naming the
+implementing issue; their signatures and return types are frozen.
 """
 
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
+from negotiation_session.domain.errors import (
+    DuplicateTurn,
+    PositionNotFound,
+    RoundCloseGuardViolation,
+    RoundLearningMissing,
+    TurnNotAvailable,
+)
 from negotiation_session.domain.values import (
     ArgumentId,
     ArgumentStance,
@@ -91,7 +98,15 @@ class Position:
         evidence: Sequence[ClaimEvidence],
         round_number: int,
     ) -> Position:
-        raise NotImplementedError("Position.initial is implemented by issue #289")
+        return cls(
+            id=position_id,
+            stakeholder=stakeholder,
+            topic=topic,
+            stance=stance,
+            proposal=proposal,
+            evidence=tuple(evidence),
+            round_number=round_number,
+        )
 
     def supersede(
         self,
@@ -100,11 +115,23 @@ class Position:
         stance: ArgumentStance,
         reason: RevisionReason,
     ) -> Position:
-        raise NotImplementedError("Position.supersede is implemented by issue #289")
+        """Close this lineage entry and return its successor with the new stance."""
+        self.superseded_by = new_id
+        return type(self)(
+            id=new_id,
+            stakeholder=self.stakeholder,
+            topic=self.topic,
+            stance=stance,
+            proposal=self.proposal,
+            evidence=self.evidence,
+            round_number=self.round_number,
+            revision=reason,
+            supersedes=self.id,
+        )
 
     @property
     def is_open(self) -> bool:
-        raise NotImplementedError("Position.is_open is implemented by issue #289")
+        return self.superseded_by is None
 
 
 @dataclass(slots=True)
@@ -137,11 +164,22 @@ class Argument:
         round_number: int,
         invocation_id: InvocationId | None = None,
     ) -> Argument:
-        raise NotImplementedError("Argument.new is implemented by issue #290")
+        return cls(
+            id=argument_id,
+            stakeholder=stakeholder,
+            target=target,
+            stance=stance,
+            text=text,
+            claims=tuple(claims),
+            evidence=tuple(evidence),
+            unsupported=unsupported,
+            round_number=round_number,
+            invocation_id=invocation_id,
+        )
 
     @property
     def is_evidenced(self) -> bool:
-        raise NotImplementedError("Argument.is_evidenced is implemented by issue #290")
+        return bool(self.evidence) or self.unsupported
 
 
 @dataclass(slots=True)
@@ -268,43 +306,101 @@ class NegotiationRound:
         turn_order: Sequence[TurnAssignment],
         learning: RoundLearning | None = None,
     ) -> NegotiationRound:
-        raise NotImplementedError("NegotiationRound.open is implemented by issue #287")
-
-    def assert_turn_available(self, stakeholder: StakeholderId, topic: TopicRef) -> None:
-        raise NotImplementedError(
-            "NegotiationRound.assert_turn_available is implemented by issue #291"
+        return cls(
+            id=round_id,
+            number=number,
+            turn_order=list(turn_order),
+            learning=learning,
         )
 
+    def assert_turn_available(self, stakeholder: StakeholderId, topic: TopicRef) -> None:
+        if any(
+            argument.stakeholder == stakeholder and argument.target.topic == topic
+            for argument in self.arguments
+        ):
+            raise DuplicateTurn(
+                f"stakeholder {stakeholder} already took a turn on {topic} in round {self.number}"
+            )
+        if self.abstentions.get(stakeholder) == topic:
+            raise DuplicateTurn(
+                f"stakeholder {stakeholder} abstained on {topic} in round {self.number}"
+            )
+        if self.turn_order and not any(
+            assignment.stakeholder == stakeholder for assignment in self.turn_order
+        ):
+            raise TurnNotAvailable(f"stakeholder {stakeholder} has no floor in round {self.number}")
+
     def record_position(self, position: Position) -> Position:
-        raise NotImplementedError("NegotiationRound.record_position is implemented by issue #289")
+        key = (position.stakeholder, position.topic)
+        existing = self.positions.get(key)
+        if existing is not None and existing.is_open and existing.id != position.id:
+            existing.superseded_by = position.id
+            if position.supersedes is None:
+                position.supersedes = existing.id
+        self.positions[key] = position
+        return position
 
     def record_argument(self, argument: Argument) -> Argument:
-        raise NotImplementedError("NegotiationRound.record_argument is implemented by issue #291")
+        self.arguments.append(argument)
+        self._mark_outcome(argument.stakeholder, TurnOutcome.SPOKE)
+        return argument
 
     def record_abstention(self, stakeholder: StakeholderId, topic: TopicRef) -> None:
-        raise NotImplementedError("NegotiationRound.record_abstention is implemented by issue #287")
+        self.abstentions[stakeholder] = topic
+        self._mark_outcome(stakeholder, TurnOutcome.ABSTAINED)
+
+    def _mark_outcome(self, stakeholder: StakeholderId, outcome: TurnOutcome) -> None:
+        for index, assignment in enumerate(self.turn_order):
+            if assignment.stakeholder == stakeholder:
+                self.turn_order[index] = replace(assignment, outcome=outcome)
+                break
 
     def assert_everyone_accounted_for(self, bound: Collection[StakeholderId]) -> None:
-        raise NotImplementedError(
-            "NegotiationRound.assert_everyone_accounted_for is implemented by issue #287"
+        missing = [stakeholder for stakeholder in bound if not self._is_accounted_for(stakeholder)]
+        if missing:
+            raise RoundCloseGuardViolation(
+                f"round {self.number} cannot close; unaccounted: {', '.join(sorted(missing))}"
+            )
+
+    def _is_accounted_for(self, stakeholder: StakeholderId) -> bool:
+        if stakeholder in self.abstentions:
+            return True
+        if any(argument.stakeholder == stakeholder for argument in self.arguments):
+            return True
+        return any(
+            position.stakeholder == stakeholder and position.is_open
+            for position in self.positions.values()
         )
 
     def attach_learning(self, learning: RoundLearning) -> None:
-        raise NotImplementedError("NegotiationRound.attach_learning is implemented by issue #294")
+        if learning is None:
+            raise RoundLearningMissing(f"round {self.number} has no learning record")
+        self.learning = learning
 
     def close(self) -> None:
-        raise NotImplementedError("NegotiationRound.close is implemented by issue #287")
+        if self.learning is None:
+            raise RoundLearningMissing(f"round {self.number} has no learning record")
+        self.closed = True
 
     def carry_learning(self) -> RoundLearning | None:
-        raise NotImplementedError("NegotiationRound.carry_learning is implemented by issue #294")
+        return self.learning
 
     def open_position_for(self, stakeholder: StakeholderId, topic: TopicRef) -> Position | None:
-        raise NotImplementedError("NegotiationRound.open_position_for is implemented by issue #289")
+        position = self.positions.get((stakeholder, topic))
+        if position is None or not position.is_open:
+            return None
+        return position
+
+    def require_open_position(self, stakeholder: StakeholderId, topic: TopicRef) -> Position:
+        position = self.open_position_for(stakeholder, topic)
+        if position is None:
+            raise PositionNotFound(f"no open position for {stakeholder} on {topic}")
+        return position
 
     @property
     def is_closed(self) -> bool:
-        raise NotImplementedError("NegotiationRound.is_closed is implemented by issue #287")
+        return self.closed
 
     @property
     def turn_outcomes(self) -> Sequence[TurnOutcome]:
-        raise NotImplementedError("NegotiationRound.turn_outcomes is implemented by issue #291")
+        return tuple(assignment.outcome for assignment in self.turn_order)
