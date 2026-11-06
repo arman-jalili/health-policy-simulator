@@ -48,6 +48,41 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - NegotiationSession contract frozen (#282)
+
+### Changed
+- Module: negotiation-session
+  - Contract freeze: `SimulationRun` aggregate, 13 owned concepts, 7 value objects, 19 named
+    error codes, 16 domain events plus the per-run `LoggedEvent` ordinal, repository ports
+    (`SimulationRunRepository`, `RunEventLog`), ACL/technical ports, 16 application services and
+    their command/result DTOs, 12 HTTP routes and the SSE frame contract.
+  - Domain binds `StakeholderBinding` (ACL target of `StakeholderProfileView`) instead of importing
+    an upstream layer, so the dependency-direction guard stays satisfied.
+  - Replaced the invalid generated placeholders (hyphenated module names, `assert False`) with 54
+    structural contract checks across the 17 epic components.
+
+### Impact Analysis
+- Files affected:
+  - src/negotiation_session/
+  - tests/unit/negotiation-session/
+  - tests/unit/negotiation_session_contract_helpers.py
+- Canonical refs to update:
+  - .pi/architecture/modules/negotiation-session.md#contract-freeze-issue-282
+- Validators required:
+  - ci, tests, architecture
+
+### Migration Steps
+1. Implement each component against the frozen signatures; do not rename frozen members.
+2. Replace contract tests with behavioural proofs as the implementing issues land.
+3. Wire the router and container in issue #299 by mounting the existing router and factory.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated
+- [x] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-06] - SSE liveness and unit identity normalisation (#277, #278)
 
 ### Changed
