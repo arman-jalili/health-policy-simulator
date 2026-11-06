@@ -199,3 +199,91 @@ def test_a_package_cannot_be_composed_twice() -> None:
 
     with pytest.raises(PackageStateTransition):
         package.compose(rejected=())
+
+
+async def test_composing_through_the_use_case_keeps_every_rejection() -> None:
+    """The assembly path, not just the aggregate: a stub here would have passed every other test."""
+    from consensus_analysis.application.commands import ComposeCompromisePackageRequest
+    from consensus_analysis.application.services import ComposeCompromisePackage
+    from consensus_analysis.domain.values import RunId
+
+    class _Catalogue:
+        async def components(self, run_id: RunId) -> tuple[PackageComponent, ...]:
+            return (_component("cmp_1", "extend the catalogue"),)
+
+    class _Packages:
+        def __init__(self) -> None:
+            self.saved: list[CompromisePackage] = []
+
+        async def get(self, package_id: PackageId) -> CompromisePackage | None:
+            return None
+
+        async def save(self, package: CompromisePackage) -> None:
+            self.saved.append(package)
+
+        async def for_run(self, run_id: RunId) -> list[CompromisePackage]:
+            return list(self.saved)
+
+    class _Consensus:
+        async def get(self, consensus_id: object) -> None:
+            return None
+
+        async def save(self, record: object) -> None:
+            return None
+
+        async def for_run(self, run_id: RunId) -> list[object]:
+            return []
+
+        async def replace_for_run(self, run_id: RunId, records: object) -> None:
+            return None
+
+    class _Events:
+        def __init__(self) -> None:
+            self.published: list[object] = []
+
+        async def publish(self, events: object, *, trace_id: str | None = None) -> None:
+            self.published.append(events)
+
+    from collections.abc import AsyncIterator
+    from contextlib import asynccontextmanager
+    from datetime import UTC, datetime
+
+    class _Clock:
+        def now(self) -> datetime:
+            return datetime(2026, 11, 6, tzinfo=UTC)
+
+    class _UnitOfWork:
+        @asynccontextmanager
+        async def transaction(self) -> AsyncIterator[object]:
+            yield None
+
+    class _Ids:
+        _next = 0
+
+        def new_id(self, prefix: str) -> str:
+            type(self)._next += 1
+            return f"{prefix}_{type(self)._next}"
+
+    packages = _Packages()
+    service = ComposeCompromisePackage(
+        packages=packages,
+        consensus=_Consensus(),  # type: ignore[arg-type]
+        compatible=ComponentsCompatible(),
+        catalogue=_Catalogue(),
+        events=_Events(),
+        clock=_Clock(),
+        ids=_Ids(),
+        uow=_UnitOfWork(),
+    )
+
+    result = await service.execute(
+        ComposeCompromisePackageRequest(
+            run_id=RunId("run_1"),
+            component_ids=(ComponentId("cmp_1"),),
+            rejected_ids=(ComponentId("cmp_9"), ComponentId("cmp_8")),
+        )
+    )
+
+    assert result.state is PackageState.COMPOSED
+    assert result.rejected_count == 2
+    assert packages.saved[0].rejected_proposals

@@ -261,6 +261,10 @@ run_stage "17" "negotiation_session_proofing" \
     "${SCRIPTS_DIR}/stage_negotiation-session_proofing.sh" \
     "always"
 
+run_stage "18" "consensus_analysis_proofing" \
+    "${SCRIPTS_DIR}/stage_consensus-analysis_proofing.sh" \
+    "always"
+
 # ── Summary ──
 
 echo ""
