@@ -12,6 +12,7 @@ from negotiation_session.application.services import (
     ListConflictTopics,
     ListRoundLearning,
     ListRounds,
+    OpenRound,
     OpenSimulationRun,
     RecordAbstention,
     ReplaySimulationHistory,
@@ -31,6 +32,7 @@ from negotiation_session.domain.services import (
 APPLICATION_SERVICES = (
     TranslateQuestionToMandate,
     SelectRelevantStakeholders,
+    OpenRound,
     OpenSimulationRun,
     SubmitInitialPosition,
     TakeNegotiationTurn,

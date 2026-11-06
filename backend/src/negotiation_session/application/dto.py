@@ -156,6 +156,14 @@ class RoundSummaryResult:
 
 
 @dataclass(frozen=True, slots=True)
+class OpenRoundResult:
+    run_id: RunId
+    round: int
+    closed: bool
+    turn_order: tuple[StakeholderId, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class StoppingConditionResult:
     name: StoppingConditionName
     fired: bool

@@ -1,15 +1,8 @@
-# Issue Groups — 2026-11-06
+# Issue Groups — 2026-11-06 (round lifecycle / analysis chain)
 
 | Group | Issues | Component | Branch | Order |
 |---|---|---|---|---|
-| Correctness batch | #277, #278 | claim-validation + simulation-orchestration | `fix/277-278-correctness` | #277 → #278 |
+| Runtime chain | #404, #405, #406, #407, #408, #409 | negotiation-session → consensus-analysis → decision-brief → readiness/docs | `feat/404-409-runtime-chain` | #404 → #405 → #406 → #407 → #408 → #409 |
 
-## #277 — measure identity casing
-- Normalise the unit fallback (whitespace + casefold) and add canonical `count`, `percent`, `days`.
-- Property test: emitted vocabulary is a fixed point and `resolve(resolve(x)) == resolve(x)`.
-- API test: register `count`, verify with `Count`/`COUNT`.
-
-## #278 — SSE liveness
-- Remove the 0.5 s close; wait for a terminal event or configurable max idle.
-- Emit `: ping` heartbeats and a final `run.stream_closed` marker with a reason.
-- Close only on terminal/max-idle/client disconnect; count disconnects.
+Dependency order is the run lifecycle itself: a run must open/close before the closed-run subscriber,
+derived consensus, brief gates and readiness can be verified. #409 records the resulting state.

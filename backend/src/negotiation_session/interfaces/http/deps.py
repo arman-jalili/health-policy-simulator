@@ -15,6 +15,7 @@ from negotiation_session.application.services import (
     ListConflictTopics,
     ListRoundLearning,
     ListRounds,
+    OpenRound,
     OpenSimulationRun,
     RecordAbstention,
     ReplaySimulationHistory,
@@ -30,6 +31,7 @@ from negotiation_session.application.services import (
 class NegotiationSessionContainer(Protocol):
     translate_question_to_mandate: TranslateQuestionToMandate
     open_simulation_run: OpenSimulationRun
+    open_round: OpenRound
     submit_initial_position: SubmitInitialPosition
     take_negotiation_turn: TakeNegotiationTurn
     revise_position: RevisePosition

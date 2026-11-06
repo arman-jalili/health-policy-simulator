@@ -31,6 +31,7 @@ from negotiation_session.application.services import (
     ListConflictTopics,
     ListRoundLearning,
     ListRounds,
+    OpenRound,
     OpenSimulationRun,
     RecordAbstention,
     ReplaySimulationHistory,
@@ -43,14 +44,21 @@ from negotiation_session.application.services import (
     TranslateQuestionToMandate,
 )
 from negotiation_session.domain.events import DomainEvent
+from negotiation_session.domain.repositories import RunEventLog, SimulationRunRepository
 from negotiation_session.domain.values import RunId
 from negotiation_session.infrastructure.progress import InMemoryProgressBroker
 from negotiation_session.infrastructure.repository.memory import (
     InMemoryRunEventLog,
     InMemorySimulationRunRepository,
 )
+from negotiation_session.infrastructure.repository.sqlalchemy import (
+    SqlAlchemyRunEventLog,
+    SqlAlchemySimulationRunRepository,
+)
 from shared.config import Settings
 from shared.db import Database
+from shared.db import UnitOfWork as DbUnitOfWork
+from shared.enums import Environment, Persistence
 from shared.ids import new_id
 
 
@@ -92,6 +100,7 @@ class NegotiationSessionContainer:
     translate_question_to_mandate: TranslateQuestionToMandate
     select_relevant_stakeholders: SelectRelevantStakeholders
     open_simulation_run: OpenSimulationRun
+    open_round: OpenRound
     submit_initial_position: SubmitInitialPosition
     take_negotiation_turn: TakeNegotiationTurn
     revise_position: RevisePosition
@@ -107,6 +116,16 @@ class NegotiationSessionContainer:
     replay_simulation_history: ReplaySimulationHistory
     progress_stream: RunProgressStream
 
+    def subscribe_run_closed(self, handler: object) -> None:
+        """Register the ConsensusAnalysis run-closed subscriber (issue #406)."""
+        self.close_round.subscribe_run_closed(handler)  # type: ignore[arg-type]
+        self.open_round.subscribe_run_closed(handler)  # type: ignore[arg-type]
+
+    def readiness(self) -> tuple[str, str]:
+        """Return ``(state, adapter)`` for the persistence family actually bound."""
+        adapter = type(self.open_simulation_run._runs).__name__
+        return ("ok", adapter)
+
 
 def build_container(
     settings: Settings,
@@ -121,16 +140,22 @@ def build_container(
 ) -> NegotiationSessionContainer:
     """Build every use case over the injected ports.
 
-    Persistence: negotiation state uses the in-memory aggregate/log adapters for both configured
-    families; the SQLAlchemy family is tracked in the module runbook (deferred migration 0401).
+    PostgreSQL uses the aggregate snapshot and append-only event log from migrations 0401/0402;
+    memory remains the explicit test/local family.
     """
-    del settings, database  # configuration is validated by the app shell
-    runs = InMemorySimulationRunRepository()
-    event_log = InMemoryRunEventLog()
+    if settings.persistence is Persistence.MEMORY and settings.env is not Environment.LOCAL:
+        raise ValueError("PERSISTENCE=memory is only allowed with ENV=local")
+    if settings.persistence is Persistence.POSTGRES:
+        runs: SimulationRunRepository = SqlAlchemySimulationRunRepository(database.session_factory)
+        event_log: RunEventLog = SqlAlchemyRunEventLog(database.session_factory)
+        uow: UnitOfWork = DbUnitOfWork(database.session_factory)
+    else:
+        runs = InMemorySimulationRunRepository()
+        event_log = InMemoryRunEventLog()
+        uow = _NullUnitOfWork()
     broker: RunProgressStream = progress or InMemoryProgressBroker()
     publisher = _ProgressEventPublisher(broker)
     ids: IdFactory = UuidFactory()
-    uow: UnitOfWork = _NullUnitOfWork()
 
     return NegotiationSessionContainer(
         translate_question_to_mandate=TranslateQuestionToMandate(ids=ids),
@@ -143,6 +168,7 @@ def build_container(
             ids=ids,
             uow=uow,
         ),
+        open_round=OpenRound(runs=runs, event_log=event_log, events=publisher, uow=uow),
         submit_initial_position=SubmitInitialPosition(
             runs=runs,
             event_log=event_log,

@@ -106,11 +106,11 @@ def build_container(
     guard = EnforceInstitutionOnlyOutput(
         rules=chain, allowlist=allowlist, violations=violations, clock=clock, uow=uow
     )
-    logger.warning(
-        "governance_provenance_source_deferred",
+    logger.info(
+        "governance_provenance_source_late_bound",
         detail=(
-            "DisclosePositionProvenance has no NegotiationSession/SimulationOrchestration "
-            "facts source yet"
+            "the application root binds the NegotiationSession facts source after that "
+            "container exists"
         ),
     )
     logger.info(

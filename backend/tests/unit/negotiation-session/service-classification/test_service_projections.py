@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from negotiation_session.application.commands import (
@@ -49,6 +50,9 @@ class FakeRunRepository:
 
     async def get(self, run_id: RunId) -> SimulationRun | None:
         return self.run if run_id == self.run.id else None
+
+    async def all_ids(self) -> Sequence[RunId]:
+        return (self.run.id,)
 
     async def save(self, run: SimulationRun) -> None:
         self.run = run

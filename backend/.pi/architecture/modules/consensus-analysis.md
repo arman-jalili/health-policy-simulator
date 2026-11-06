@@ -2,7 +2,7 @@
 
 ## Module Status
 
-**Status:** Implemented (derivation fails closed until the run log is published)
+**Status:** Implemented and wired (run log, per-run mandate threshold and veto classes bound; run-closed subscriber registered; projections persist through 0501)
 **Depends:** NegotiationSession (open-host — published session events are the derivation input), StakeholderModel (veto rights and negotiating power)
 **Last reviewed:** 2026-11-06
 **Operational docs:** `docs/runbook-consensus-analysis.md`, `docs/dr-plan-consensus-analysis.md`

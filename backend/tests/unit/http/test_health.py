@@ -53,13 +53,14 @@ async def test_readyz_reports_ready_when_database_answers(
         "simulation_worker": "not_started",
         "governance_compliance": "ok",
         "governance_allowlist": "9",
-        "governance_provenance": "deferred",
+        "governance_provenance": "wired",
         "consensus_analysis": "ok",
-        "consensus_analysis_projection": "memory",
-        "decision_brief": "degraded",
-        "decision_brief_gates": (
-            "UnwiredConsensusSource,UnwiredHistorySource,UnwiredProvenanceGate"
-        ),
+        "consensus_analysis_persistence": "memory",
+        "consensus_analysis_sources": "wired",
+        "negotiation_session": "ok",
+        "negotiation_session_persistence": "InMemorySimulationRunRepository",
+        "decision_brief": "ok",
+        "decision_brief_gates": "wired",
     }
     assert response.headers["Cache-Control"] == "no-store"
     assert stub_database.ping_count == 1

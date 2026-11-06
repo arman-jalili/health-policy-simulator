@@ -35,6 +35,7 @@ class TranslateQuestionToMandateRequest:
     round_cap: int = 5
     constraints: tuple[str, ...] = ()
     stopping_conditions: tuple[StoppingConditionName, ...] = ()
+    consensus_threshold: float = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,12 @@ class OpenSimulationRunRequest:
     question: str
     round_cap: int = 5
     stakeholder_ids: tuple[StakeholderId, ...] = ()
+    consensus_threshold: float = 0.5
+
+
+@dataclass(frozen=True, slots=True)
+class OpenRoundRequest:
+    run_id: RunId
 
 
 @dataclass(frozen=True, slots=True)

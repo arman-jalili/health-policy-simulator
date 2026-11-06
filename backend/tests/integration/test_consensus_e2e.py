@@ -69,8 +69,8 @@ async def test_deriving_without_a_run_log_fails_closed_with_a_named_reason() -> 
     assert response.status_code == 503, response.text
     body = response.json()
     assert body["code"] == "CONSENSUS_ANALYSIS_UNAVAILABLE"
-    assert "mandate threshold" in body["message"]
-    assert "default threshold" in body["message"]
+    assert "no mandate" in body["message"]
+    assert "default quorum" in body["message"]
 
 
 async def test_deriving_is_refused_before_a_default_threshold_could_be_used() -> None:

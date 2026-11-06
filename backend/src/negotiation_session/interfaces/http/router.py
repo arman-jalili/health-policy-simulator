@@ -14,11 +14,13 @@ from fastapi.responses import StreamingResponse
 
 from identity_access.interfaces.http.dependencies import require_declared_scope
 from negotiation_session.application.commands import (
+    CloseRoundRequest,
     FormCoalitionRequest,
     GetSimulationRunRequest,
     ListConflictTopicsRequest,
     ListRoundLearningRequest,
     ListRoundsRequest,
+    OpenRoundRequest,
     OpenSimulationRunRequest,
     RecordAbstentionRequest,
     ReplaySimulationHistoryRequest,
@@ -42,6 +44,7 @@ from negotiation_session.application.progress import (
     encode_frame,
     parse_last_event_id,
 )
+from negotiation_session.domain.entities import RoundLearning
 from negotiation_session.domain.values import (
     ArgumentId,
     ArgumentStance,
@@ -49,6 +52,9 @@ from negotiation_session.domain.values import (
     ConflictStatus,
     EvidencePackId,
     InvocationId,
+    LearningId,
+    LearningInsight,
+    LearningInsightType,
     PositionId,
     Proposal,
     ProposalComponent,
@@ -68,6 +74,8 @@ from negotiation_session.interfaces.http.schemas import (
     ArgumentResponse,
     BoundStakeholderBody,
     ClaimBody,
+    CloseRoundBody,
+    CloseRoundResponse,
     CoalitionBody,
     CoalitionOfferResponse,
     CoalitionResponse,
@@ -78,6 +86,8 @@ from negotiation_session.interfaces.http.schemas import (
     LearningInsightResponse,
     LearningListResponse,
     LearningResponse,
+    OpenRoundBody,
+    OpenRoundResponse,
     OpenRunBody,
     OpenRunResponse,
     PositionBody,
@@ -311,6 +321,7 @@ async def open_simulation_run(body: OpenRunBody, container: Container) -> OpenRu
             question=body.question,
             round_cap=body.round_cap or 5,
             stakeholder_ids=tuple(StakeholderId(item) for item in (body.stakeholder_ids or ())),
+            consensus_threshold=body.consensus_threshold,
         )
     )
     return _open_run_response(result)
@@ -360,6 +371,68 @@ async def list_rounds(
         ListRoundsRequest(run_id=RunId(run_id), cursor=cursor, limit=limit)
     )
     return RoundListResponse(items=[_round_response(item) for item in rounds])
+
+
+@router.post(
+    "/runs/{run_id}/rounds",
+    response_model=OpenRoundResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Open the next negotiation round",
+    openapi_extra={"x-required-scope": "runs:write"},
+    responses=WRITE_ERRORS,
+)
+async def open_round(
+    run_id: str, container: Container, body: OpenRoundBody | None = None
+) -> OpenRoundResponse:
+    result = await container.open_round.execute(OpenRoundRequest(run_id=RunId(run_id)))
+    return OpenRoundResponse(
+        run_id=str(result.run_id),
+        round=result.round,
+        closed=result.closed,
+        turn_order=[str(item) for item in result.turn_order],
+    )
+
+
+@router.post(
+    "/runs/{run_id}/rounds/{number}:close",
+    response_model=CloseRoundResponse,
+    summary="Close a round with its learning and evaluate stopping",
+    openapi_extra={"x-required-scope": "runs:write"},
+    responses=WRITE_ERRORS,
+)
+async def close_round(
+    run_id: str, number: int, body: CloseRoundBody, container: Container
+) -> CloseRoundResponse:
+    current = await container.get_simulation_run.execute(
+        GetSimulationRunRequest(run_id=RunId(run_id))
+    )
+    insights = tuple(
+        LearningInsight(
+            insight_type=LearningInsightType(item.insight_type),
+            statement=item.statement,
+            derived_from=tuple(ArgumentId(argument) for argument in item.derived_from),
+            round_number=item.round_number,
+        )
+        for item in body.learning
+    )
+    learning = RoundLearning.capture(
+        learning_id=LearningId(f"lrn_{RunId(run_id)}_{number}"),
+        round_number=current.round,
+        insights=insights,
+    )
+    result = await container.close_round.execute(
+        CloseRoundRequest(run_id=RunId(run_id), learning=learning, convergence=body.convergence)
+    )
+    return CloseRoundResponse(
+        run_id=str(result.run_id),
+        round=result.round,
+        learning=_learning_response(result.learning),
+        stopping_condition={
+            "name": result.stopping_condition.name.value,
+            "fired": result.stopping_condition.fired,
+            "parameters": dict(result.stopping_condition.parameters),
+        },
+    )
 
 
 @router.post(

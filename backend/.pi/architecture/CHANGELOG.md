@@ -48,6 +48,22 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Negotiation write path, durability and the analysis/delivery chain (#404-#409)
+
+### Changed
+- NegotiationSession gains `POST /runs/{id}/rounds` and `POST /runs/{id}/rounds/{n}:close`; round-cap
+  closes the run and `SimulationRunClosed` is emitted.
+- `0401`/`0402` now create the snapshot/child/log tables and PostgreSQL adapters select by
+  `PERSISTENCE`; `NegotiationSession` and its persistence appear in `/readyz`.
+- ConsensusAnalysis binds the run log, per-run mandate threshold and stakeholder veto classes;
+  `HandleRunClosed` is subscribed; `0501` has a SQLAlchemy repository.
+- DecisionBrief binds the history, consensus and provenance gates, persists through `0502`, and
+  publishes events through the shared outbox.
+- Roadmap phases 4/5, DEFERRED D-005/D-007/D-008/D-009 and module wiring contracts updated.
+
+### Verification
+- Full suite: 1618 tests passed; restart round-trip for a negotiation run; API open→round→close.
+
 ## [2026-11-06] - ConsensusAnalysis operational readiness (#323)
 
 ### Changed

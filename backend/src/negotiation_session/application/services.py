@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from negotiation_session.application.commands import (
     CloseRoundRequest,
@@ -20,6 +20,7 @@ from negotiation_session.application.commands import (
     ListConflictTopicsRequest,
     ListRoundLearningRequest,
     ListRoundsRequest,
+    OpenRoundRequest,
     OpenSimulationRunRequest,
     RecordAbstentionRequest,
     ReplaySimulationHistoryRequest,
@@ -42,6 +43,7 @@ from negotiation_session.application.dto import (
     IntermediateSummaryResult,
     LearningInsightResult,
     MandateResult,
+    OpenRoundResult,
     OpenSimulationRunResult,
     PositionResult,
     ReplayResult,
@@ -79,6 +81,7 @@ from negotiation_session.domain.errors import (
     ClaimVerdictRejected,
     EvidencePackNotFound,
     GovernanceRejected,
+    RoundCapExceeded,
     SimulationRunNotFound,
     StakeholderNotBound,
 )
@@ -190,7 +193,9 @@ class OpenSimulationRun:
             bound[stakeholder] = binding_from_profile(view)
         mandate = _build_mandate(
             TranslateQuestionToMandateRequest(
-                question=request.question, round_cap=request.round_cap
+                question=request.question,
+                round_cap=request.round_cap,
+                consensus_threshold=request.consensus_threshold,
             ),
             self._ids,
         )
@@ -204,6 +209,48 @@ class OpenSimulationRun:
             phase=run.phase,
             mandate=_mandate_result(mandate),
             bound=tuple(_bound_result(binding) for binding in bound.values()),
+        )
+
+
+class OpenRound:
+    """Open the next round, or close the run when the round cap is reached."""
+
+    def __init__(
+        self,
+        *,
+        runs: SimulationRunRepository,
+        event_log: RunEventLog,
+        events: EventPublisher,
+        uow: UnitOfWork,
+    ) -> None:
+        self._runs = runs
+        self._event_log = event_log
+        self._events = events
+        self._uow = uow
+        self._on_closed: Callable[[SimulationRun], Awaitable[None]] | None = None
+
+    def subscribe_run_closed(self, handler: Callable[[SimulationRun], Awaitable[None]]) -> None:
+        self._on_closed = handler
+
+    async def execute(self, request: OpenRoundRequest) -> OpenRoundResult:
+        run = await _require_run(self._runs, request.run_id)
+        if run.is_closed and run.rounds and len(run.rounds) >= run.round_cap:
+            raise RoundCapExceeded(f"run {run.id} reached its round cap of {run.round_cap}")
+        try:
+            round_ = run.open_round()
+        except RoundCapExceeded:
+            async with self._uow.transaction():
+                await _persist(run, self._runs, self._event_log, self._events)
+            if self._on_closed is not None:
+                await self._on_closed(run)
+            raise
+        async with self._uow.transaction():
+            await _persist(run, self._runs, self._event_log, self._events)
+        return OpenRoundResult(
+            run_id=run.id,
+            round=round_.number,
+            closed=round_.is_closed,
+            turn_order=tuple(assignment.stakeholder for assignment in round_.turn_order),
         )
 
 
@@ -438,17 +485,26 @@ class CloseRound:
         self._event_log = event_log
         self._events = events
         self._uow = uow
+        self._on_closed: Callable[[SimulationRun], Awaitable[None]] | None = None
+
+    def subscribe_run_closed(self, handler: Callable[[SimulationRun], Awaitable[None]]) -> None:
+        self._on_closed = handler
 
     async def execute(self, request: CloseRoundRequest) -> CloseRoundResult:
         run = await _require_run(self._runs, request.run_id)
-        run.close_round(request.learning)
+        learning = request.learning
+        if run.rounds and learning.round_number != run.rounds[-1].number:
+            learning = dataclasses.replace(learning, round_number=run.rounds[-1].number)
+        run.close_round(learning)
         condition = run.evaluate_stopping(_consensus(request.convergence))
         async with self._uow.transaction():
             await _persist(run, self._runs, self._event_log, self._events)
+        if run.is_closed and self._on_closed is not None:
+            await self._on_closed(run)
         return CloseRoundResult(
             run_id=run.id,
             round=run.rounds[-1].number,
-            learning=_learning_result(run.id, run.rounds[-1].number, request.learning),
+            learning=_learning_result(run.id, run.rounds[-1].number, learning),
             stopping_condition=_stopping_result(condition),
         )
 
@@ -460,7 +516,14 @@ class GetSimulationRun:
         self._runs = runs
 
     async def execute(self, request: GetSimulationRunRequest) -> SimulationRunResult:
-        return _run_result(await _require_run(self._runs, request.run_id))
+        return _run_result(await self.load(request.run_id))
+
+    async def load(self, run_id: RunId) -> SimulationRun:
+        """Aggregate access for read-model adapters; never exposed over HTTP."""
+        return await _require_run(self._runs, run_id)
+
+    async def all_ids(self) -> Sequence[RunId]:
+        return await self._runs.all_ids()
 
 
 class ListRounds:
@@ -619,6 +682,7 @@ def _build_mandate(
         stopping_conditions=conditions,
         profile_version="v1",
         mandate_hash=hashlib.sha256(f"{request.question}|{request.round_cap}".encode()).hexdigest(),
+        consensus_threshold=request.consensus_threshold,
     )
 
 
@@ -841,6 +905,7 @@ SERVICE_CLASSIFICATION: Mapping[str, str] = {
     "TranslateQuestionToMandate": "application",
     "SelectRelevantStakeholders": "application",
     "OpenSimulationRun": "application",
+    "OpenRound": "application",
     "SubmitInitialPosition": "application",
     "TakeNegotiationTurn": "application",
     "RevisePosition": "application",

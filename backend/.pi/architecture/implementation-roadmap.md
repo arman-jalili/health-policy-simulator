@@ -251,10 +251,10 @@ not read as "verified".
 
 **Goal:** Nine institutional agents argue, revise positions with recorded reasons, form coalitions and close under an explicit condition — streamed live.
 
-**Verified 2026-11-06 on `ef2ceb4`:** the aggregate, round, revision, coalition and replay rules are
-implemented and unit-tested (138 contract checks). What is missing is the *write-side API*: `open_round`
-has no caller and `CloseRound` has no route, so no run can progress or close (#404). Persistence is
-memory-only (D-008) and the consensus seam does not exist (D-009).
+**Verified 2026-11-06 on the `#404–#409` branch:** the aggregate, round, revision, coalition and replay
+rules are implemented and unit-tested (138 contract checks). The write-side API now opens and closes
+rounds (`POST /runs/{id}/rounds`, `POST /runs/{id}/rounds/{n}:close`), PostgreSQL adapters back
+`0401`/`0402`, and `SimulationRunClosed` reaches ConsensusAnalysis. D-008 and D-009 are closed.
 
 ### Modules
 
@@ -286,10 +286,10 @@ memory-only (D-008) and the consensus seam does not exist (D-009).
   evidence-pack ids and refuses unknown ones (`EVIDENCE_PACK_NOT_FOUND`)
 - [x] `round_cap` reached forces terminal evaluation; phase never regresses — domain-tested
 - [x] Folding the event log to round N equals live state at round N — tested (replay-equivalence)
-- [ ] A live run streams positions, arguments and revisions; reconnect replays without gaps — **blocked**:
-  no run can open a round, so there is nothing to stream (#404)
-- [ ] Killing the worker mid-round neither duplicates arguments nor loses rounds — **cannot hold**:
-  negotiation state is memory-only (#405, D-008)
+- [x] A live run streams positions, arguments and revisions; reconnect replays without gaps — API
+  round lifecycle + SSE replay verified (#404)
+- [x] Killing the worker mid-round neither duplicates arguments nor loses rounds — aggregate snapshot and
+  append-only log survive restart (#405, D-008 closed)
 
 ---
 
@@ -297,10 +297,10 @@ memory-only (D-008) and the consensus seam does not exist (D-009).
 
 **Goal:** The negotiation becomes a decision artefact: consensus with veto awareness, compromise packages, honest impact, and an eight-section brief.
 
-**Verified 2026-11-06 on `ef2ceb4`:** derivation, veto precedence, packages, scenarios and the eight-section
-brief are implemented and tested (134 + 149 contract checks), and both routers are mounted. The chain is
-not functional: consensus inputs are unavailable stubs (#406) and the brief gates are unwired (D-007,
-#407).
+**Verified 2026-11-06 on the `#404–#409` branch:** derivation, veto precedence, packages, scenarios and
+the eight-section brief are implemented and tested. The run log, mandate threshold and veto classes are
+bound at runtime; `HandleRunClosed` is subscribed; consensus rows persist through `0501`; the brief's
+history/consensus/provenance gates are bound and `0502` persists published versions.
 
 ### Modules
 
@@ -337,9 +337,10 @@ not functional: consensus inputs are unavailable stubs (#406) and the brief gate
   (`ReproductionCheck`)
 - [x] A veto-blocked topic renders as blocked, never as a recommendation — tested
 
-**System status:** every Phase 5 rule is enforced in the domain. None of them can be exercised end to end
-yet — a run cannot close (#404), consensus has no inputs (#406), and publication is fail-closed by D-007
-(#407). The phase is closed at the module level; it is not functional as a chain.
+**System status:** the chain is reachable end to end: a run opens/closes through the API, the close
+subscriber derives from the stored run log, and a closed run with disclosures can publish a versioned
+brief. D-007, D-008 and D-009 are closed; remaining deferrals are D-001 (stakeholder durability) and
+D-002–D-005.
 
 ---
 

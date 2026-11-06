@@ -28,6 +28,9 @@ class InMemorySimulationRunRepository:
     async def get(self, run_id: RunId) -> SimulationRun | None:
         return self._runs.get(run_id)
 
+    async def all_ids(self) -> Sequence[RunId]:
+        return tuple(self._runs)
+
     async def save(self, run: SimulationRun) -> None:
         self._runs[run.id] = run
 
