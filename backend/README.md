@@ -137,6 +137,14 @@ Keys are stored as salted SHA-256 hashes; revocation takes effect on the next re
 `docs/runbook-identity-access.md`; recovery: `docs/dr-plan-identity-access.md`. Contract proofing:
 `bash .pi/scripts/ci/check_identity-access_contracts.sh`.
 
+## Demo from an empty database
+
+`make demo-seed` bootstraps the shipped `samples/demo-corpus.pdf`, one pinned snapshot, five reference
+figures and one evidence pack per demo topic. It is idempotent and refused outside `ENV=local`.
+`make demo-walkthrough` drives the public API from a run to a published brief with no manual provenance
+call. The exact request sequence, expected statuses, and the documented `client-declared` attribution
+posture are in `docs/demo-walkthrough.md`.
+
 ## Stakeholder model
 
 `/api/v1/stakeholders*` owns institutional identity: 9 grounded personas, interests, constraints,

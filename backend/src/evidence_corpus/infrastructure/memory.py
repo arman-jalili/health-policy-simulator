@@ -128,6 +128,10 @@ class InMemoryCorpusSnapshotRepository:
     async def get(self, snapshot_id: str) -> CorpusSnapshot | None:
         return self._snapshots.get(snapshot_id)
 
+    async def get_by_label(self, label: str) -> CorpusSnapshot | None:
+        matching = [row for row in self._snapshots.values() if row.label == label]
+        return max(matching, key=lambda row: row.pinned_at) if matching else None
+
     async def save(self, snapshot: CorpusSnapshot) -> None:
         self._snapshots[snapshot.id] = snapshot
 

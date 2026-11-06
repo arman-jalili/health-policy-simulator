@@ -514,7 +514,8 @@ Every row is a call-site obligation, not a description: the collaborator must be
 | Collaborator | Invoked from | Observable effect | Fails when |
 |---|---|---|---|
 | `EnforceInstitutionOnlyOutput` | blocking dependency on the argument/position write path | 5xx when the guard is unbound; a violation row otherwise | the guard is constructed and the request path skips it |
-| `AgentInvocation` reference | argument write | an `invocation_id` is present on every argument | nullable, so cost attribution silently disappears. **Verified 2026-11-06:** presence only — `RequiredInvocationLookup` rejects blanks and accepts any other string, so membership in the run is not proven (#414) |
+| `AgentInvocation` reference | argument write | an `invocation_id` is present on every argument | nullable, so cost attribution silently disappears. **Verified 2026-11-06:** the id is required (blank is refused) but attribution is **client-declared**: NegotiationSession does not resolve it against an orchestrator usage store, so a non-blank id that never existed on the run is accepted. This posture is named in `/readyz` (`attribution: client-declared`) and in `docs/demo-walkthrough.md`; #414 permits it explicitly. Closing it needs a run-scoped invocation lookup, not a format check. |
+| `PositionProvenanceDisclosure` | round close | a stored disclosure for every open position, produced in the close transaction | the brief gate reads a store nobody writes (#412). Verified 2026-11-06: `CloseRound` discloses all open positions; `/readyz` reports `governance_provenance_producer: close_round` |
 | debate / abstention policy | round close | abstention recorded for actors who did not speak | a silent skip manufactures quorum |
 | run-log append | every command | replay fold equals live state | the log is written outside the aggregate transaction |
 

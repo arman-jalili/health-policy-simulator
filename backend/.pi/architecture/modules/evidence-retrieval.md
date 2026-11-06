@@ -423,6 +423,7 @@ Every row is a call-site obligation, not a description: the collaborator must be
 | recency exemption | score derivation | a 1995 statute keeps full weight; a 1995 press report does not | the exemption table is read but never applied |
 | absence recorder | empty-result path | absence row written, `absence != null`, HTTP 200 | an empty list is returned instead of an absence |
 | memory and postgres adapters | the same claim against the same snapshot | identical candidate ids and order | the two adapters rank differently |
+| `IndexWriterPort.search` | `CorpusPassageSearch.search` | the same `async` signature; the adapter awaits it and resolves ids to citable passages | the postgres coroutine is returned unawaited, so the 500 hides until a real deployment (#411) |
 
 ## Acceptance Criteria
 

@@ -277,7 +277,7 @@ and can be argued with — three disqualifying properties for a compliance contr
 | Guard on the write path | `EnforceInstitutionOnlyOutput` is a **blocking** dependency of the negotiation write path; a missing guard must fail closed | negative test: guard unbound ⇒ argument write returns 5xx, never persists |
 | Persistence | Migration `0305` applied; violations append-only and idempotent on `violation_hash` | restart + duplicate-retry test |
 | Determinism | No LLM call in the guard path; rule version recorded per violation | unit test monkeypatching the LLM client to raise — guard must still work |
-| Provenance | **Deferred and visible.** `DisclosePositionProvenance` reads from `_NoFacts`, which returns an incomplete record, so the endpoint answers 422 for every request until NegotiationSession records positions; the complete source (invocations + verdicts) is not wired. `/readyz` reports `governance_provenance: deferred` | the rejection is correct, the source is missing; closing this requires the Phase 4 write path, not a stub replacement |
+| Provenance | `NegotiationProvenanceFacts` is late-bound in `shared/app.py`; `CloseRound` produces a disclosure for every open position and joins the close `UnitOfWork` in the PostgreSQL family. `/readyz` reports `governance_provenance: wired` and `governance_provenance_producer: close_round`. The explicit route remains for re-disclosure and audits | a brief publication succeeds while no disclosure row exists |
 
 
 ### Collaborator reachability (W8)
@@ -291,7 +291,7 @@ Every row is a call-site obligation, not a description: the collaborator must be
 | institution allowlist | boot | boot aborts on an empty or personal-name allowlist | an empty allowlist is treated as "permit all" |
 | rule engine | every argument write | `rule_version` recorded on each violation row | a violation is recorded without a rule version |
 | `violation_hash` uniqueness | retry path | a duplicate retry yields one row | duplicate rows on retry |
-| `DisclosePositionProvenance` | brief publication | a complete disclosure record for a real run | **current: `_NoFacts` ⇒ every request 422** (#269) |
+| `DisclosePositionProvenance` | round close + explicit re-disclosure route | a complete disclosure record for a real run | the brief gate reads a row no lifecycle step produces (#412) |
 | `ContradictedFigureRule` verdict lookup | guard, on every check with `reference_figure_ids` | `reject` on a contradicted figure | the lookup is bound to a stub that returns `None` (verified: wired to `ClaimValidationFigureVerdicts` in `shared/app.py`) |
 | LLM independence | guard path | the guard still works with the LLM client raising | the guard calls the model and degrades to permissive |
 

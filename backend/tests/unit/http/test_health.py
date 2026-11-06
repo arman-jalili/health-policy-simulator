@@ -54,6 +54,8 @@ async def test_readyz_reports_ready_when_database_answers(
         "governance_compliance": "ok",
         "governance_allowlist": "9",
         "governance_provenance": "wired",
+        "governance_provenance_producer": "close_round",
+        "attribution": "client-declared",
         "consensus_analysis": "ok",
         "consensus_analysis_persistence": "memory",
         "consensus_analysis_sources": "wired",

@@ -1304,6 +1304,21 @@ Track which changes have been synced to implementation:
 ---
 
 *Last updated: 2026-11-06*
+
+## 2026-11-06 — Demo chain and async corpus port (#411–#414)
+
+- **#411:** `IndexWriterPort.search` is one `async` contract for both families; the PostgreSQL adapter is
+  awaited and resolves passage ids to citable passages. Removed the `except TypeError` arity fallback.
+- **#412:** `CloseRound` is the provenance producer: every open position is disclosed after the aggregate
+  save and before consensus derivation; PostgreSQL joins the close `UnitOfWork`. `/readyz` reports
+  `governance_provenance_producer: close_round`.
+- **#413:** a closed run with zero stances returns `200` with `outcome: unresolved`, `support: 0.0` and
+  `reason: no_recorded_stances`; a genuinely unbound source still returns `503`.
+- **#414:** `make demo-seed` (+ `shared.demo_seed`) is idempotent and local-only; `make demo-walkthrough`
+  (+ `shared.demo_walkthrough`) drives the public API to a published brief; `samples/demo-corpus.pdf` and
+  `docs/demo-walkthrough.md` document every call. Attribution posture is `client-declared` in `/readyz`.
+- Consensus projection ids are prefixed ULIDs, not a process counter, so a restart cannot overwrite
+  another run's row on primary-key conflict.
 *Framework version: 1.2.0*
 
 ## 2026-11-05 — EvidenceCorpus implemented

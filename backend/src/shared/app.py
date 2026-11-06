@@ -41,7 +41,6 @@ from consensus_analysis.infrastructure.repository.memory import (
     InMemoryEventPublisher,
     InMemoryPackageRepository,
     InMemoryScenarioRepository,
-    SequentialIdFactory,
 )
 from consensus_analysis.infrastructure.repository.memory import (
     NoopUnitOfWork as ConsensusUnitOfWork,
@@ -212,10 +211,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         invocations=RequiredInvocationLookup(),
         progress=app.state.negotiation_progress,
     )
+    close_uow = app.state.negotiation_session.bind_position_provenance(
+        PositionProvenanceAcl(app.state.governance_compliance.disclose_position_provenance)
+    )
     if app_settings.persistence is Persistence.POSTGRES:
-        close_uow = app.state.negotiation_session.bind_position_provenance(
-            PositionProvenanceAcl(app.state.governance_compliance.disclose_position_provenance)
-        )
         app.state.governance_compliance.bind_unit_of_work(close_uow)
     if app_settings.persistence is Persistence.POSTGRES:
         consensus_repository: ConsensusRepository = SqlAlchemyConsensusRepository(
@@ -266,6 +265,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     )
     app.state.governance_provenance = "wired"
+    app.state.governance_provenance_producer = "close_round"
     if app_settings.persistence is Persistence.POSTGRES:
         brief_repository: DecisionBriefRepository = SqlAlchemyDecisionBriefRepository(
             database.session_factory
@@ -326,8 +326,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-_ids = SequentialIdFactory()
-"""One id factory for the process; projections only need uniqueness, not meaning."""
+_ids = UuidFactory()
+"""Every process uses prefixed ULIDs, so projection ids never collide across restarts."""
 
 
 class _EmptyComponentCatalogue:

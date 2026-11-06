@@ -1,16 +1,18 @@
 # DecisionBrief
 
-### Provenance gate — who writes the disclosure (verified 2026-11-06)
+### Provenance gate — who writes the disclosure (issue #412)
 
 `GovernanceProvenanceGate.assert_disclosed` requires a **stored** provenance record for every open position
-of the run (`GetPositionProvenance` reads the governance store, not the negotiation aggregate). The only
-producer is `POST /api/v1/positions/{position_id}/provenance`; no negotiation use case writes it. So a run
-with nine positions needs nine explicit calls before `POST /runs/{id}/brief` succeeds — verified: `422
-DISCLOSURE_MISSING` before the calls, `201` after them.
+of the run (`GetPositionProvenance` reads the governance store, not the negotiation aggregate).
 
-This is recorded as **#412**. Until it is fixed, treat "publish a brief" as a two-step ceremony and do not
-describe the gate as automatic. The facts source (`NegotiationProvenanceFacts`, late-bound in
-`shared/app.py`) is real; the *invocation* is what is missing.
+`CloseRound` is the producer: it asks `PositionProvenanceDisclosure` for every open position after saving
+the aggregate and before the run-closed subscriber runs. In the PostgreSQL family the disclosure store
+joins the same `UnitOfWork` as the close, so an incomplete close cannot leave a half-disclosed run.
+`POST /positions/{id}/provenance` remains for re-disclosure and audits. `/readyz` names the producer
+(`governance_provenance_producer: close_round`) so "wired" cannot hide "nobody calls it".
+
+Verified 2026-11-06: nine positions → nine turns → close → `POST /runs/{id}/brief` returns `201` with no
+manual disclosure call. Emptying the provenance store still returns `422 DISCLOSURE_MISSING`.
 
 ## Module Status
 
