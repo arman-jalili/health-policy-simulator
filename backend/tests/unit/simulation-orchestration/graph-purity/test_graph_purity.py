@@ -35,7 +35,12 @@ def test_graph_exposes_pure_step_and_next_node() -> None:
 
 
 def test_graph_talks_to_negotiation_only_through_commands() -> None:
-    assert method_names(NegotiationGateway) == {"close_run", "load_state", "take_turn"}
+    assert method_names(NegotiationGateway) == {
+        "briefing",
+        "close_run",
+        "load_state",
+        "take_turn",
+    }
 
 
 def test_application_does_not_import_negotiation_domain_internals() -> None:

@@ -64,7 +64,7 @@ curl -sS -X POST localhost:8000/api/v1/runs \
 # 202 {run_id, phase:"position_formation", mandate_hash, bound:[...]}
 
 curl -sS localhost:8000/api/v1/runs/$RUN_ID/events      # ordered SimulationRunOpened …
-curl -sSN localhost:8000/api/v1/runs/$RUN_ID/stream     # id/event/data frames
+curl -sSN localhost:8000/api/v1/runs/$RUN_ID/negotiation/stream     # id/event/data frames
 bash .pi/scripts/ci/check_negotiation-session_contracts.sh   # 138 checks, 0 failures
 ```
 

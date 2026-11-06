@@ -126,3 +126,44 @@ async def test_a_graph_that_cannot_drive_the_run_never_reports_completed() -> No
 
     assert job["status"] in {"failed", "dead_letter"}
     assert job["status"] != "completed"
+
+
+async def test_automated_run_does_not_manufacture_unanimity() -> None:
+    app = _app()
+    await seed_demo(app)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+    ):
+        ids = [
+            item["stakeholder_id"]
+            for item in (await client.get("/api/v1/stakeholders")).json()["items"]
+        ]
+        opened = await client.post(
+            "/api/v1/runs",
+            json={
+                "question": "Kassenstellen und Versorgung",
+                "round_cap": 1,
+                "stakeholder_ids": ids,
+            },
+        )
+        run_id = str(opened.json()["run_id"])
+        started = await client.post(f"/api/v1/runs/{run_id}:start", json={})
+        await _wait_for_job(client, str(started.json()["job_id"]), {"completed"})
+
+        records = (await client.get(f"/api/v1/runs/{run_id}/consensus")).json()["records"]
+        rounds = (await client.get(f"/api/v1/runs/{run_id}/rounds")).json()["items"]
+        events = (await client.get(f"/api/v1/runs/{run_id}/events")).json()["items"]
+
+    assert records
+    assert records[0]["support"] < 1.0
+    assert records[0]["minorities"]
+    assert records[0]["topic"] != "Kassenstellen und Versorgung"
+    assert rounds[0]["learning"]["insights"]
+    argument_topics = {
+        event["payload"]["target"]["topic"]
+        for event in events
+        if event["event_type"] == "ArgumentSubmitted"
+    }
+    assert argument_topics == {records[0]["topic"]}

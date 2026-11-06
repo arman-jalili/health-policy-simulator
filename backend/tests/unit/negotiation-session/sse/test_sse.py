@@ -53,5 +53,5 @@ def test_reconnect_replays_after_last_event_id() -> None:
         "last_event_id",
     ]
     assert "publish" in method_names(RunProgressPublisher)
-    stream = _routes()[("GET", "/api/v1/runs/{run_id}/stream")]
+    stream = _routes()[("GET", "/api/v1/runs/{run_id}/negotiation/stream")]
     assert stream.openapi_extra == {"x-required-scope": "runs:read"}

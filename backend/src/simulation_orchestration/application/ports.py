@@ -15,6 +15,7 @@ from simulation_orchestration.application.values import (
     LLMResponse,
     ModelPrice,
     NegotiationRunView,
+    NegotiationTurnBriefing,
     NegotiationTurnCommand,
     NegotiationTurnView,
     RunId,
@@ -72,6 +73,8 @@ class NegotiationGateway(Protocol):
     """ACL to NegotiationSession. The graph calls commands; it never reads aggregates."""
 
     async def load_state(self, run_id: RunId) -> NegotiationRunView: ...
+
+    async def briefing(self, run_id: RunId, actor_id: str) -> NegotiationTurnBriefing: ...
 
     async def take_turn(self, command: NegotiationTurnCommand) -> NegotiationTurnView: ...
 

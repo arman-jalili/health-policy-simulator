@@ -1,13 +1,15 @@
-"""Runtime ACL from SimulationOrchestration to NegotiationSession (issue #415).
+"""Runtime ACL from SimulationOrchestration to NegotiationSession (issues #415, #423).
 
-The graph owns sequencing only. This adapter turns a turn command into the public negotiation use
-cases: ensure a round, ensure an evidenced position, take one turn, then close the round when every
-bound actor is accounted for.
+The graph owns sequencing only. This adapter turns a decision produced by the node into the public
+negotiation use cases: ensure a round, ensure an evidenced position, take one turn, then close the
+round when every bound actor is accounted for. No stance, topic or proposal is substituted here.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from negotiation_session.application.commands import (
     CloseRoundRequest,
@@ -27,9 +29,11 @@ from negotiation_session.domain.errors import PositionNotFound, RoundCapExceeded
 from negotiation_session.domain.simulation_run import SimulationRun
 from negotiation_session.domain.values import (
     ArgumentStance,
+    ClaimStatement,
     EvidencePackId,
     LearningId,
-    PositionId,
+    LearningInsight,
+    LearningInsightType,
     Proposal,
     StakeholderId,
     TargetRef,
@@ -44,13 +48,23 @@ from negotiation_session.domain.values import (
 )
 from simulation_orchestration.application.values import (
     NegotiationRunView,
+    NegotiationTurnBriefing,
     NegotiationTurnCommand,
     NegotiationTurnView,
     RunId,
     RunPhase,
 )
 
-EvidencePackForClaim = Callable[[str], Awaitable[str]]
+_STOPWORDS = frozenset({"der", "die", "das", "und", "the", "and", "of", "in", "on"})
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceBriefing:
+    pack_id: str
+    passage_ids: tuple[str, ...] = ()
+
+
+EvidencePackForClaim = Callable[[str], Awaitable[EvidenceBriefing]]
 
 
 class NegotiationSessionGateway:
@@ -98,10 +112,30 @@ class NegotiationSessionGateway:
             terminal=False,
         )
 
+    async def briefing(self, run_id: RunId, actor_id: str) -> NegotiationTurnBriefing:
+        run = await self._runs.load(NegotiationRunId(str(run_id)))
+        actor = StakeholderId(actor_id)
+        topic = _topic(run)
+        pack = await self._evidence_pack_for(run.mandate.question)
+        previous = run.rounds[-2].learning if len(run.rounds) >= 2 else None
+        return NegotiationTurnBriefing(
+            persona_name=run.bound[actor].institution_name,
+            topic=str(topic),
+            evidence_pack_id=pack.pack_id,
+            passage_ids=pack.passage_ids,
+            previous_learning=(
+                json.dumps(previous.to_prompt_payload(), sort_keys=True) if previous else ""
+            ),
+            current_stances=_current_stances(run),
+        )
+
     async def take_turn(self, command: NegotiationTurnCommand) -> NegotiationTurnView:
         run = await self._runs.load(NegotiationRunId(str(command.run_id)))
         actor = StakeholderId(command.actor_id)
-        topic = _topic(run)
+        briefing = await self.briefing(command.run_id, command.actor_id)
+        topic = TopicRef(command.topic or briefing.topic)
+        stance = _stance(command.stance)
+        pack_id = EvidencePackId(briefing.evidence_pack_id)
         if run.is_closed:
             return _turn_view(command, None, terminal=True)
 
@@ -115,7 +149,6 @@ class NegotiationSessionGateway:
             if run.is_closed:
                 return _turn_view(command, None, terminal=True)
 
-        pack_id = await self._evidence_pack_for(run.mandate.question)
         try:
             run.open_position(actor, topic)
         except PositionNotFound:
@@ -124,21 +157,24 @@ class NegotiationSessionGateway:
                     run_id=run.id,
                     stakeholder_id=actor,
                     topic=topic,
-                    stance=ArgumentStance.SUPPORT,
-                    proposal=Proposal(summary=f"Position of {actor} on {topic}"),
-                    evidence_ids=(EvidencePackId(pack_id),),
+                    stance=stance,
+                    proposal=Proposal(summary=command.proposal_summary or f"{actor} on {topic}"),
+                    evidence_ids=(pack_id,),
                 )
             )
             run = await self._runs.load(run.id)
 
-        argument = await self._take_turn.execute(
+        await self._take_turn.execute(
             TakeNegotiationTurnRequest(
                 run_id=run.id,
                 stakeholder_id=actor,
                 target=TargetRef(topic=topic),
-                stance=ArgumentStance.SUPPORT,
-                text=command.text or _fallback_text(actor, topic),
-                evidence_ids=(EvidencePackId(pack_id),),
+                stance=stance,
+                text=command.text or f"{actor} states its position on {topic}.",
+                claims=tuple(ClaimStatement(text=claim) for claim in command.claims),
+                evidence_ids=tuple(
+                    EvidencePackId(item) for item in (command.evidence_ids or (pack_id,))
+                ),
                 invocation_id=NegotiationInvocationId(str(command.invocation_id)),
             )
         )
@@ -148,17 +184,12 @@ class NegotiationSessionGateway:
             await self._close_round.execute(
                 CloseRoundRequest(
                     run_id=run.id,
-                    learning=RoundLearning.capture(
-                        learning_id=LearningId(f"lrn_{run.id}_{current.number}"),
-                        round_number=current.number,
-                        insights=(),
-                    ),
+                    learning=_learning(run.id, current),
                 )
             )
             run = await self._runs.load(run.id)
-        return _turn_view(
-            command, PositionId(str(argument.position_id)) if False else None, run.is_closed
-        )
+        position = run.open_position(actor, topic)
+        return _turn_view(command, str(position.id), run.is_closed)
 
     async def close_run(self, run_id: RunId) -> None:
         run = await self._runs.load(NegotiationRunId(str(run_id)))
@@ -168,19 +199,19 @@ class NegotiationSessionGateway:
         if current.is_closed:
             return
         await self._close_round.execute(
-            CloseRoundRequest(
-                run_id=run.id,
-                learning=RoundLearning.capture(
-                    learning_id=LearningId(f"lrn_{run.id}_{current.number}"),
-                    round_number=current.number,
-                    insights=(),
-                ),
-            )
+            CloseRoundRequest(run_id=run.id, learning=_learning(run.id, current))
         )
 
 
 def _topic(run: SimulationRun) -> TopicRef:
-    return TopicRef(run.mandate.question)
+    if run.conflicts:
+        return next(iter(run.conflicts))
+    tokens = [
+        word.strip(".,:;!?()[]")
+        for word in run.mandate.question.split()
+        if word.strip(".,:;!?()[]").casefold() not in _STOPWORDS
+    ]
+    return TopicRef(" ".join(tokens[:2]) or "Agenda")
 
 
 def _first_bound(run: SimulationRun) -> str | None:
@@ -195,6 +226,44 @@ def _next_pending(round_: NegotiationRound) -> str | None:
     return None
 
 
+def _current_stances(run: SimulationRun) -> str:
+    if not run.rounds:
+        return ""
+    return ", ".join(
+        f"{stakeholder}={position.stance.value}"
+        for (stakeholder, _), position in sorted(
+            run.rounds[-1].positions.items(), key=lambda item: str(item[0][0])
+        )
+        if position.is_open
+    )
+
+
+def _learning(run_id: object, round_: NegotiationRound) -> RoundLearning:
+    opposing = sum(1 for argument in round_.arguments if argument.stance is ArgumentStance.OPPOSE)
+    statement = (
+        f"Round {round_.number}: {len(round_.arguments)} contributions, {opposing} opposing."
+    )
+    return RoundLearning.capture(
+        learning_id=LearningId(f"lrn_{run_id}_{round_.number}"),
+        round_number=round_.number,
+        insights=(
+            LearningInsight(
+                insight_type=LearningInsightType.SHARED_INTEREST,
+                statement=statement,
+                derived_from=tuple(argument.id for argument in round_.arguments),
+                round_number=round_.number,
+            ),
+        ),
+    )
+
+
+def _stance(value: str) -> ArgumentStance:
+    try:
+        return ArgumentStance(value.strip().lower())
+    except ValueError:
+        return ArgumentStance.QUALIFY
+
+
 def _turn_view(
     command: NegotiationTurnCommand, position_id: str | None, terminal: bool
 ) -> NegotiationTurnView:
@@ -205,7 +274,3 @@ def _turn_view(
         position_id=position_id,
         terminal=terminal,
     )
-
-
-def _fallback_text(actor: StakeholderId, topic: TopicRef) -> str:
-    return f"{actor} supports a negotiated solution on {topic}."

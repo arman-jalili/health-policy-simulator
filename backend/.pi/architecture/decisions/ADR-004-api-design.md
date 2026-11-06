@@ -21,7 +21,7 @@ Pydantic models and treated as the contract.**
 | Style | REST, resource-oriented, JSON only (no GraphQL) |
 | Versioning | Path prefix `/api/v1`; additive changes stay in v1; breaking changes get `/v2` |
 | Long-running work | `POST` returns `202 Accepted` + `run_id`; work proceeds on a worker; client polls or streams |
-| Streaming | `GET /runs/{id}/stream` as `text/event-stream` (SSE), replayable via `Last-Event-ID` |
+| Streaming | `GET /runs/{id}/stream` (simulation job progress) and `GET /runs/{id}/negotiation/stream` (domain events) as `text/event-stream` (SSE), both replayable via `Last-Event-ID` |
 | Errors | Uniform envelope: `{code, message, details[], trace_id}`; stable machine codes |
 | Pagination | Cursor-based (`?cursor=&limit=`) on history endpoints |
 | Idempotency | `Idempotency-Key` header honoured on `POST /runs` and `POST /runs/{id}/resume` |

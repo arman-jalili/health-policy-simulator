@@ -44,7 +44,7 @@ def test_http_contract_is_exact() -> None:
         ("GET", "/api/v1/runs/{run_id}/conflicts"),
         ("POST", "/api/v1/runs/{run_id}/coalitions"),
         ("GET", "/api/v1/runs/{run_id}/learning"),
-        ("GET", "/api/v1/runs/{run_id}/stream"),
+        ("GET", "/api/v1/runs/{run_id}/negotiation/stream"),
     }
     assert set(routes) == expected
     assert routes[("POST", "/api/v1/runs")].status_code == 202

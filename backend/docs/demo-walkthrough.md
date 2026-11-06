@@ -20,6 +20,12 @@ alembic upgrade head
 
 `demo-seed` is refused outside `ENV=local`.
 
+Integration tests use a separate `<database>_test` database (default
+`health_policy_test`, derived from `DATABASE_URL` or overridden by `TEST_DATABASE_URL`). They never
+downgrade the demo database. If a destructive fixture is pointed at a non-test name it refuses
+before dropping anything; `ALLOW_DESTRUCTIVE_TESTS=1` is the explicit override. If you did wipe the
+demo, `make demo-reset` migrates and re-seeds it.
+
 ## 2. Seed the demo corpus (idempotent)
 
 ```bash

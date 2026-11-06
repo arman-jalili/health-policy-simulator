@@ -25,7 +25,7 @@ async def test_the_public_api_reaches_the_wired_negotiation_session(
     assert "/api/v1/runs" in paths
     assert "/api/v1/runs/{run_id}" in paths
     assert "/api/v1/runs/{run_id}/events" in paths
-    assert "/api/v1/runs/{run_id}/stream" in paths
+    assert "/api/v1/runs/{run_id}/negotiation/stream" in paths
     assert hasattr(app.state, "negotiation_session")
 
     opened = await client.post(

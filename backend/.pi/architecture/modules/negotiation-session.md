@@ -44,7 +44,7 @@ All public interfaces for this epic are frozen before implementation. The frozen
 `POST /api/v1/runs/{run_id}/positions/{position_id}:revise` (200),
 `POST /api/v1/runs/{run_id}/abstentions` (204), `GET /api/v1/runs/{run_id}/conflicts`,
 `POST /api/v1/runs/{run_id}/coalitions` (201), `GET /api/v1/runs/{run_id}/learning`,
-`GET /api/v1/runs/{run_id}/stream` (SSE). Write routes require `runs:write`; read/stream routes
+`GET /api/v1/runs/{run_id}/negotiation/stream` (SSE). Write routes require `runs:write`; read/stream routes
 require `runs:read`.
 
 **Error codes:** `SIMULATION_RUN_NOT_FOUND`, `POSITION_NOT_FOUND`, `ROUND_NOT_FOUND`,
@@ -417,7 +417,7 @@ class RunEventLog(Protocol):
 | GET | `/api/v1/runs/{run_id}/conflicts` | `list_conflict_topics` | `?status` | conflicts + stances | `runs:read` |
 | POST | `/api/v1/runs/{run_id}/coalitions` | `form_coalition` | `{topic, member_ids[], proposal}` | `201 coalition` | `runs:write` |
 | GET | `/api/v1/runs/{run_id}/learning` | `list_round_learning` | — | per-round insights | `runs:read` |
-| GET | `/api/v1/runs/{run_id}/stream` | SSE publisher | `Last-Event-ID` | `text/event-stream` | `runs:read` |
+| GET | `/api/v1/runs/{run_id}/negotiation/stream` | SSE publisher | `Last-Event-ID` | `text/event-stream` | `runs:read` |
 
 ## Ubiquitous Language
 

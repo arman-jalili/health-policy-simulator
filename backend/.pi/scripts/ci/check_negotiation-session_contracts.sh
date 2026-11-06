@@ -67,7 +67,7 @@ require_literal "$SRC/application/services.py" "SERVICE_CLASSIFICATION" "service
 for file in commands.py dto.py ports.py progress.py mappers.py; do require_file "$SRC/application/$file" "application/$file"; done
 
 echo ""; echo "--- API and ACL ---"
-for path in '"/runs"' '"/runs/{run_id}"' '"/runs/{run_id}/events"' '"/runs/{run_id}/rounds"' '"/runs/{run_id}/positions"' '"/runs/{run_id}/turns"' '"/runs/{run_id}/positions/{position_id}:revise"' '"/runs/{run_id}/abstentions"' '"/runs/{run_id}/conflicts"' '"/runs/{run_id}/coalitions"' '"/runs/{run_id}/learning"' '"/runs/{run_id}/stream"'; do
+for path in '"/runs"' '"/runs/{run_id}"' '"/runs/{run_id}/events"' '"/runs/{run_id}/rounds"' '"/runs/{run_id}/positions"' '"/runs/{run_id}/turns"' '"/runs/{run_id}/positions/{position_id}:revise"' '"/runs/{run_id}/abstentions"' '"/runs/{run_id}/conflicts"' '"/runs/{run_id}/coalitions"' '"/runs/{run_id}/learning"' '"/runs/{run_id}/negotiation/stream"'; do
     require_literal "$SRC/interfaces/http/router.py" "$path" "route $path"
 done
 require_literal "$SRC/interfaces/http/router.py" 'x-required-scope' "routes declare scopes"

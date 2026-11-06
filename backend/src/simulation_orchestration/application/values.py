@@ -183,6 +183,23 @@ class NegotiationTurnCommand:
     actor_id: str
     invocation_id: InvocationId
     text: str = ""
+    topic: str = ""
+    stance: str = "support"
+    proposal_summary: str = ""
+    claims: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class NegotiationTurnBriefing:
+    """Everything the model prompt may see, read through the ACL from the run."""
+
+    persona_name: str
+    topic: str
+    evidence_pack_id: str
+    passage_ids: tuple[str, ...]
+    previous_learning: str
+    current_stances: str
 
 
 @dataclass(frozen=True, slots=True)

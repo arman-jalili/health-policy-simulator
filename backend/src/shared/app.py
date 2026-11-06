@@ -114,6 +114,7 @@ from shared.outbox import OutboxEvent
 from shared.relay import WILDCARD, OutboxRelay
 from simulation_orchestration.composition import build_container as build_simulation_container
 from simulation_orchestration.infrastructure.negotiation_session import (
+    EvidenceBriefing,
     NegotiationSessionGateway,
 )
 from simulation_orchestration.interfaces.http.router import (
@@ -223,10 +224,13 @@ def create_app(settings: Settings | None = None, *, log_stream: TextIO | None = 
     if app_settings.persistence is Persistence.POSTGRES:
         app.state.governance_compliance.bind_unit_of_work(close_uow)
 
-    async def _evidence_pack_for(claim: str) -> str:
+    async def _evidence_pack_for(claim: str) -> EvidenceBriefing:
         existing = await app.state.evidence_retrieval.packs.latest_for_claim(ClaimText(claim))
         if existing is not None and existing.candidates:
-            return str(existing.id)
+            return EvidenceBriefing(
+                pack_id=str(existing.id),
+                passage_ids=tuple(str(item.passage_id) for item in existing.candidates),
+            )
         snapshot = await app.state.corpus.snapshots.latest()
         if snapshot is None:
             raise RuntimeError(
@@ -240,15 +244,21 @@ def create_app(settings: Settings | None = None, *, log_stream: TextIO | None = 
             )
         )
         if assembled.candidates:
-            return str(assembled.pack_id)
+            return EvidenceBriefing(
+                pack_id=str(assembled.pack_id),
+                passage_ids=tuple(str(item.passage_id) for item in assembled.candidates),
+            )
         # A demo question need not share words with a passage; the seeded pack keeps the turn
         # evidenced rather than submitting a position that cites nothing.
         seeded = await app.state.evidence_retrieval.packs.latest_for_claim(
             ClaimText("Die Kassenstellen sollen ausgebaut werden.")
         )
         if seeded is not None and seeded.candidates:
-            return str(seeded.id)
-        return str(assembled.pack_id)
+            return EvidenceBriefing(
+                pack_id=str(seeded.id),
+                passage_ids=tuple(str(item.passage_id) for item in seeded.candidates),
+            )
+        return EvidenceBriefing(pack_id=str(assembled.pack_id))
 
     app.state.simulation_orchestration = build_simulation_container(
         app_settings,

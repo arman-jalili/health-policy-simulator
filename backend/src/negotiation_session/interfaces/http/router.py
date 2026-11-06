@@ -592,7 +592,7 @@ async def list_round_learning(run_id: str, container: Container) -> LearningList
 
 
 @router.get(
-    "/runs/{run_id}/stream",
+    "/runs/{run_id}/negotiation/stream",
     summary="Live ordered event stream with Last-Event-ID replay",
     openapi_extra={"x-required-scope": "runs:read"},
     responses=READ_ERRORS,

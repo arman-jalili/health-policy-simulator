@@ -65,6 +65,13 @@ APP_SECRET=some-example-value   # same value in .env.example
 A real provider without `LLM_BASE_URL` or `LLM_API_KEY` aborts boot with a named reason. `scripted`
 outside `ENV=local` is refused; `/readyz` reports which provider is bound.
 
+## Test database isolation
+
+Integration tests derive `TEST_DATABASE_URL` as `<DATABASE_URL database>_test` when it is not set
+explicitly. Destructive migration fixtures refuse a database whose name does not end in `_test`
+unless `ALLOW_DESTRUCTIVE_TESTS=1` is set. The demo database and the test database are therefore
+separate; `make demo-reset` re-seeds the demo if it was modified by hand.
+
 ## Simulation metering
 
 | Variable | Default | Effect |
