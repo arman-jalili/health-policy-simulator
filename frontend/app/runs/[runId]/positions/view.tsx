@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { useSettings, useToast } from "@/components/providers";
+import { engineLabel } from "@/lib/engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/field";
@@ -382,7 +383,7 @@ function PositionInspector({
                 </div>
                 <div>
                   <dt className="text-ink-muted">{t("positions.model")}</dt>
-                  <dd className="font-mono break-all">{provenance.data.model}</dd>
+                  <dd>{engineLabel(provenance.data.model, locale)}</dd>
                 </div>
                 <div>
                   <dt className="text-ink-muted">{t("positions.promptVersion")}</dt>

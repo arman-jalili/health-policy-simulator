@@ -18,6 +18,7 @@ import { getRun } from "@/features/run/api";
 import { useLocalRuns, useSeed } from "@/features/run/hooks";
 import { useReadyz } from "@/features/platform/hooks";
 import { formatDate, truncateMiddle } from "@/lib/format";
+import { engineKind, engineLabel } from "@/lib/engine";
 import { enumLabel, type MessageKey } from "@/lib/i18n";
 
 export default function DashboardPage() {
@@ -97,6 +98,11 @@ export default function DashboardPage() {
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
+                      {run.model !== undefined && run.model !== null && run.model !== "" && (
+                        <StatusPill tone={engineKind(run.model) === "scripted" ? "warn" : "ok"}>
+                          {engineLabel(run.model, locale)}
+                        </StatusPill>
+                      )}
                       {run.phase !== null && (
                         <StatusPill>{enumLabel("phase", run.phase, locale)}</StatusPill>
                       )}

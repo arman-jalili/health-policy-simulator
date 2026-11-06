@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { useSettings } from "@/components/providers";
+import { engineLabel } from "@/lib/engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/field";
@@ -273,7 +274,7 @@ export default function GovernancePage() {
                 </div>
                 <div>
                   <dt className="text-ink-muted">{t("positions.model")}</dt>
-                  <dd className="break-all font-mono">{provenance.data.model}</dd>
+                  <dd>{engineLabel(provenance.data.model, locale)}</dd>
                 </div>
                 <div>
                   <dt className="text-ink-muted">{t("positions.promptVersion")}</dt>

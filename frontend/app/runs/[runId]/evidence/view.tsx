@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSettings, useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { ExpandableText } from "@/components/ui/expandable-text";
 import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/field";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui/states";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -243,13 +244,17 @@ export default function EvidencePage() {
                       <TBody>
                         {candidates.map((candidate) => (
                           <TR key={candidate.passage_id}>
-                            <TD className="max-w-md">
+                            <TD className="max-w-xl min-w-[18rem] align-top">
                               <p className="font-mono text-2xs text-ink-muted">
                                 {truncateMiddle(candidate.passage_id)}
                               </p>
-                              <p className="mt-1 text-sm">
-                                {snippets.get(candidate.passage_id) ?? t("evidence.passageUnavailable")}
-                              </p>
+                              <ExpandableText
+                                className="mt-1"
+                                text={
+                                  snippets.get(candidate.passage_id) ??
+                                  t("evidence.passageUnavailable")
+                                }
+                              />
                             </TD>
                             <TD>
                               <StatusPill

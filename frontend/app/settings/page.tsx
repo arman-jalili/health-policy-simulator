@@ -253,9 +253,6 @@ export default function SettingsPage() {
                   );
                 })}
               </div>
-              <p className="text-2xs text-ink-muted">
-                {t("settings.modelActive")}: {llm.data.active} · {llm.data.model}
-              </p>
               <p className="text-2xs text-ink-muted">{t("settings.modelNote")}</p>
               {switchLlm.error !== null && switchLlm.error !== undefined && (
                 <p role="alert" className="text-2xs text-danger">
@@ -607,7 +604,9 @@ export default function SettingsPage() {
                     </TR>
                   </THead>
                   <TBody>
-                    {Object.entries(readyz.data.checks).map(([key, value]) => (
+                    {Object.entries(readyz.data.checks)
+                      .filter(([key]) => key !== "llm_model" && key !== "simulation_model")
+                      .map(([key, value]) => (
                       <TR key={key}>
                         <TD className="font-mono text-2xs">{key}</TD>
                         <TD>
@@ -620,7 +619,11 @@ export default function SettingsPage() {
                                   : "neutral"
                             }
                           >
-                            {value}
+                            {key === "llm"
+                              ? value === "scripted"
+                                ? t("settings.modelScripted")
+                                : t("settings.modelLive")
+                              : value}
                           </StatusPill>
                         </TD>
                       </TR>

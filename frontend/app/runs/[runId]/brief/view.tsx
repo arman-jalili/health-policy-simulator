@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/icons";
 import { useSettings, useToast } from "@/components/providers";
+import { engineLabel } from "@/lib/engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, TextArea } from "@/components/ui/field";
@@ -297,7 +298,7 @@ export default function BriefPage() {
                   <h2 className="text-base font-semibold">{t("brief.disclaimer")}</h2>
                   <p className="mt-1 text-sm">{brief.data.disclaimer.text}</p>
                   <p className="mt-1 font-mono text-2xs text-ink-muted">
-                    {t("brief.modelReference")}: {brief.data.disclaimer.model_reference} ·{" "}
+                    {t("brief.modelReference")}: {engineLabel(brief.data.disclaimer.model_reference, locale)} ·{" "}
                     {t("brief.promptVersion")}: {brief.data.disclaimer.prompt_version}
                   </p>
                 </section>

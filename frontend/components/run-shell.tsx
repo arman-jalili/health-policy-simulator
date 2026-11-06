@@ -8,7 +8,11 @@ import { useSettings } from "@/components/providers";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Tabs } from "@/components/ui/tabs";
 import { ErrorState, LoadingBlock } from "@/components/ui/states";
-import { RunDriverBadge, RunProvenanceBanner } from "@/features/run/components/run-provenance";
+import {
+  RunDriverBadge,
+  RunModelBadge,
+  RunProvenanceBanner,
+} from "@/features/run/components/run-provenance";
 import { useRun, useLocalRuns, useRunDriver } from "@/features/run/hooks";
 import { enumLabel } from "@/lib/i18n";
 import { truncateMiddle } from "@/lib/format";
@@ -93,6 +97,7 @@ export function RunShell({ children }: { readonly children: ReactNode }) {
             {run.data !== undefined && (
               <>
                 <RunDriverBadge automated={driver.automated} known={driver.known} />
+                <RunModelBadge model={driver.model} />
                 <StatusPill tone={run.data.closed ? "neutral" : "ok"}>
                   {run.data.closed ? t("run.closed") : t("run.open")}
                 </StatusPill>

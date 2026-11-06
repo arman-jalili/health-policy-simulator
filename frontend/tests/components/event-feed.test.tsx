@@ -52,7 +52,8 @@ describe("EventFeed", () => {
         <EventFeed events={events} names={names} />
       </Providers>,
     );
-    await user.selectOptions(screen.getByLabelText("Nach Ereignistyp filtern"), "SimulationRunOpened");
+    await user.click(screen.getByRole("button", { name: /Nach Ereignistyp filtern/ }));
+    await user.click(screen.getByRole("option", { name: "Verhandlung eröffnet" }));
     const list = within(screen.getByTestId("event-feed-list"));
     expect(list.getByText("Verhandlung eröffnet")).toBeInTheDocument();
     expect(list.queryByText("Argument eingebracht")).not.toBeInTheDocument();

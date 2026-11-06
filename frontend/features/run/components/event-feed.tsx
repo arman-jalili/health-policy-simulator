@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 
 import { useSettings } from "@/components/providers";
 import { CopyButton } from "@/components/ui/copy-button";
-import { Select, controlClass } from "@/components/ui/field";
+import { controlClass } from "@/components/ui/field";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { EmptyState } from "@/components/ui/states";
 import { StanceBadge } from "@/features/run/components/stance-badge";
 import type { EventItem } from "@/features/run/contracts";
@@ -89,51 +90,41 @@ export function EventFeed({
               : formatRelative(latest.occurred_at ?? null, locale)}
           </span>
         </div>
-        <div className="mt-2 flex flex-wrap items-end gap-2">
-          <div>
-            <label htmlFor="feed-type" className="sr-only">
-              {t("console.filter")}
-            </label>
-            <Select
-              id="feed-type"
-              value={eventType}
-              onChange={(event) => {
-                setEventType(event.target.value);
-                setLimit(PAGE);
-              }}
-              className="h-8"
-            >
-              <option value="all">{t("console.allEvents")}</option>
-              {types.map((type) => (
-                <option key={type} value={type}>
-                  {enumLabel("eventType", type, locale) === humanize(type)
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <SelectMenu
+            id="feed-type"
+            label={t("console.filter")}
+            value={eventType}
+            onChange={(value) => {
+              setEventType(value);
+              setLimit(PAGE);
+            }}
+            options={[
+              { value: "all", label: t("console.allEvents") },
+              ...types.map((type) => ({
+                value: type,
+                label:
+                  enumLabel("eventType", type, locale) === humanize(type)
                     ? type
-                    : enumLabel("eventType", type, locale)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label htmlFor="feed-stakeholder" className="sr-only">
-              {t("console.filterStakeholder")}
-            </label>
-            <Select
-              id="feed-stakeholder"
-              value={stakeholderId}
-              onChange={(event) => {
-                setStakeholderId(event.target.value);
-                setLimit(PAGE);
-              }}
-              className="h-8"
-            >
-              <option value="all">{t("console.allStakeholders")}</option>
-              {stakeholders.map((id) => (
-                <option key={id} value={id}>
-                  {names.get(id) ?? id}
-                </option>
-              ))}
-            </Select>
-          </div>
+                    : enumLabel("eventType", type, locale),
+              })),
+            ]}
+            className="w-[13rem] max-w-full"
+          />
+          <SelectMenu
+            id="feed-stakeholder"
+            label={t("console.filterStakeholder")}
+            value={stakeholderId}
+            onChange={(value) => {
+              setStakeholderId(value);
+              setLimit(PAGE);
+            }}
+            options={[
+              { value: "all", label: t("console.allStakeholders") },
+              ...stakeholders.map((id) => ({ value: id, label: names.get(id) ?? id })),
+            ]}
+            className="w-[15rem] max-w-full"
+          />
           <span aria-live="polite" className="sr-only">
             {t("console.feedAnnounce", { count: filtered.length })}
           </span>
