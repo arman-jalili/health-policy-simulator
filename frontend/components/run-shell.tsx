@@ -7,6 +7,7 @@ import { useEffect, type ReactNode } from "react";
 import { useSettings } from "@/components/providers";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Tabs } from "@/components/ui/tabs";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ErrorState, LoadingBlock } from "@/components/ui/states";
 import {
   RunDriverBadge,
@@ -16,7 +17,8 @@ import {
 import { useRun, useLocalRuns, useRunDriver } from "@/features/run/hooks";
 import { enumLabel } from "@/lib/i18n";
 import { truncateMiddle } from "@/lib/format";
-import { updateRunInIndex } from "@/lib/settings";
+import { ApiError } from "@/lib/http";
+import { updateRunInIndex, loadRunIndex, saveRunIndex } from "@/lib/settings";
 import type { MessageKey } from "@/lib/i18n";
 
 const PHASES = ["draft", "position_formation", "debate", "negotiation", "compromise", "closed"] as const;
@@ -51,6 +53,42 @@ export function RunShell({ children }: { readonly children: ReactNode }) {
 
   const phaseIndex =
     run.data === undefined ? -1 : PHASES.indexOf(run.data.phase as (typeof PHASES)[number]);
+
+  // A 404 means this run is gone (the database was cleaned, or the id came from another machine).
+  // Self-heal the local index and say so instead of showing the raw error envelope.
+  const missing = run.error instanceof ApiError && run.error.status === 404;
+  useEffect(() => {
+    if (!missing) return;
+    const entries = loadRunIndex();
+    if (!entries.some((item) => item.runId === runId)) return;
+    saveRunIndex(entries.filter((item) => item.runId !== runId));
+  }, [missing, runId]);
+
+  if (missing) {
+    return (
+      <Card>
+        <CardHeader title={t("run.missingTitle")} description={t("run.missingHint")} />
+        <CardBody className="space-y-3">
+          <p className="font-mono text-2xs text-ink-muted">{runId}</p>
+          <p className="text-sm text-ink-muted">{t("run.missingWhy")}</p>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/runs/new"
+              className="inline-flex h-9 items-center rounded-md border border-accent bg-accent px-4 font-heading text-sm font-medium text-on-accent no-underline"
+            >
+              {t("dashboard.newRun")}
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface px-4 font-heading text-sm font-medium text-ink no-underline"
+            >
+              {t("dashboard.title")}
+            </Link>
+          </div>
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
     <div>
