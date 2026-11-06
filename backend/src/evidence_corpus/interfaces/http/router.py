@@ -20,11 +20,13 @@ from evidence_corpus.application.commands import (
     GetCorpusSnapshotRequest,
     GetDocumentRequest,
     GetIngestionRunRequest,
+    IndexIngestedPassagesRequest,
     IngestDocumentRequest,
     ListAuthorityRulesRequest,
     PinCorpusSnapshotRequest,
     PublicationInput,
     ResolvePassageRequest,
+    SegmentArticleRequest,
     StartIngestionRunRequest,
 )
 from evidence_corpus.composition import CorpusContainer
@@ -34,6 +36,7 @@ from evidence_corpus.interfaces.http.schemas import (
     AuthorityRuleResponse,
     DocumentIngestionBody,
     DocumentResponse,
+    DocumentStageResponse,
     IngestDocumentBody,
     IngestionRunResponse,
     PassageResponse,
@@ -116,6 +119,90 @@ async def get_ingestion_run(
     """Return attempted/accepted/quarantined/failed counts and the run status."""
     view = await container.get_ingestion_run.execute(GetIngestionRunRequest(run_id=run_id))
     return IngestionRunResponse.model_validate(view, from_attributes=True)
+
+
+async def _stage_response(
+    container: CorpusContainer, document_id: str, *, index: object | None = None
+) -> DocumentStageResponse:
+    document = await container.documents.get(document_id)
+    if document is None:
+        from evidence_corpus.domain.errors import DocumentNotFound
+
+        raise DocumentNotFound(document_id)
+    return DocumentStageResponse(
+        document_id=document_id,
+        citable=bool(document.publishable_passages()),
+        article_count=len(document.articles),
+        passage_count=len(document.publishable_passages()),
+        index=index,
+    )
+
+
+@router.post(
+    "/corpus/documents/{document_id}:segment",
+    response_model=DocumentStageResponse,
+    summary="Derive article boundaries for an ingested document",
+    openapi_extra={"x-required-scope": "corpus:write"},
+    responses=WRITE_ERRORS,
+)
+async def segment_document(
+    document_id: str, container: Annotated[CorpusContainer, Depends(get_container)]
+) -> DocumentStageResponse:
+    await container.segment_article.execute(SegmentArticleRequest(document_id=document_id))
+    return await _stage_response(container, document_id)
+
+
+@router.post(
+    "/corpus/documents/{document_id}:index",
+    response_model=DocumentStageResponse,
+    summary="Publish searchable passages for a segmented document",
+    openapi_extra={"x-required-scope": "corpus:write"},
+    responses=WRITE_ERRORS,
+)
+async def index_document(
+    document_id: str, container: Annotated[CorpusContainer, Depends(get_container)]
+) -> DocumentStageResponse:
+    manifest = await container.index_ingested_passages.execute(
+        IndexIngestedPassagesRequest(document_id=document_id)
+    )
+    return await _stage_response(
+        container,
+        document_id,
+        index={
+            "index_version": manifest.index_version,
+            "embedding_model": manifest.embedding_model,
+            "searchable_since": manifest.searchable_since,
+            "passage_count": manifest.passage_count,
+        },
+    )
+
+
+@router.post(
+    "/corpus/documents/{document_id}:publish",
+    response_model=DocumentStageResponse,
+    summary="Segment and index in one idempotent call",
+    openapi_extra={"x-required-scope": "corpus:write"},
+    responses=WRITE_ERRORS,
+)
+async def publish_document(
+    document_id: str, container: Annotated[CorpusContainer, Depends(get_container)]
+) -> DocumentStageResponse:
+    document = await container.documents.get(document_id)
+    if document is not None and not document.articles:
+        await container.segment_article.execute(SegmentArticleRequest(document_id=document_id))
+    manifest = await container.index_ingested_passages.execute(
+        IndexIngestedPassagesRequest(document_id=document_id)
+    )
+    return await _stage_response(
+        container,
+        document_id,
+        index={
+            "index_version": manifest.index_version,
+            "embedding_model": manifest.embedding_model,
+            "searchable_since": manifest.searchable_since,
+            "passage_count": manifest.passage_count,
+        },
+    )
 
 
 @router.get(

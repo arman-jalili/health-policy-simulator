@@ -217,6 +217,7 @@ class TestStructuralValueObjects:
             "has_text_layer",
             "average_chars_per_page",
             "missing_glyph_rate",
+            "page_count",
         ]
 
     def test_article_draft_is_what_a_boundary_strategy_emits(self) -> None:

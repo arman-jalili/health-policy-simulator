@@ -10,20 +10,26 @@ measured quality. `StartIngestionRun` opens the batch record; the worker process
 from __future__ import annotations
 
 import hashlib
+from datetime import date
 from pathlib import Path
 
 from evidence_corpus.application.commands import (
     ExtractDocumentTextRequest,
     GetIngestionRunRequest,
+    IndexIngestedPassagesRequest,
     IngestDocumentRequest,
+    PublicationInput,
+    SegmentArticleRequest,
     StartIngestionRunRequest,
 )
 from evidence_corpus.application.dto import DocumentIngestionResult, IngestionRunView
 from evidence_corpus.application.extraction_handler import ExtractDocumentTextHandler
-from evidence_corpus.domain.entities import Document, IngestionRun, Publication
+from evidence_corpus.application.indexing_handler import IndexIngestedPassagesHandler
+from evidence_corpus.application.segmentation_handler import SegmentArticleHandler
+from evidence_corpus.domain.entities import Document, IngestionOutcome, IngestionRun, Publication
 from evidence_corpus.domain.errors import RunNotFound
 from evidence_corpus.domain.repositories import DocumentRepository, IngestionRunRepository
-from evidence_corpus.domain.values import LANGUAGE_DE_AT, LanguageTag
+from evidence_corpus.domain.values import LANGUAGE_DE_AT, LanguageTag, SourceType
 from shared.ids import new_id
 
 
@@ -66,18 +72,59 @@ class IngestDocumentHandler:
         return DocumentIngestionResult(
             document_id=document.id,
             quality=outcome.quality,
-            citable=reloaded.is_citable() if reloaded is not None else False,
+            # "citable" means a publishable passage exists, not merely acceptable extraction.
+            citable=bool(reloaded.publishable_passages()) if reloaded is not None else False,
         )
 
 
 class StartIngestionRunHandler:
-    """Implements :class:`evidence_corpus.application.services.StartIngestionRun`."""
+    """Implements :class:`evidence_corpus.application.services.StartIngestionRun`.
 
-    def __init__(self, runs: IngestionRunRepository) -> None:
+    When the pipeline handlers are available the batch is executed document by document; without
+    them it is a register-only row. Either way the returned status says which happened.
+    """
+
+    def __init__(
+        self,
+        runs: IngestionRunRepository,
+        *,
+        ingest: IngestDocumentHandler | None = None,
+        segment: SegmentArticleHandler | None = None,
+        index: IndexIngestedPassagesHandler | None = None,
+    ) -> None:
         self._runs = runs
+        self._ingest = ingest
+        self._segment = segment
+        self._index = index
 
     async def execute(self, request: StartIngestionRunRequest) -> IngestionRunView:
         run = IngestionRun(id=new_id("run"), shard_label=request.shard_label)
+        if self._ingest is None or self._segment is None or self._index is None:
+            await self._runs.save(run)
+            return ingestion_run_view(run)
+        for path in request.paths:
+            try:
+                ingested = await self._ingest.execute(
+                    IngestDocumentRequest(
+                        source_uri=path,
+                        publication=PublicationInput(
+                            outlet="batch", published_on=date.today(), medium="file"
+                        ),
+                        source_type=SourceType.PRESS_REPORT,
+                    )
+                )
+                await self._segment.execute(SegmentArticleRequest(document_id=ingested.document_id))
+                manifest = await self._index.execute(
+                    IndexIngestedPassagesRequest(document_id=ingested.document_id)
+                )
+                run.record(
+                    IngestionOutcome.ACCEPTED
+                    if manifest.passage_count > 0
+                    else IngestionOutcome.QUARANTINED
+                )
+            except Exception:
+                run.record(IngestionOutcome.FAILED)
+        run.complete()
         await self._runs.save(run)
         return ingestion_run_view(run)
 
@@ -100,7 +147,7 @@ def ingestion_run_view(run: IngestionRun) -> IngestionRunView:
     return IngestionRunView(
         run_id=run.id,
         shard_label=run.shard_label,
-        status=str(run.status),
+        status=run.status.value,
         attempted=run.attempted,
         accepted=run.accepted,
         quarantined=run.quarantined,

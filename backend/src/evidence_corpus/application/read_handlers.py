@@ -56,7 +56,7 @@ def document_view(document: Document) -> DocumentView:
         language=document.language,
         tier=document.tier,
         quality=document.quality,
-        citable=document.is_citable(),
+        citable=bool(document.publishable_passages()),
         articles=[article_view(article) for article in document.articles],
     )
 

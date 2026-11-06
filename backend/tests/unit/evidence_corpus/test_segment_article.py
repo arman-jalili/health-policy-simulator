@@ -200,7 +200,7 @@ class TestSegmentArticleHandler:
         assert [article.page_from for article in result.articles] == [1, 2, 3]
         from evidence_corpus.domain.events import ArticleSegmented
 
-        assert all(isinstance(event, ArticleSegmented) for event in publisher.events)
+        assert sum(isinstance(event, ArticleSegmented) for event in publisher.events) == 3
 
     async def test_unsegmented_document_is_refused(self) -> None:
         from datetime import date

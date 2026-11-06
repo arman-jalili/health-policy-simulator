@@ -13,6 +13,7 @@ from evidence_corpus.domain.errors import DocumentNotCitable, DocumentNotFound
 from evidence_corpus.domain.repositories import DocumentRepository
 from evidence_corpus.domain.services import ArticleBoundaryStrategy
 from evidence_corpus.domain.strategies import select_strategy
+from evidence_corpus.domain.values import Offsets, SpeakerKind
 
 
 class SegmentArticleHandler:
@@ -39,10 +40,20 @@ class SegmentArticleHandler:
 
         strategy = self._strategy or select_strategy(document.extracted_text)
         drafts = strategy.segment(document.extracted_text, document.publication)
-        articles = [
-            document.add_article(draft.headline, draft.body, draft.page_from, draft.page_to)
-            for draft in drafts
-        ]
+        articles = []
+        for draft in drafts:
+            article = document.add_article(
+                draft.headline, draft.body, draft.page_from, draft.page_to
+            )
+            # Segmentation owns the article boundaries; publish one citable body span now so the
+            # indexer has real passages to search. Finer sentence/quote splitting can replace this
+            # without changing the API pipeline.
+            article.add_passage(
+                text=draft.body,
+                offsets=Offsets(0, len(draft.body)),
+                speaker_kind=SpeakerKind.INSTITUTION,
+            )
+            articles.append(article)
 
         await self._documents.save(document)
         await self._events.publish(document.drain_events(), actor=self._actor)

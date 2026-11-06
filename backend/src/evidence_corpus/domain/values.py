@@ -37,6 +37,7 @@ class PageTextFacts:
     has_text_layer: bool
     average_chars_per_page: float
     missing_glyph_rate: float
+    page_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
