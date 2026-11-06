@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 from decision_brief.domain.entities import BriefSection, RejectedProposalRecord
 from decision_brief.domain.errors import (
@@ -50,6 +51,42 @@ DISCLAIMER_DISCLOSURE = "simulation_disclaimer"
 REJECTED_PROPOSALS_DISCLOSURE = "rejected_proposals"
 
 
+class _FrozenSections(dict[SectionKind, BriefSection]):
+    """The section map of a published brief: every mutation raises the domain error.
+
+    ``dict`` is the frozen field type, so the guard is a subclass rather than a wrapper — a caller
+    can read it exactly like a mapping and still cannot slip a section in after publication.
+    """
+
+    def __init__(self, sections: dict[SectionKind, BriefSection], brief_id: str) -> None:
+        super().__init__(sections)
+        self._brief_id = brief_id
+
+    def _refuse(self) -> None:
+        raise PublishedBriefIsImmutable(self._brief_id)
+
+    def __setitem__(self, *args: object) -> None:
+        self._refuse()
+
+    def __delitem__(self, *args: object) -> None:
+        self._refuse()
+
+    def clear(self) -> None:
+        self._refuse()
+
+    def pop(self, *args: object) -> Any:
+        self._refuse()
+
+    def popitem(self) -> Any:
+        self._refuse()
+
+    def setdefault(self, *args: object) -> Any:
+        self._refuse()
+
+    def update(self, *args: object, **kwargs: object) -> None:
+        self._refuse()
+
+
 @dataclass
 class DecisionBrief:
     """Versioned jury-facing artefact; ``PUBLISHED`` versions are immutable."""
@@ -63,6 +100,12 @@ class DecisionBrief:
     outcomes: tuple[TopicOutcome, ...] = ()
     status: BriefStatus = BriefStatus.DRAFT
     events: list[DomainEvent] = field(default_factory=list)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """A published version is read-only; the audit event list stays appendable."""
+        if name != "events" and getattr(self, "status", None) is BriefStatus.PUBLISHED:
+            raise PublishedBriefIsImmutable(str(getattr(self, "id", "unknown")))
+        object.__setattr__(self, name, value)
 
     def missing_sections(self) -> frozenset[SectionKind]:
         """Mandated kinds absent from this brief (AC 1)."""
@@ -139,6 +182,7 @@ class DecisionBrief:
         except AppError:
             self.status = BriefStatus.BLOCKED
             raise
+        object.__setattr__(self, "sections", _FrozenSections(self.sections, str(self.id)))
         self.status = BriefStatus.PUBLISHED
         for record in self.rejected_proposals:
             self.events.append(
