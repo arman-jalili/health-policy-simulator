@@ -48,6 +48,46 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ConsensusAnalysis contract frozen (#305)
+
+### Changed
+- Module: consensus-analysis
+  - Contract freeze: `ConsensusRecord`, `CompromisePackage` and `Scenario` aggregates, 5 owned
+    entities, 17 value objects, 11 stable error codes, 9 domain events, repository and derivation
+    ports (`ConsensusRepository`, `CompromisePackageRepository`, `ScenarioRepository`,
+    `RunLogPort`, `StakeholderPowersPort`), 9 application services with their command/result DTOs,
+    4 estimation strategies, 7 HTTP routes and the `ConsensusView` published to DecisionBrief.
+  - Veto precedence is frozen as declaration order (`ConsensusRule.veto` before `.threshold`) and
+    as a first-class outcome kind, so a blocked class can never render as consensus.
+  - The context declares its own `ProposalClass` mirror and a `StakeholderPowersPort` ACL instead of
+    importing an upstream layer, so the `domain/` dependency-direction guard stays satisfied.
+  - Each use case publishes `collaborators()`; the frozen stub bodies name their implementing
+    issue, so the W8 reachability gate keeps meaning while nothing is implemented yet.
+  - Replaced the invalid generated placeholders (hyphenated module names, `assert False`) with 83
+    structural contract checks across the 15 epic components.
+
+### Impact Analysis
+- Files affected:
+  - src/consensus_analysis/
+  - tests/unit/consensus-analysis/
+  - tests/unit/consensus_analysis_contract_helpers.py
+- Canonical refs to update:
+  - .pi/architecture/modules/consensus-analysis.md#contract-freeze-issue-305
+- Validators required:
+  - ci, tests, architecture, canonical
+
+### Migration Steps
+1. Implement each component against the frozen signatures; do not rename frozen members.
+2. Replace contract tests with behavioural proofs as the implementing issues land.
+3. Wire the router and container in issue #320 by mounting the existing router and factory.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated
+- [x] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-06] - NegotiationSession contract frozen (#282)
 
 ### Changed
