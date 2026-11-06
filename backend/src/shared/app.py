@@ -9,7 +9,7 @@ Canonical: .pi/architecture/decisions/ADR-001-architecture-pattern.md
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager, suppress
 
 import uvicorn
@@ -18,6 +18,31 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from claim_validation.composition import build_container as build_claim_validation_container
 from claim_validation.interfaces.http.router import router as claim_validation_router
+from consensus_analysis.application.dto import ModelledEstimate
+from consensus_analysis.application.estimators import AssumedEstimator
+from consensus_analysis.composition import build_container as build_consensus_container
+from consensus_analysis.domain.entities import PackageComponent
+from consensus_analysis.domain.errors import ConsensusAnalysisUnavailable
+from consensus_analysis.domain.values import BasisKind, RunId, ScenarioId
+from consensus_analysis.infrastructure.acl import IllustrativeExampleCatalog
+from consensus_analysis.infrastructure.comparison import LexicographicRanker
+from consensus_analysis.infrastructure.projection import LogFoldingRebuilder
+from consensus_analysis.infrastructure.repository.memory import (
+    InMemoryConsensusRepository,
+    InMemoryEventPublisher,
+    InMemoryPackageRepository,
+    InMemoryScenarioRepository,
+    SequentialIdFactory,
+)
+from consensus_analysis.infrastructure.repository.memory import (
+    NoopUnitOfWork as ConsensusUnitOfWork,
+)
+from consensus_analysis.infrastructure.sources import (
+    unavailable_mandate,
+    unavailable_powers,
+    unavailable_run_log,
+)
+from consensus_analysis.interfaces.http.router import router as consensus_analysis_router
 from decision_brief.composition import build_container as build_decision_brief_container
 from decision_brief.domain.values import BRIEF_PROMPT_VERSION, SimulationDisclaimer
 from decision_brief.infrastructure.acl import EvidenceCorpusCitationResolver
@@ -30,7 +55,6 @@ from decision_brief.infrastructure.projection import BriefProjectionAdapter
 from decision_brief.infrastructure.repository.memory import InMemoryDecisionBriefRepository
 from decision_brief.infrastructure.runtime import (
     LoggingEventPublisher,
-    NoopUnitOfWork,
     UuidFactory,
 )
 from decision_brief.interfaces.http.router import router as decision_brief_router
@@ -147,6 +171,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.stakeholder_model = build_stakeholder_container(app_settings, database)
     app.state.claim_validation = build_claim_validation_container(app_settings, database)
     app.state.simulation_orchestration = build_simulation_container(app_settings, database)
+    app.state.consensus_analysis = build_consensus_container(
+        app_settings,
+        database,
+        consensus=InMemoryConsensusRepository(),
+        packages=InMemoryPackageRepository(),
+        scenarios=InMemoryScenarioRepository(),
+        log=unavailable_run_log(),
+        powers=unavailable_powers(),
+        mandate=unavailable_mandate(),
+        estimation={BasisKind.ASSUMED: AssumedEstimator()},
+        catalogue=IllustrativeExampleCatalog(examples=()),
+        components=_EmptyComponentCatalogue(),
+        llm=_UnavailableLlm(),
+        rebuilder=LogFoldingRebuilder(ids=_ids),
+        ranker=LexicographicRanker(),
+        events=InMemoryEventPublisher(),
+        clock=SystemClock(),
+        ids=_ids,
+        uow=ConsensusUnitOfWork(),
+    )
     app.state.governance_compliance = build_governance_container(
         app_settings,
         database,
@@ -184,7 +228,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         events=LoggingEventPublisher(),
         clock=SystemClock(),
         ids=UuidFactory(),
-        uow=NoopUnitOfWork(),
+        uow=ConsensusUnitOfWork(),
         renderer=JsonBriefRenderer(),
     )
 
@@ -209,9 +253,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(claim_validation_router)
     app.include_router(simulation_orchestration_router)
     app.include_router(governance_compliance_router)
+    app.include_router(consensus_analysis_router)
     app.include_router(negotiation_session_router)
     app.include_router(decision_brief_router)
     return app
+
+
+_ids = SequentialIdFactory()
+"""One id factory for the process; projections only need uniqueness, not meaning."""
+
+
+class _EmptyComponentCatalogue:
+    """No component catalogue is published yet, so the package cannot assemble itself."""
+
+    async def components(self, run_id: RunId) -> Sequence[PackageComponent]:
+        raise ConsensusAnalysisUnavailable(
+            "accepted components are not published per run yet; a package cannot be assembled "
+            "around parts nobody accepted"
+        )
+
+
+class _UnavailableLlm:
+    """The metered model client is not reachable from this context yet (ADR-006)."""
+
+    async def estimate(
+        self, *, scenario_id: ScenarioId, field: str, context: str
+    ) -> ModelledEstimate:
+        raise ConsensusAnalysisUnavailable(
+            "no metered model client is configured for consensus-analysis; modelled figures "
+            "cannot be produced without one"
+        )
 
 
 async def _log_dispatched_event(event: OutboxEvent) -> None:
