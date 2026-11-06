@@ -15,6 +15,7 @@ from typing import Protocol, runtime_checkable
 from negotiation_session.domain.entities import Argument
 from negotiation_session.domain.values import (
     ArgumentContradiction,
+    ArgumentStance,
     ConsensusLevel,
     StakeholderBinding,
     StakeholderId,
@@ -41,12 +42,36 @@ class EvaluateStoppingCondition:
 class DetectArgumentContradiction:
     """Compare claims and stances inside and across arguments of one topic."""
 
+    _OPPOSING = frozenset(
+        {
+            frozenset({ArgumentStance.SUPPORT, ArgumentStance.OPPOSE}),
+            frozenset({ArgumentStance.CONDITIONAL_ACCEPT, ArgumentStance.OPPOSE}),
+        }
+    )
+
     def detect(self, arguments: Sequence[Argument]) -> Sequence[ArgumentContradiction]:
-        raise NotImplementedError("DetectArgumentContradiction.detect is implemented by issue #284")
+        findings: list[ArgumentContradiction] = []
+        ordered = list(arguments)
+        for index, left in enumerate(ordered):
+            for right in ordered[index + 1 :]:
+                if self.contradicts(left, right):
+                    findings.append(self._finding(left, right))
+        return findings
 
     def contradicts(self, left: Argument, right: Argument) -> bool:
-        raise NotImplementedError(
-            "DetectArgumentContradiction.contradicts is implemented by issue #284"
+        if left.id == right.id or left.stakeholder == right.stakeholder:
+            return False
+        if left.target.topic != right.target.topic:
+            return False
+        return frozenset({left.stance, right.stance}) in self._OPPOSING
+
+    def _finding(self, left: Argument, right: Argument) -> ArgumentContradiction:
+        return ArgumentContradiction(
+            argument_id_a=left.id,
+            argument_id_b=right.id,
+            topic=left.target.topic,
+            stance_a=left.stance,
+            stance_b=right.stance,
         )
 
 
