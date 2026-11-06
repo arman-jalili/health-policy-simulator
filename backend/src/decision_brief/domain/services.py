@@ -15,6 +15,7 @@ from typing import Protocol, runtime_checkable
 
 from decision_brief.domain.decision_brief import DecisionBrief
 from decision_brief.domain.entities import BriefSection, RejectedProposalRecord
+from decision_brief.domain.errors import BriefReproductionMismatch
 from decision_brief.domain.projections import (
     ClaimVerdictProjection,
     CompromiseRecord,
@@ -44,6 +45,7 @@ SERVICE_CLASSIFICATION: Mapping[str, str] = MappingProxyType(
         "BriefProjectionBuilder": "domain",
         "SectionAssembler": "domain",
         "ReproductionChecker": "domain",
+        "ReproductionCheck": "domain",
         "OutcomeHonestyPolicy": "domain",
         "CitationResolver": "infrastructure",
         "ProvenanceDisclosureGate": "infrastructure",
@@ -71,6 +73,46 @@ class ReproductionChecker(Protocol):
     """Prove the artefact is a projection: regeneration reproduces it (invariant 7, AC 8)."""
 
     def assert_reproduces(self, published: DecisionBrief, regenerated: DecisionBrief) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ReproductionCheck:
+    """Prove the artefact is a projection: regeneration reproduces it (invariant 7, AC 8).
+
+    Evidence is fixed — status, claim ids, citation targets and the text of an ``EVIDENCED``
+    statement — while narrative wording may be rewritten between generations. Anything else
+    differing is a second source of truth and is refused, naming the section.
+    """
+
+    def assert_reproduces(self, published: DecisionBrief, regenerated: DecisionBrief) -> None:
+        """Raise ``BriefReproductionMismatch`` at the first section that does not reproduce."""
+        for kind in sorted(SectionKind, key=lambda item: SECTION_ORDINAL[item]):
+            published_section = published.sections.get(kind)
+            regenerated_section = regenerated.sections.get(kind)
+            if published_section is None or regenerated_section is None:
+                if published_section is not regenerated_section:
+                    raise BriefReproductionMismatch(str(published.run_id), kind.value)
+                continue
+            if self._fingerprint(published_section) != self._fingerprint(regenerated_section):
+                raise BriefReproductionMismatch(str(published.run_id), kind.value)
+
+    def _fingerprint(self, section: BriefSection) -> tuple[object, ...]:
+        return (
+            section.kind,
+            section.ordinal,
+            tuple(
+                (
+                    statement.status,
+                    statement.claim_ids,
+                    tuple(
+                        (str(citation.passage_id), citation.is_resolved(), citation.quote)
+                        for citation in statement.citations
+                    ),
+                    statement.text if statement.status is EvidenceStatus.EVIDENCED else None,
+                )
+                for statement in section.statements
+            ),
+        )
 
 
 @runtime_checkable

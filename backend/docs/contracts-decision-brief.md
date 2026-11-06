@@ -88,6 +88,16 @@ recorded in #332; an empty run list is a legitimate "no refusals" result).
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
 
+## Reproduction (#342)
+
+`ReproductionCheck.assert_reproduces(published, regenerated)` compares the two artefacts section by
+section in ordinal order and raises `BriefReproductionMismatch(run_id, section)` at the first
+divergence. The fingerprint fixes everything a reader could check — section kind and ordinal,
+statement `EvidenceStatus`, `claim_ids`, citation passage ids/resolution/quote and the text of every
+`EVIDENCED` statement — while **narrative wording may change** between generations. A missing section
+is named too. This is the machine form of invariant 7: the brief is a projection, not a second source
+of truth.
+
 ## Lineage (#341)
 
 `VersionDecisionBrief.execute` builds version N+1 from N (same run, same snapshot, `previous_version = N`,
