@@ -47,7 +47,16 @@ class Settings(BaseSettings):
     persistence: Persistence = Persistence.POSTGRES
 
     database_url: Annotated[PostgresDsn, Field(repr=False)]
-    # Optional LLM health endpoint; unset means "not configured" in /readyz, never a failure.
+    # LLM provider. ``scripted`` is local/test only; ``openai-compatible`` covers OpenAI, Azure,
+    # OpenRouter, vLLM and Ollama. There is no silent fallback from a failing provider to the echo.
+    llm_provider: str = "scripted"
+    llm_base_url: str | None = None
+    llm_api_key: str | None = Field(default=None, repr=False)
+    llm_model: str = "gpt-4o-mini"
+    llm_timeout_s: Annotated[float, Field(gt=0, le=300)] = 30.0
+    llm_max_retries: Annotated[int, Field(ge=0, le=10)] = 2
+    llm_temperature: Annotated[float, Field(ge=0, le=2)] = 0.2
+    llm_max_output_tokens: Annotated[int, Field(ge=1, le=100000)] = 1024
     llm_health_url: str | None = None
     simulation_model_id: str = "scripted-local"
     simulation_input_price_per_1k: float = 0.0
@@ -73,6 +82,23 @@ class Settings(BaseSettings):
     def _reject_demo_in_production(self) -> Settings:
         if self.env is Environment.PRODUCTION and self.auth_mode is AuthMode.DEMO:
             raise ValueError("AUTH_MODE=demo is refused when ENV=production; set AUTH_MODE=strict")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_llm_provider(self) -> Settings:
+        provider = self.llm_provider.strip().lower()
+        if provider not in {"scripted", "openai-compatible", "azure_ai_foundry"}:
+            raise ValueError(
+                "LLM_PROVIDER must be 'scripted', 'openai-compatible' or "
+                f"'azure_ai_foundry', got {self.llm_provider!r}"
+            )
+        if provider == "scripted" and self.env is not Environment.LOCAL:
+            raise ValueError("LLM_PROVIDER=scripted is refused outside ENV=local")
+        if provider in {"openai-compatible", "azure_ai_foundry"}:
+            if not self.llm_base_url:
+                raise ValueError("LLM_BASE_URL is required for LLM_PROVIDER=openai-compatible")
+            if not self.llm_api_key:
+                raise ValueError("LLM_API_KEY is required for LLM_PROVIDER=openai-compatible")
         return self
 
     @model_validator(mode="after")

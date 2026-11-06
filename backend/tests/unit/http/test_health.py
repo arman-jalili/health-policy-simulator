@@ -36,7 +36,8 @@ async def test_readyz_reports_ready_when_database_answers(
     assert response.status_code == 200
     assert response.json()["checks"] == {
         "database": "ok",
-        "llm": "not_configured",
+        "llm": "scripted",
+        "llm_model": "scripted-local",
         "evidence_retrieval": "ok",
         "evidence_retrieval_mode": "lexical+dense",
         "evidence_retrieval_detail": (
@@ -175,3 +176,27 @@ async def test_healthz_never_probes_the_llm() -> None:
 
     assert response.status_code == 200
     assert stub.ping_count == 0
+
+
+async def test_readyz_distinguishes_a_configured_provider_from_scripted() -> None:
+    app = create_app(
+        Settings(
+            _env_file=None,
+            database_url=TEST_DATABASE_URL,
+            persistence=Persistence.MEMORY,
+            llm_provider="openai-compatible",
+            llm_base_url="https://llm.example/v1",
+            llm_api_key="test-key",
+            llm_model="gpt-test",
+        )
+    )
+    app.state.db = StubDatabase()
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/readyz")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["checks"]["llm"] == "openai-compatible"
+    assert response.json()["checks"]["llm_model"] == "gpt-test"
+    assert response.json()["checks"]["simulation_model"] == "gpt-test"

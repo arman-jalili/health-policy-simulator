@@ -132,6 +132,13 @@ class InMemoryCorpusSnapshotRepository:
         matching = [row for row in self._snapshots.values() if row.label == label]
         return max(matching, key=lambda row: row.pinned_at) if matching else None
 
+    async def latest(self) -> CorpusSnapshot | None:
+        return (
+            max(self._snapshots.values(), key=lambda row: row.pinned_at)
+            if self._snapshots
+            else None
+        )
+
     async def save(self, snapshot: CorpusSnapshot) -> None:
         self._snapshots[snapshot.id] = snapshot
 

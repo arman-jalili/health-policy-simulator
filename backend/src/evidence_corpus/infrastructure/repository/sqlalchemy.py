@@ -266,6 +266,17 @@ class SqlAlchemyCorpusSnapshotRepository:
             row = await session.scalar(statement)
         return _to_snapshot(row) if row is not None else None
 
+    async def latest(self) -> CorpusSnapshot | None:
+        statement = (
+            select(CorpusSnapshotRow)
+            .options(selectinload(CorpusSnapshotRow.document_ids))
+            .order_by(CorpusSnapshotRow.pinned_at.desc())
+            .limit(1)
+        )
+        async with self._uow.session() as session:
+            row = await session.scalar(statement)
+        return _to_snapshot(row) if row is not None else None
+
     async def save(self, snapshot: CorpusSnapshot) -> None:
         async with self._uow.session() as session:
             row = await session.get(CorpusSnapshotRow, snapshot.id)

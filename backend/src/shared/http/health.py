@@ -76,14 +76,30 @@ async def readyz(request: Request) -> JSONResponse:
             )
         )
 
-    llm_ok, llm_status = await _check_llm(settings.llm_health_url, settings.db_connect_timeout_s)
-    checks["llm"] = llm_status
-    if not llm_ok:
+    provider = settings.llm_provider.strip().lower()
+    checks["llm"] = provider
+    checks["llm_model"] = (
+        settings.simulation_model_id if provider == "scripted" else settings.llm_model
+    )
+    if settings.llm_health_url:
+        llm_ok, llm_status = await _check_llm(
+            settings.llm_health_url, settings.db_connect_timeout_s
+        )
+        checks["llm"] = llm_status
+        if not llm_ok:
+            failures.append(
+                ErrorDetail(
+                    message="LLM health check failed",
+                    field="llm",
+                    code=llm_status,
+                )
+            )
+    elif provider == "scripted" and settings.env.value != "local":
         failures.append(
             ErrorDetail(
-                message="LLM health check failed",
+                message="scripted LLM is only allowed in local environments",
                 field="llm",
-                code=llm_status,
+                code="scripted_outside_local",
             )
         )
 
@@ -157,7 +173,9 @@ async def readyz(request: Request) -> JSONResponse:
         worker_alive = worker_task is not None and not worker_task.done()
         checks["simulation_orchestration"] = "ok"
         checks["simulation_orchestration_persistence"] = str(settings.persistence)
-        checks["simulation_model"] = settings.simulation_model_id
+        checks["simulation_model"] = (
+            settings.simulation_model_id if provider == "scripted" else settings.llm_model
+        )
         configured = (
             settings.simulation_input_price_per_1k > 0
             or settings.simulation_output_price_per_1k > 0

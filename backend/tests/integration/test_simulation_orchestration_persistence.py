@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from shared.app import create_app
 from shared.config import Settings, get_settings
+from shared.demo_seed import seed_demo
 from shared.enums import AuthMode, Persistence
 from shared.ids import new_id
 from simulation_orchestration.application.commands import StreamSimulationProgressRequest
@@ -209,12 +210,22 @@ async def test_public_api_runs_on_postgres_through_worker(
         auth_mode=AuthMode.DEMO,
     )
     app = create_app(settings)
+    await seed_demo(app)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    run_id = new_id("run")
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
+        opened = await client.post(
+            "/api/v1/runs",
+            json={
+                "question": "Persisted simulation",
+                "round_cap": 1,
+                "stakeholder_ids": ["stk_aerztekammer"],
+            },
+        )
+        assert opened.status_code == 202, opened.text
+        run_id = str(opened.json()["run_id"])
         started = await client.post(f"/api/v1/runs/{run_id}:start", json={})
         assert started.status_code == 202, started.text
         job_id = started.json()["job_id"]

@@ -49,11 +49,27 @@ Fail — secret copied unchanged from the example:
 APP_SECRET=some-example-value   # same value in .env.example
 ```
 
+## LLM provider
+
+| Variable | Default | Effect |
+|---|---|---|
+| `LLM_PROVIDER` | `scripted` | `scripted` is local/test only; `openai-compatible` and `azure_ai_foundry` select `HttpLlmClient` |
+| `LLM_BASE_URL` | — | Provider base URL, e.g. `https://api.openai.com/v1` |
+| `LLM_API_KEY` | — | Secret-shaped; required for every non-scripted provider |
+| `LLM_MODEL` | `gpt-4o-mini` | Model id sent to the provider and used by the price table |
+| `LLM_TIMEOUT_S` | `30` | Per-request timeout |
+| `LLM_MAX_RETRIES` | `2` | Retries on timeout, 429 and 5xx; exhausted retries fail the run |
+| `LLM_TEMPERATURE` | `0.2` | Sampling temperature |
+| `LLM_MAX_OUTPUT_TOKENS` | `1024` | Completion cap |
+
+A real provider without `LLM_BASE_URL` or `LLM_API_KEY` aborts boot with a named reason. `scripted`
+outside `ENV=local` is refused; `/readyz` reports which provider is bound.
+
 ## Simulation metering
 
 | Variable | Default | Effect |
 |---|---|---|
-| `SIMULATION_MODEL_ID` | `scripted-local` | The only model the price table can serve; an unknown id aborts boot |
+| `SIMULATION_MODEL_ID` | `scripted-local` | Model id when `LLM_PROVIDER=scripted`; an unknown id aborts boot |
 | `SIMULATION_INPUT_PRICE_PER_1K` | `0.0` | EUR per 1k input tokens, applied when an invocation envelope is recorded |
 | `SIMULATION_OUTPUT_PRICE_PER_1K` | `0.0` | EUR per 1k output tokens |
 | `SIMULATION_ALLOW_ZERO_PRICE` | `true` | When `false`, boot refuses a model priced at zero |

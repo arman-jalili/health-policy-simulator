@@ -1305,6 +1305,17 @@ Track which changes have been synced to implementation:
 
 *Last updated: 2026-11-06*
 
+## 2026-11-06 — Simulation drives the run, real provider adapter (#415–#416)
+
+- **#415:** `NegotiationSessionGateway` replaces the production no-op. The graph prepares from the
+  aggregate, opens rounds, submits evidenced positions, takes one metered turn per real stakeholder,
+  closes each round and lets the run reach `CLOSED`. A failed gateway/provider path retries and then
+  reports `failed`/`dead_letter`, never `completed`.
+- **#416:** `LLM_PROVIDER` selects `scripted` (local only) or `openai-compatible`; `HttpLlmClient`
+  posts `/chat/completions`, records provider token usage and latency, retries 429/5xx/timeout and
+  raises `LLM_PROVIDER_FAILED`. Boot refuses a real provider without base URL/key and scripted
+  outside `ENV=local`. `/readyz` reports `llm: scripted|openai-compatible` and `llm_model`.
+
 ## 2026-11-06 — Demo chain and async corpus port (#411–#414)
 
 - **#411:** `IndexWriterPort.search` is one `async` contract for both families; the PostgreSQL adapter is

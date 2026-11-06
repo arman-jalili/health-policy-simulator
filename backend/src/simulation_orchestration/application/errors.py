@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from shared.errors import ConflictError, NotFoundError, ValidationFailedError
+from shared.errors import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationFailedError,
+)
 
 
 class SimulationJobNotFound(NotFoundError):
@@ -45,6 +50,12 @@ class InvalidPromptTemplate(ValidationFailedError):
     """A prompt template is empty or has no checksum."""
 
     code = "INVALID_PROMPT_TEMPLATE"
+
+
+class LlmProviderFailed(ServiceUnavailableError):
+    """The configured model provider failed after bounded retries; never fall back to the echo."""
+
+    code = "LLM_PROVIDER_FAILED"
 
 
 class UnknownLastEventId(ValidationFailedError):

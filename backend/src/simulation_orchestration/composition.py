@@ -12,7 +12,7 @@ from shared.db import UnitOfWork as DbUnitOfWork
 from shared.enums import Persistence
 from shared.log_setup import get_logger
 from simulation_orchestration.application.errors import UnknownModel
-from simulation_orchestration.application.ports import NegotiationGateway, WorkerLoop
+from simulation_orchestration.application.ports import LLMClient, NegotiationGateway, WorkerLoop
 from simulation_orchestration.application.repositories import (
     InvocationStore,
     JobStore,
@@ -35,19 +35,18 @@ from simulation_orchestration.application.services import (
     StreamSimulationProgress,
 )
 from simulation_orchestration.application.values import ModelPrice
-from simulation_orchestration.infrastructure.bootstrap import (
-    BootstrapMandateNode,
-    BootstrapRoundNode,
-)
 from simulation_orchestration.infrastructure.graph import SequentialWorkflowGraph
-from simulation_orchestration.infrastructure.llm import ScriptedLLMClient
+from simulation_orchestration.infrastructure.llm import HttpLlmClient, ScriptedLLMClient
 from simulation_orchestration.infrastructure.memory import (
     InMemoryInvocationStore,
     InMemoryJobStore,
     InMemoryProgressStore,
     InMemoryPromptRegistry,
 )
-from simulation_orchestration.infrastructure.negotiation import NoopNegotiationGateway
+from simulation_orchestration.infrastructure.negotiation_nodes import (
+    NegotiationPrepareNode,
+    NegotiationTurnNode,
+)
 from simulation_orchestration.infrastructure.pricing import StaticPriceTable
 from simulation_orchestration.infrastructure.repository.sqlalchemy import (
     SqlAlchemyInvocationStore,
@@ -79,8 +78,14 @@ def build_container(
     database: Database,
     negotiation: NegotiationGateway | None = None,
 ) -> SimulationOrchestrationContainer:
-    model_id = settings.simulation_model_id
-    if model_id not in _SUPPORTED_MODELS:
+    if negotiation is None:
+        raise ValueError(
+            "SimulationOrchestration requires a real NegotiationGateway; "
+            "NoopNegotiationGateway is test-only and must not be a production default"
+        )
+    provider = settings.llm_provider.strip().lower()
+    model_id = settings.simulation_model_id if provider == "scripted" else settings.llm_model
+    if provider == "scripted" and model_id not in _SUPPORTED_MODELS:
         raise UnknownModel(f"no price entry for configured model {model_id!r}")
     clock = SystemClock()
     if settings.persistence is Persistence.POSTGRES:
@@ -99,7 +104,21 @@ def build_container(
         and not settings.simulation_allow_zero_price
     ):
         raise ValueError("simulation model prices are zero; set SIMULATION_ALLOW_ZERO_PRICE=true")
-    llm = ScriptedLLMClient(model_id)
+    llm: LLMClient
+    if provider == "scripted":
+        llm = ScriptedLLMClient(model_id)
+    else:
+        if settings.llm_base_url is None or settings.llm_api_key is None:
+            raise ValueError("LLM_BASE_URL and LLM_API_KEY are required for a real provider")
+        llm = HttpLlmClient(
+            model_id=model_id,
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+            timeout_s=settings.llm_timeout_s,
+            max_retries=settings.llm_max_retries,
+            temperature=settings.llm_temperature,
+            max_output_tokens=settings.llm_max_output_tokens,
+        )
     prices = StaticPriceTable(
         {
             model_id: ModelPrice(
@@ -114,14 +133,24 @@ def build_container(
     )
     graph = SequentialWorkflowGraph(
         [
-            BootstrapMandateNode(record_agent_invocation, model=model_id, llm=llm),
-            BootstrapRoundNode(record_agent_invocation, model=model_id, llm=llm),
+            NegotiationPrepareNode(negotiation=negotiation),
+            NegotiationTurnNode(
+                recorder=record_agent_invocation,
+                negotiation=negotiation,
+                llm=llm,
+                model=model_id,
+                synthetic=(
+                    provider == "scripted"
+                    and settings.simulation_input_price_per_1k == 0
+                    and settings.simulation_output_price_per_1k == 0
+                ),
+            ),
         ]
     )
     uow = DbUnitOfWork(database.session_factory)
     run_job = RunSimulationJob(
         graph=graph,
-        negotiation=negotiation or NoopNegotiationGateway(),
+        negotiation=negotiation,
         jobs=jobs,
         invocations=invocations,
         progress=progress,
