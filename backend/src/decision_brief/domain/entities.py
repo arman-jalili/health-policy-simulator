@@ -1,4 +1,4 @@
-"""Frozen entities of DecisionBrief (contract frozen, issue #331).
+"""Frozen entities of DecisionBrief (contract frozen #331, validated by #333).
 
 Canonical: ``.pi/architecture/modules/decision-brief.md`` (Entity relationship)
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from decision_brief.domain.values import CitedStatement, SectionKind
+from decision_brief.domain.values import SECTION_ORDINAL, CitedStatement, SectionKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +22,13 @@ class BriefSection:
     ordinal: int
     statements: tuple[CitedStatement, ...] = ()
 
+    def __post_init__(self) -> None:
+        expected = SECTION_ORDINAL[self.kind]
+        if self.ordinal != expected:
+            raise ValueError(
+                f"section {self.kind.value!r} belongs at ordinal {expected}, not {self.ordinal}"
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class RejectedProposalRecord:
@@ -30,3 +37,9 @@ class RejectedProposalRecord:
     measure: str
     blocking_stakeholders: tuple[str, ...]
     reasons: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.measure.strip():
+            raise ValueError("a rejected proposal record requires the measure")
+        if not self.blocking_stakeholders:
+            raise ValueError("a rejected proposal must name the stakeholders that blocked it")

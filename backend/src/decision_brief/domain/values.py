@@ -1,10 +1,12 @@
-"""Frozen value objects and enums of DecisionBrief (contract frozen, issue #331).
+"""Value objects and enums of DecisionBrief (contract frozen #331, validated by #333).
 
 Canonical: ``.pi/architecture/modules/decision-brief.md`` (Entities and value objects)
 
 The eight section kinds, their ordinals and the evidence vocabulary are the wire contract of the
-artefact: changing a member, a field name or an ordinal re-opens this freeze. Values validate
-nothing here — implementation issues add the guards the invariants require.
+artefact: changing a member, a field name or an ordinal re-opens this freeze. A value that exists is
+a value that is valid: every object below rejects the degenerate form that would make the artefact
+dishonest or unopenable (empty text, a missing generation reference, a version that cannot be a
+successor, a section in the wrong place).
 """
 
 from __future__ import annotations
@@ -89,6 +91,16 @@ class CitationProvenance:
     page_to: int
     source_uri: str
 
+    def __post_init__(self) -> None:
+        if not self.outlet.strip():
+            raise ValueError("citation provenance requires an outlet")
+        if not self.source_uri.strip():
+            raise ValueError("citation provenance requires a source URI")
+        if self.page_from < 1:
+            raise ValueError("citation page numbers are 1-based")
+        if self.page_to < self.page_from:
+            raise ValueError("citation page_to must not precede page_from")
+
 
 @dataclass(frozen=True, slots=True)
 class CitationReference:
@@ -97,6 +109,12 @@ class CitationReference:
     passage_id: PassageId
     provenance: CitationProvenance | None = None
     quote: str | None = None
+
+    def __post_init__(self) -> None:
+        if not str(self.passage_id).strip():
+            raise ValueError("a citation reference requires a passage id")
+        if self.quote is not None and not self.quote.strip():
+            raise ValueError("a citation quote must not be blank when present")
 
     def is_resolved(self) -> bool:
         """A citation is resolved only when the target passage provenance is present."""
@@ -112,6 +130,10 @@ class CitedStatement:
     citations: tuple[CitationReference, ...] = ()
     claim_ids: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ValueError("a cited statement requires text")
+
 
 @dataclass(frozen=True, slots=True)
 class BriefVersion:
@@ -123,6 +145,21 @@ class BriefVersion:
     generated_at: datetime
     previous_version: int | None = None
     reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.number < 1:
+            raise ValueError("a brief version number starts at 1")
+        if not self.snapshot_ref.strip():
+            raise ValueError("a brief version must pin the corpus snapshot it was built from")
+        if self.generated_at.tzinfo is None:
+            raise ValueError("a brief version requires a timezone-aware generation time")
+        if self.previous_version is not None:
+            if self.previous_version < 1 or self.previous_version >= self.number:
+                raise ValueError("a successor must reference an earlier version")
+            if self.reason is None or not self.reason.strip():
+                raise ValueError("a successor version requires a reason")
+        elif self.reason is not None:
+            raise ValueError("only a successor version carries a reason")
 
 
 DEFAULT_DISCLAIMER_TEXT: Final[str] = (
@@ -140,6 +177,14 @@ class SimulationDisclaimer:
     model_reference: str
     prompt_version: str
 
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ValueError("the simulation disclaimer requires text")
+        if not self.model_reference.strip():
+            raise ValueError("the disclaimer must name the model that generated the brief")
+        if not self.prompt_version.strip():
+            raise ValueError("the disclaimer must name the prompt version that generated the brief")
+
 
 @dataclass(frozen=True, slots=True)
 class ActorSummary:
@@ -150,6 +195,10 @@ class ActorSummary:
     constraints: tuple[str, ...] = ()
     adopted_positions: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if not self.institution.strip():
+            raise ValueError("an actor summary requires an institution")
+
 
 @dataclass(frozen=True, slots=True)
 class PositionStance:
@@ -159,6 +208,12 @@ class PositionStance:
     stance: str
     rationale: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.round_no < 1:
+            raise ValueError("negotiation rounds are 1-based")
+        if not self.stance.strip():
+            raise ValueError("a position stance requires a stance")
+
 
 @dataclass(frozen=True, slots=True)
 class PositionTimeline:
@@ -166,6 +221,10 @@ class PositionTimeline:
 
     actor: str
     stances: tuple[PositionStance, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.actor.strip():
+            raise ValueError("a position timeline requires an actor")
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +235,13 @@ class BriefComponentSlot:
     ordinal: int
     completed: bool = False
 
+    def __post_init__(self) -> None:
+        if self.ordinal != SECTION_ORDINAL[self.kind]:
+            raise ValueError(
+                f"section {self.kind.value!r} belongs at ordinal {SECTION_ORDINAL[self.kind]}, "
+                f"not {self.ordinal}"
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class TopicOutcome:
@@ -185,3 +251,14 @@ class TopicOutcome:
     kind: OutcomeKind
     blocking_stakeholders: tuple[str, ...] = ()
     reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.topic.strip():
+            raise ValueError("a topic outcome requires a topic")
+        if self.kind is OutcomeKind.BLOCKED and not self.blocking_stakeholders:
+            raise ValueError("a blocked topic must name who blocked it")
+
+    @property
+    def is_recommendation(self) -> bool:
+        """Whether this outcome may be rendered as agreed advice (never a blocked topic)."""
+        return self.kind is OutcomeKind.RECOMMENDATION
