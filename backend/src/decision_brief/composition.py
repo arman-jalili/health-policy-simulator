@@ -35,6 +35,9 @@ from decision_brief.domain.values import SimulationDisclaimer
 from decision_brief.interfaces.renderer import BriefRenderer
 from shared.config import Settings
 from shared.db import Database
+from shared.log_setup import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,20 +54,58 @@ def build_container(
     settings: Settings,
     database: Database,
     *,
+    disclaimer: SimulationDisclaimer,
+    events: EventPublisher,
+    clock: Clock,
+    ids: IdFactory,
+    uow: UnitOfWork,
     briefs: DecisionBriefRepository,
     history: RunHistorySource,
     consensus: ConsensusSource,
     citations: CitationResolver,
     provenance: ProvenanceDisclosureGate,
     projection: BriefProjectionBuilder,
-    disclaimer: SimulationDisclaimer,
-    events: EventPublisher,
-    clock: Clock,
-    ids: IdFactory,
-    uow: UnitOfWork,
     renderer: BriefRenderer,
 ) -> DecisionBriefContainer:
-    """Build the container; the wiring issue supplies every port and binds ``app.state``."""
-    raise NotImplementedError(
-        "decision-brief composition is implemented by issue-decision-brief-wiring"
+    """Build the container; the runtime supplies every port and binds ``app.state``.
+
+    Ports the runtime has not bound yet are replaced by fail-closed stand-ins, so a publication
+    attempt raises ``BRIEF_GATE_UNAVAILABLE`` instead of skipping a gate. The repository is
+    in-memory until migration ``0502`` gets its SQLAlchemy adapter (runtime-integration issue).
+    """
+    del database  # configuration is validated by the app shell
+
+    logger.info(
+        "decision_brief_wired",
+        persistence=settings.persistence.value,
+        citations=type(citations).__name__,
+        provenance=type(provenance).__name__,
+        projection=type(projection).__name__,
+        repository=type(briefs).__name__,
+    )
+    return DecisionBriefContainer(
+        publish_decision_brief=PublishDecisionBrief(
+            briefs=briefs,
+            history=history,
+            consensus=consensus,
+            citations=citations,
+            provenance=provenance,
+            projection=projection,
+            disclaimer=disclaimer,
+            events=events,
+            clock=clock,
+            ids=ids,
+            uow=uow,
+        ),
+        version_decision_brief=VersionDecisionBrief(
+            briefs=briefs,
+            events=events,
+            clock=clock,
+            ids=ids,
+            uow=uow,
+        ),
+        get_decision_brief=GetDecisionBrief(briefs=briefs),
+        list_brief_versions=ListBriefVersions(briefs=briefs),
+        list_citations=ListCitations(briefs=briefs),
+        renderer=renderer,
     )

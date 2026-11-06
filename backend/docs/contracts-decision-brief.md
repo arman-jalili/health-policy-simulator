@@ -262,13 +262,26 @@ All five travel through the shared outbox; the two blocked-publication events ar
 
 Error bodies use the shared envelope `{code, message, details, trace_id}`.
 
-## Wiring obligations (not yet met — later issues)
+## Wiring (#345)
 
-1. `shared/app.py`: `app.state.decision_brief = build_container(...)` and
-   `app.include_router(decision_brief_router)` (additive union with sibling epics).
-2. `build_container` requires every gate as a keyword argument; no permissive default.
-3. `briefs:publish` must yield 403 for an analyst key.
-4. Migration `0502_decision_brief` is reserved and applied by the persistence issue.
+1. `shared/app.py` binds `app.state.decision_brief = build_container(...)` and
+   `app.include_router(decision_brief_router)`; the routes are in the app's OpenAPI document.
+2. `build_container` requires every port as a keyword argument — there is no permissive default.
+   Ports the runtime has not bound yet (`history`, `consensus`, `provenance`, `projection`) are
+   passed as fail-closed stand-ins (`infrastructure/failclosed.py`) which raise
+   `BRIEF_GATE_UNAVAILABLE` (503) on use: publication stops instead of skipping a gate.
+3. The citation resolver is already real (`EvidenceCorpusCitationResolver` over
+   `corpus.resolve_passage`); the renderer is the frozen `JsonBriefRenderer`.
+4. `briefs:publish` is declared per route and enforced by `require_declared_scope`: an analyst key
+   gets 403 on both POST routes, `runs:read` covers the three GET routes.
+5. Persistence is in-memory until migration `0502_decision_brief` gets its adapter; events are
+   logged by `LoggingEventPublisher` until the shared outbox is bound (runtime-integration issue).
+
+`PublishDecisionBrief.execute` now runs the real path: load the closed run, load the derived
+consensus, assert the provenance disclosures, build the eight sections, check the rejected-proposal
+disclosure, resolve every cited passage, fold the resolutions in, publish through the aggregate
+gates, then save and publish the events in one unit of work. A missing run or consensus raises
+`BRIEF_SOURCE_INCOMPLETE` (409) rather than projecting a partial artefact.
 
 ## Out of bounds (deliberately not frozen)
 
