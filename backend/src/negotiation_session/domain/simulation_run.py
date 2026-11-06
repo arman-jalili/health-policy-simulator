@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from negotiation_session.domain.entities import (
     Argument,
     Coalition,
+    CoalitionOffer,
     ConflictTopic,
     NegotiationMandate,
     NegotiationRound,
@@ -24,6 +25,7 @@ from negotiation_session.domain.entities import (
 from negotiation_session.domain.errors import (
     ArgumentWithoutEvidence,
     ClosedRunImmutable,
+    CoalitionWithoutOffer,
     NegotiationRoundNotFound,
     PhaseRegression,
     PositionNotFound,
@@ -35,6 +37,8 @@ from negotiation_session.domain.errors import (
 from negotiation_session.domain.events import (
     AbstentionRecorded,
     ArgumentSubmitted,
+    CoalitionFormed,
+    CoalitionOffered,
     ConflictTopicOpened,
     DomainEvent,
     InitialPositionStated,
@@ -57,6 +61,7 @@ from negotiation_session.domain.values import (
     ClaimEvidence,
     ClaimStatement,
     CoalitionId,
+    CoalitionOfferId,
     ConflictStatus,
     ConflictTopicId,
     ConsensusLevel,
@@ -317,7 +322,47 @@ class SimulationRun:
         proposal: Proposal,
         coalition_id: CoalitionId,
     ) -> Coalition:
-        raise NotImplementedError("SimulationRun.form_coalition is implemented by issue #293")
+        self._assert_mutable()
+        if not member_ids:
+            raise CoalitionWithoutOffer("a coalition requires at least one member")
+        for member in member_ids:
+            self._assert_bound(member)
+        offers: dict[StakeholderId, CoalitionOffer] = {}
+        for member in member_ids:
+            offer = CoalitionOffer.offer(
+                offer_id=CoalitionOfferId(new_id("cfo")),
+                coalition_id=coalition_id,
+                invited=member,
+                conditions="",
+            )
+            offer.accept()
+            offers[member] = offer
+        coalition = Coalition.form(
+            coalition_id=coalition_id,
+            topic=topic,
+            proposal=proposal,
+            offers=offers,
+        )
+        self.coalitions[coalition_id] = coalition
+        for offer in offers.values():
+            self.events.append(
+                CoalitionOffered(
+                    run_id=self.id,
+                    coalition_id=coalition_id,
+                    invited_id=offer.invited,
+                    conditions=offer.conditions,
+                )
+            )
+        self.events.append(
+            CoalitionFormed(
+                run_id=self.id,
+                topic=topic,
+                coalition_id=coalition_id,
+                members=tuple(coalition.members),
+                proposal=proposal,
+            )
+        )
+        return coalition
 
     def close_round(self, learning: RoundLearning) -> None:
         self._assert_mutable()

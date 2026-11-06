@@ -13,7 +13,9 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from negotiation_session.domain.errors import (
+    CoalitionWithoutOffer,
     DuplicateTurn,
+    InvalidCoalitionOfferTransition,
     PositionNotFound,
     RoundCloseGuardViolation,
     RoundLearningMissing,
@@ -234,13 +236,27 @@ class CoalitionOffer:
         invited: StakeholderId,
         conditions: str,
     ) -> CoalitionOffer:
-        raise NotImplementedError("CoalitionOffer.offer is implemented by issue #293")
+        return cls(
+            id=offer_id,
+            coalition_id=coalition_id,
+            invited=invited,
+            conditions=conditions,
+        )
 
     def accept(self) -> None:
-        raise NotImplementedError("CoalitionOffer.accept is implemented by issue #293")
+        if self.status is not CoalitionOfferStatus.OFFERED:
+            raise InvalidCoalitionOfferTransition(
+                f"offer {self.id} is {self.status} and cannot be accepted"
+            )
+        self.status = CoalitionOfferStatus.ACCEPTED
 
     def decline(self, reason: str) -> None:
-        raise NotImplementedError("CoalitionOffer.decline is implemented by issue #293")
+        if self.status is not CoalitionOfferStatus.OFFERED:
+            raise InvalidCoalitionOfferTransition(
+                f"offer {self.id} is {self.status} and cannot be declined"
+            )
+        self.status = CoalitionOfferStatus.DECLINED
+        self.decline_reason = reason
 
 
 @dataclass(slots=True)
@@ -262,10 +278,39 @@ class Coalition:
         proposal: Proposal,
         offers: Mapping[StakeholderId, CoalitionOffer],
     ) -> Coalition:
-        raise NotImplementedError("Coalition.form is implemented by issue #293")
+        mismatched = [
+            invited
+            for invited, offer in offers.items()
+            if offer.coalition_id != coalition_id or offer.invited != invited
+        ]
+        if mismatched:
+            raise InvalidCoalitionOfferTransition(
+                f"offers do not belong to coalition {coalition_id}: {mismatched}"
+            )
+        return cls(
+            id=coalition_id,
+            topic=topic,
+            proposal=proposal,
+            members=[
+                invited
+                for invited, offer in offers.items()
+                if offer.status is CoalitionOfferStatus.ACCEPTED
+            ],
+            offers=dict(offers),
+        )
 
     def add_member(self, stakeholder: StakeholderId) -> None:
-        raise NotImplementedError("Coalition.add_member is implemented by issue #293")
+        offer = self.offers.get(stakeholder)
+        if offer is None:
+            raise CoalitionWithoutOffer(
+                f"stakeholder {stakeholder} never received an offer for coalition {self.id}"
+            )
+        if offer.status is not CoalitionOfferStatus.ACCEPTED:
+            raise CoalitionWithoutOffer(
+                f"stakeholder {stakeholder} has not accepted the offer ({offer.status})"
+            )
+        if stakeholder not in self.members:
+            self.members.append(stakeholder)
 
 
 @dataclass(slots=True)
