@@ -291,3 +291,14 @@ class TopicOutcome:
     def is_recommendation(self) -> bool:
         """Whether this outcome may be rendered as agreed advice (never a blocked topic)."""
         return self.kind is OutcomeKind.RECOMMENDATION
+
+    def assert_honest(self) -> None:
+        """Refuse a vetoed topic stated as anything but blocked (invariant 8, AC 9).
+
+        Naming a blocker and then rendering the topic as consensus is exactly the smoothing the
+        artefact must never do.
+        """
+        from decision_brief.domain.errors import BlockedOutcomeMisrendered
+
+        if self.blocking_stakeholders and self.kind is not OutcomeKind.BLOCKED:
+            raise BlockedOutcomeMisrendered(self.topic)

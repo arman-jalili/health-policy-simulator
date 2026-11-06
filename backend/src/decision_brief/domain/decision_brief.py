@@ -182,6 +182,7 @@ class DecisionBrief:
             self._assert_statements_evidenced()
             self._assert_citations_resolved()
             self._assert_disclaimer_present()
+            self._assert_outcomes_honest()
         except AppError:
             self.status = BriefStatus.BLOCKED
             raise
@@ -249,6 +250,10 @@ class DecisionBrief:
             first = unresolved[0]
             self.events.append(CitationResolutionFailed(self.id, len(unresolved), first.passage_id))
             raise UnresolvedCitation(str(self.id), str(first.passage_id))
+
+    def _assert_outcomes_honest(self) -> None:
+        for outcome in self.outcomes:
+            outcome.assert_honest()
 
     def _assert_disclaimer_present(self) -> None:
         if self.disclaimer is None:

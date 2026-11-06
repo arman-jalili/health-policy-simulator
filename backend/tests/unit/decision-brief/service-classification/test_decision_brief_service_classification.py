@@ -87,6 +87,7 @@ def test_every_service_is_classified() -> None:
         *(service.__name__ for service in DOMAIN_SERVICES),
         "SectionAssembler",
         "ReproductionCheck",
+        "OutcomeHonestyCheck",
         "CitationResolver",
         "ProvenanceDisclosureGate",
         "BriefRenderer",

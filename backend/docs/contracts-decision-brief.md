@@ -88,6 +88,14 @@ recorded in #332; an empty run list is a legitimate "no refusals" result).
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
 
+## Blocked-outcome honesty (#343)
+
+`TopicOutcome.assert_honest()` refuses any outcome that names a blocker but is stated as
+`recommendation` or `open_dispute`: naming a veto and rendering consensus is exactly the smoothing
+invariant 8 forbids. `OutcomeHonestyCheck` applies the rule to a whole outcome list, and `publish()`
+runs it as the last gate, so a misrendered veto leaves the brief `BLOCKED` and unpublished. The wire
+schema keeps `blocked` as a first-class `TopicOutcomeBody.kind`.
+
 ## Reproduction (#342)
 
 `ReproductionCheck.assert_reproduces(published, regenerated)` compares the two artefacts section by

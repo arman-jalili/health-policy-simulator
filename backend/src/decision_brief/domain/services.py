@@ -47,6 +47,7 @@ SERVICE_CLASSIFICATION: Mapping[str, str] = MappingProxyType(
         "ReproductionChecker": "domain",
         "ReproductionCheck": "domain",
         "OutcomeHonestyPolicy": "domain",
+        "OutcomeHonestyCheck": "domain",
         "CitationResolver": "infrastructure",
         "ProvenanceDisclosureGate": "infrastructure",
         "BriefRenderer": "interfaces",
@@ -120,6 +121,16 @@ class OutcomeHonestyPolicy(Protocol):
     """A veto-blocked or ambiguous topic is stated as such, never smoothed into agreement (AC 9)."""
 
     def assert_honest(self, outcomes: Sequence[TopicOutcome]) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class OutcomeHonestyCheck:
+    """Concrete honesty policy: a vetoed topic must be stated as blocked (AC 9)."""
+
+    def assert_honest(self, outcomes: Sequence[TopicOutcome]) -> None:
+        """Raise ``BlockedOutcomeMisrendered`` for the first vetoed topic not stated as blocked."""
+        for outcome in outcomes:
+            outcome.assert_honest()
 
 
 @dataclass(frozen=True, slots=True)
