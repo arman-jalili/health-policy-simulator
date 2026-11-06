@@ -9,6 +9,7 @@ with no gap and no duplicate.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -27,9 +28,19 @@ class SseFrame:
 
 
 def encode_frame(frame: SseFrame) -> str:
-    raise NotImplementedError("SSE frame encoding is implemented by issue #298")
+    """Render one spec-compliant frame with its id, event name and JSON data line."""
+    payload = json.dumps(dict(frame.data), default=str, sort_keys=True)
+    return f"id: {frame.event_id}\nevent: {frame.event}\ndata: {payload}\n\n"
 
 
 def parse_last_event_id(value: str | None) -> int | None:
     """Return the ordinal encoded in ``Last-Event-ID``; ``None`` means "from the start"."""
-    raise NotImplementedError("Last-Event-ID parsing is implemented by issue #298")
+    if value is None or not value.strip():
+        return None
+    try:
+        ordinal = int(value)
+    except ValueError as error:
+        raise ValueError(f"invalid Last-Event-ID: {value!r}") from error
+    if ordinal < 0:
+        raise ValueError(f"invalid Last-Event-ID: {value!r}")
+    return ordinal
