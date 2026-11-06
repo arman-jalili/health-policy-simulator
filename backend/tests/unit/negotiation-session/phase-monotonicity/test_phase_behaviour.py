@@ -95,28 +95,28 @@ def test_closed_run_refuses_every_mutating_command() -> None:
         STAKEHOLDER_A, TOPIC, ArgumentStance.SUPPORT, Proposal(summary="A"), [_evidence()]
     )
     run.advance_phase(NegotiationPhase.CLOSED)
-    commands = [
-        lambda: run.open_round(),
-        lambda: run.submit_initial_position(
+    with pytest.raises(ClosedRunImmutable):
+        run.open_round()
+    with pytest.raises(ClosedRunImmutable):
+        run.submit_initial_position(
             STAKEHOLDER_A, TOPIC, ArgumentStance.OPPOSE, Proposal(summary="B"), [_evidence()]
-        ),
-        lambda: run.take_turn(
+        )
+    with pytest.raises(ClosedRunImmutable):
+        run.take_turn(
             STAKEHOLDER_A,
             TargetRef(topic=TOPIC),
             ArgumentStance.SUPPORT,
             "text",
             (),
             [_evidence()],
-        ),
-        lambda: run.revise_position(
-            STAKEHOLDER_A, TOPIC, ArgumentStance.OPPOSE, RevisionReason(driver="x")
-        ),
-        lambda: run.record_abstention(STAKEHOLDER_B, TOPIC),
-        lambda: run.track_conflict(TOPIC, {STAKEHOLDER_A: ArgumentStance.SUPPORT}),
-        lambda: run.close_round(_learning(1)),
-    ]
-    for command in commands:
-        with pytest.raises(ClosedRunImmutable):
-            command()
+        )
+    with pytest.raises(ClosedRunImmutable):
+        run.revise_position(STAKEHOLDER_A, TOPIC, ArgumentStance.OPPOSE, RevisionReason(driver="x"))
+    with pytest.raises(ClosedRunImmutable):
+        run.record_abstention(STAKEHOLDER_B, TOPIC)
+    with pytest.raises(ClosedRunImmutable):
+        run.track_conflict(TOPIC, {STAKEHOLDER_A: ArgumentStance.SUPPORT})
+    with pytest.raises(ClosedRunImmutable):
+        run.close_round(_learning(1))
     assert position.is_open
     assert run.phase is NegotiationPhase.CLOSED

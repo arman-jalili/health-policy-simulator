@@ -4,12 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from negotiation_session.domain.entities import (
-    Argument,
-    ConflictTopic,
-    NegotiationMandate,
-    Proposal,
-)
+from negotiation_session.domain.entities import Argument, ConflictTopic, NegotiationMandate
 from negotiation_session.domain.events import ConflictTopicOpened
 from negotiation_session.domain.services import DetectArgumentContradiction
 from negotiation_session.domain.simulation_run import SimulationRun
@@ -19,6 +14,7 @@ from negotiation_session.domain.values import (
     ConflictStatus,
     ConflictTopicId,
     MandateId,
+    Proposal,
     ProposalComponent,
     ProposalQuantification,
     RunId,
