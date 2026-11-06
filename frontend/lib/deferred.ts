@@ -42,22 +42,6 @@ export const DEFERRED_ENTRIES: readonly DeferredEntry[] = [
     },
   },
   {
-    id: "D-FE-003",
-    title: { de: "Negotiation-SSE wird vom Job-SSE verdeckt (#420)", en: "Negotiation SSE is shadowed by job SSE (#420)" },
-    truth: {
-      de: "Beide Routen registrieren GET /api/v1/runs/{run_id}/stream; die Orchestrierung wird zuerst eingebunden und gewinnt.",
-      en: "Both routes register GET /api/v1/runs/{run_id}/stream; orchestration is mounted first and wins.",
-    },
-    workaround: {
-      de: "Die Konsole pollt GET /api/v1/runs/{run_id}/events; useRunFeed ist der einzige Wechselpunkt.",
-      en: "The console polls GET /api/v1/runs/{run_id}/events; useRunFeed is the single switch point.",
-    },
-    removal: {
-      de: "Eine der Routen unter einem eigenen Pfad mounten (z. B. /stream/negotiation).",
-      en: "Mount one route under a distinct path (e.g. /stream/negotiation).",
-    },
-  },
-  {
     id: "D-FE-004",
     title: { de: "Ereignis-Endpunkt ohne cursor und limit", en: "Events endpoint has no cursor or limit" },
     truth: {

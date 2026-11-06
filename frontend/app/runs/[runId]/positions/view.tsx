@@ -20,7 +20,7 @@ import {
   uniqueTopics,
   type PositionView,
 } from "@/features/positions/derive";
-import { useFormCoalition, useRevisePosition, useRunFeed } from "@/features/run/hooks";
+import { useFormCoalition, useRevisePosition, useRunDriver, useRunFeed } from "@/features/run/hooks";
 import { useStakeholderNames } from "@/features/stakeholders/names";
 import { useDiscloseProvenance, useProvenance } from "@/features/governance/hooks";
 import { ApiError } from "@/lib/http";
@@ -33,6 +33,7 @@ export default function PositionsPage() {
   const params = useParams<{ runId: string }>();
   const runId = typeof params.runId === "string" ? params.runId : "";
   const feed = useRunFeed(runId);
+  const driver = useRunDriver(runId);
   const names = useStakeholderNames();
   const positions = useMemo(() => derivePositions(feed.events), [feed.events]);
   const argumentsList = useMemo(() => deriveArguments(feed.events), [feed.events]);
@@ -58,6 +59,9 @@ export default function PositionsPage() {
         <EmptyState title={t("positions.noPositions")} />
       ) : (
         <>
+          {driver.automated && (
+            <p className="text-2xs text-ink-muted">{t("positions.automatedFootnote")}</p>
+          )}
           <Card>
             <CardBody>
               <StanceMatrix

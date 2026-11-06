@@ -23,7 +23,7 @@ import {
 } from "@/features/consensus/hooks";
 import type { AssessImpactResponse } from "@/features/consensus/contracts";
 import { StanceBadge } from "@/features/run/components/stance-badge";
-import { useRun } from "@/features/run/hooks";
+import { useRun, useRunDriver } from "@/features/run/hooks";
 import { useStakeholderNames } from "@/features/stakeholders/names";
 import { enumLabel } from "@/lib/i18n";
 import { formatEur, formatPercent, truncateMiddle } from "@/lib/format";
@@ -34,6 +34,7 @@ export default function ConsensusPage() {
   const params = useParams<{ runId: string }>();
   const runId = typeof params.runId === "string" ? params.runId : "";
   const run = useRun(runId);
+  const driver = useRunDriver(runId);
   const names = useStakeholderNames();
   const consensus = useConsensus(runId);
   const openConflicts = useOpenConflicts(runId);
@@ -97,6 +98,9 @@ export default function ConsensusPage() {
           ) : (
             <>
               <SupportThresholdChart records={records} />
+              {driver.automated && (
+                <p className="text-2xs text-ink-muted">{t("consensus.automatedFootnote")}</p>
+              )}
               <div className="space-y-3">
                 {records.map((record) => (
                   <div
@@ -121,7 +125,9 @@ export default function ConsensusPage() {
                                   : "danger"
                           }
                         >
-                          {enumLabel("consensusOutcome", record.outcome, locale)}
+                          {driver.automated && record.support >= 1
+                            ? t("consensus.automatedSupport")
+                            : enumLabel("consensusOutcome", record.outcome, locale)}
                         </StatusPill>
                         <span className="text-2xs tabular text-ink-muted">
                           {formatPercent(record.support, locale, 0)} /{" "}

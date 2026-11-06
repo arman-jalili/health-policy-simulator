@@ -366,6 +366,8 @@ export const UsageResponseSchema = z.object({
   cost: DecimalString,
   by_stakeholder: z.array(StakeholderUsageSchema),
   by_round: z.array(RoundUsageSchema),
+  model: z.string().optional(),
+  provider: z.string().optional(),
 });
 export type UsageResponse = z.infer<typeof UsageResponseSchema>;
 

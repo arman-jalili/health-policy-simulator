@@ -33,18 +33,6 @@ the five pack ids are shown by topic and feed every picker.
 
 ---
 
-## D-FE-003 — Negotiation SSE is shadowed by job SSE (#420)
-
-**What is true:** both contexts register `GET /api/v1/runs/{run_id}/stream`. SimulationOrchestration
-is mounted first and wins, so the negotiation event stream is unreachable.
-
-**UI instead:** the console polls `GET /runs/{run_id}/events`; `useRunFeed` is the only switch point
-for a future negotiation stream.
-
-**Removal:** mount one route under a distinct path (for example `/stream/negotiation`).
-
----
-
 ## D-FE-004 — Events endpoint has no `cursor` / `limit`
 
 **What is true:** per OpenAPI, `GET /runs/{id}/events` accepts only `until_round`.

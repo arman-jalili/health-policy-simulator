@@ -71,6 +71,7 @@ export const RunIndexEntrySchema = z.object({
   round: z.number().nullable(),
   closed: z.boolean().nullable(),
   mandateHash: z.string().nullish(),
+  driver: z.enum(["manual", "automated"]).optional(),
 });
 
 export type RunIndexEntry = z.infer<typeof RunIndexEntrySchema>;

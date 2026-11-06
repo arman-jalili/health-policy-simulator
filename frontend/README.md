@@ -73,6 +73,7 @@ Playwright is opt-in:
 
 ```bash
 HPS_E2E=1 pnpm e2e        # needs the backend, the seed, and `pnpm dev` on port 3000
+HPS_E2E=1 HPS_E2E_RUN_ID=run_… pnpm e2e  # also runs axe on console, consensus and brief
 ```
 
 ## Demo
