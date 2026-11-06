@@ -2,6 +2,8 @@
 
 ## Module Status
 
+**Ingestion pipeline:** API ingestion is no longer a dead end: `:segment`, `:index` and `:publish` expose the remaining stages, and `citable` means at least one publishable passage exists. `CORPUS_MAX_PAGES` refuses oversized PDFs before extraction.
+
 **Status:** Implemented — contract frozen and behaviour delivered 2026-11-05
 **Depends:** — (foundation context, no upstream module)
 **Last reviewed:** 2026-11-05

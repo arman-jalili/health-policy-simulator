@@ -61,6 +61,7 @@ APP_SECRET=some-example-value   # same value in .env.example
 | `LLM_MAX_RETRIES` | `2` | Retries on timeout, 429 and 5xx; exhausted retries fail the run |
 | `LLM_TEMPERATURE` | `0.2` | Sampling temperature |
 | `LLM_MAX_OUTPUT_TOKENS` | `1024` | Completion cap |
+| `CORPUS_MAX_PAGES` | `500` | Refuse a PDF before extraction when its page count exceeds this |
 
 A real provider without `LLM_BASE_URL` or `LLM_API_KEY` aborts boot with a named reason. `scripted`
 outside `ENV=local` is refused; `/readyz` reports which provider is bound.

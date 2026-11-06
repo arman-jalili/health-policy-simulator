@@ -235,7 +235,7 @@ class TestWiredEndpoints:
         body = response.json()
         assert body["document_id"].startswith("doc_")
         assert body["quality"]["method"] == "native"
-        assert body["citable"] is True
+        assert body["citable"] is False  # extraction alone publishes no passage
 
     async def test_ingestion_run_round_trip(self, client: httpx.AsyncClient) -> None:
         created = await client.post(
@@ -249,8 +249,9 @@ class TestWiredEndpoints:
         read = await client.get(f"/api/v1/corpus/ingestion-runs/{run_id}")
 
         assert read.status_code == 200
-        assert read.json()["status"] == "running"
-        assert read.json()["attempted"] == 0
+        assert read.json()["status"] == "completed"
+        assert read.json()["attempted"] == 1
+        assert read.json()["failed"] == 1
 
     async def test_unknown_ingestion_run_uses_the_error_envelope(
         self, client: httpx.AsyncClient
@@ -320,7 +321,7 @@ class TestWiredEndpoints:
         body = read.json()
         assert body["document_id"] == document_id
         assert body["source_type"] == "legislation"
-        assert body["citable"] is True
+        assert body["citable"] is False  # extraction alone publishes no passage
 
 
 class TestContractProofing:

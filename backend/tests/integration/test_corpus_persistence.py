@@ -186,7 +186,7 @@ def test_boot_wiring_and_restart_round_trip(tmp_path: Path) -> None:
                 )
             assert response.status_code == 202, response.text
             body = response.json()
-            assert body["citable"] is True
+            assert body["citable"] is False  # no passages until segment + index
             document_id = body["document_id"]
             document_ids.append(document_id)
 

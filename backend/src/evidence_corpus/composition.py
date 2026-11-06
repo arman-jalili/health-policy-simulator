@@ -113,15 +113,15 @@ def build_container(
     """Wire the corpus for the configured persistence family."""
     app_settings = settings or get_settings()
     if app_settings.persistence is Persistence.MEMORY:
-        return _build_memory_container(actor=actor)
+        return _build_memory_container(actor=actor, max_pages=app_settings.corpus_max_pages)
     if database is None:
         raise ValueError(
             "PERSISTENCE=postgres requires a Database; the application shell owns the engine"
         )
-    return _build_postgres_container(database, actor=actor)
+    return _build_postgres_container(database, actor=actor, max_pages=app_settings.corpus_max_pages)
 
 
-def _build_memory_container(actor: str) -> CorpusContainer:
+def _build_memory_container(actor: str, *, max_pages: int = 500) -> CorpusContainer:
     """Database-less adapters for unit tests and an explicit local demo."""
     documents = InMemoryDocumentRepository()
     articles = InMemoryArticleRepository(documents)
@@ -141,10 +141,13 @@ def _build_memory_container(actor: str) -> CorpusContainer:
         events=events,
         index_writer=index_writer,
         actor=actor,
+        max_pages=max_pages,
     )
 
 
-def _build_postgres_container(database: Database, actor: str) -> CorpusContainer:
+def _build_postgres_container(
+    database: Database, actor: str, *, max_pages: int = 500
+) -> CorpusContainer:
     """PostgreSQL adapters sharing one unit of work with the outbox publisher."""
     unit_of_work = UnitOfWork(database.session_factory)
     return _wire(
@@ -157,6 +160,7 @@ def _build_postgres_container(database: Database, actor: str) -> CorpusContainer
         events=OutboxEventPublisher(unit_of_work),
         index_writer=PostgresIndexWriter(database.session_factory),
         actor=actor,
+        max_pages=max_pages,
         unit_of_work=unit_of_work,
     )
 
@@ -172,11 +176,20 @@ def _wire(
     events: EventPublisher,
     index_writer: IndexWriterPort,
     actor: str,
+    max_pages: int = 500,
     unit_of_work: UnitOfWork | None = None,
 ) -> CorpusContainer:
     extract_handler = ExtractDocumentTextHandler(
-        documents, PyMuPdfExtractor(), TesseractOcrExtractor(), events, actor=actor
+        documents,
+        PyMuPdfExtractor(),
+        TesseractOcrExtractor(),
+        events,
+        actor=actor,
+        max_pages=max_pages,
     )
+    ingest_handler = IngestDocumentHandler(documents, extract_handler)
+    segment_handler = SegmentArticleHandler(documents, events, actor=actor)
+    index_handler = IndexIngestedPassagesHandler(documents, index_writer, events, actor=actor)
     return CorpusContainer(
         documents=documents,
         articles=articles,
@@ -190,17 +203,20 @@ def _wire(
             documents, articles, events, actor=actor
         ),
         link_canonical_article=LinkCanonicalArticleHandler(articles, events, actor=actor),
-        index_ingested_passages=IndexIngestedPassagesHandler(
-            documents, index_writer, events, actor=actor
-        ),
+        index_ingested_passages=index_handler,
         index_writer=index_writer,
-        ingest_document=IngestDocumentHandler(documents, extract_handler),
-        start_ingestion_run=StartIngestionRunHandler(ingestion_runs),
+        ingest_document=ingest_handler,
+        start_ingestion_run=StartIngestionRunHandler(
+            ingestion_runs,
+            ingest=ingest_handler,
+            segment=segment_handler,
+            index=index_handler,
+        ),
         get_ingestion_run=GetIngestionRunHandler(ingestion_runs),
         list_authority_rules=ListAuthorityRulesHandler(authority_rules),
         pin_corpus_snapshot=PinCorpusSnapshotHandler(documents, snapshots, events, actor=actor),
         get_corpus_snapshot=GetCorpusSnapshotHandler(snapshots),
-        segment_article=SegmentArticleHandler(documents, events, actor=actor),
+        segment_article=segment_handler,
         resolve_passage=ResolvePassageHandler(passages),
         get_document=GetDocumentHandler(documents),
         unit_of_work=unit_of_work,

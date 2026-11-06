@@ -47,7 +47,10 @@ class PyMuPdfExtractor:
 
         if pages == 0:
             return PageTextFacts(
-                has_text_layer=False, average_chars_per_page=0.0, missing_glyph_rate=0.0
+                has_text_layer=False,
+                average_chars_per_page=0.0,
+                missing_glyph_rate=0.0,
+                page_count=0,
             )
 
         damaged = len(REPLACEMENT_CHARACTERS.findall(text))
@@ -55,6 +58,7 @@ class PyMuPdfExtractor:
             has_text_layer=bool(text.strip()),
             average_chars_per_page=len(text) / pages,
             missing_glyph_rate=damaged / len(text) if text else 0.0,
+            page_count=pages,
         )
 
     async def extract(self, source_uri: str) -> ExtractionOutcome:

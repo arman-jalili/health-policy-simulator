@@ -76,6 +76,12 @@ class ExtractionFailed(ValidationFailedError):
         super().__init__(f"extraction failed for {source_uri}: {reason}")
 
 
+class DocumentTooLarge(ValidationFailedError):
+    """A source document exceeds the configured page budget; refused before extraction."""
+
+    code = "DOCUMENT_TOO_LARGE"
+
+
 class RunAlreadyClosed(ConflictError):
     """An ingestion run is closed once; late outcomes are refused."""
 

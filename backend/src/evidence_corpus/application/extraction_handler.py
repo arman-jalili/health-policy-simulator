@@ -12,7 +12,7 @@ from evidence_corpus.application.commands import ExtractDocumentTextRequest
 from evidence_corpus.application.dto import ExtractionOutcome
 from evidence_corpus.application.events import EventPublisher
 from evidence_corpus.application.ports import ExtractionPort, OcrPort
-from evidence_corpus.domain.errors import DocumentNotFound, ExtractionFailed
+from evidence_corpus.domain.errors import DocumentNotFound, DocumentTooLarge, ExtractionFailed
 from evidence_corpus.domain.repositories import DocumentRepository
 from evidence_corpus.domain.rules import PageFactsOcrSelection
 from evidence_corpus.domain.values import ExtractionMethod
@@ -29,6 +29,7 @@ class ExtractDocumentTextHandler:
         events: EventPublisher,
         selection: PageFactsOcrSelection | None = None,
         actor: str = "system",
+        max_pages: int = 500,
     ) -> None:
         self._documents = documents
         self._extraction = extraction
@@ -36,6 +37,7 @@ class ExtractDocumentTextHandler:
         self._events = events
         self._selection = selection or PageFactsOcrSelection()
         self._actor = actor
+        self._max_pages = max_pages
 
     async def execute(self, request: ExtractDocumentTextRequest) -> ExtractionOutcome:
         document = await self._documents.get(request.document_id)
@@ -43,6 +45,10 @@ class ExtractDocumentTextHandler:
             raise DocumentNotFound(request.document_id)
 
         facts = await self._extraction.probe(document.source_uri)
+        if facts.page_count > self._max_pages:
+            raise DocumentTooLarge(
+                f"document has {facts.page_count} pages; limit is {self._max_pages}"
+            )
         method = self._selection.select(facts)
         try:
             if method is ExtractionMethod.OCR:

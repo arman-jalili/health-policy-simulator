@@ -1305,6 +1305,16 @@ Track which changes have been synced to implementation:
 
 *Last updated: 2026-11-06*
 
+## 2026-11-06 — Corpus ingestion is no longer a dead end (#424)
+
+- `POST /corpus/documents/{id}:segment`, `:index` and `:publish` expose article boundaries and passage
+  indexing; an API-only document → segment → index → snapshot → pack now yields citable candidates.
+- Segmentation publishes a body passage so the indexer has real text; `citable` means at least one
+  publishable passage, not merely acceptable extraction.
+- `POST /corpus/ingestion-runs` processes its `paths` document-by-document and records attempted/
+  accepted/failed counts instead of leaving them silently zero.
+- `CORPUS_MAX_PAGES` refuses oversized documents before extraction with `DOCUMENT_TOO_LARGE`.
+
 ## 2026-11-06 — Stream route, test isolation, honest automated negotiation (#420–#423)
 
 - **#420:** negotiation SSE moved to `GET /runs/{id}/negotiation/stream`; `/runs/{id}/stream` remains the

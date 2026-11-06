@@ -179,7 +179,7 @@ class TestProvenanceResolution:
         )
 
         assert view.document_id == document.id
-        assert view.citable is True
+        assert view.citable is False  # an article without a passage is not citable
         assert [article.headline for article in view.articles] == ["Kassenstellen"]
 
 

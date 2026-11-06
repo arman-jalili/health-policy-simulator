@@ -57,6 +57,14 @@ class StartIngestionRunResponse(BaseModel):
     status: str
 
 
+class DocumentStageResponse(BaseModel):
+    document_id: str
+    citable: bool
+    article_count: int = 0
+    passage_count: int = 0
+    index: IndexManifestBody | None = None
+
+
 class IngestionRunResponse(BaseModel):
     run_id: str
     shard_label: str
