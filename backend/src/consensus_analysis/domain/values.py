@@ -187,6 +187,11 @@ class StanceSnapshot:
 
     def __post_init__(self) -> None:
         _require_unit_interval(self.weight, "StanceSnapshot.weight")
+        if self.recorded and self.log_position is None:
+            raise ValueError(
+                "a recorded stance must cite the log position it came from; "
+                "construct it with recorded=False if it has no provenance"
+            )
 
     @property
     def supports(self) -> bool:

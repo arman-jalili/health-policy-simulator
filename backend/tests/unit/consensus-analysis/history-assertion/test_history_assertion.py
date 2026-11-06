@@ -60,9 +60,39 @@ def _record(stances: dict[StakeholderId, StanceSnapshot]) -> ConsensusRecord:
 def test_a_recorded_stance_passes_the_assertion() -> None:
     stakeholder = StakeholderId("stk_1")
     record = _record(
-        {stakeholder: StanceSnapshot(stakeholder=stakeholder, stance=Stance.SUPPORT, recorded=True)}
+        {
+            stakeholder: StanceSnapshot(
+                stakeholder=stakeholder,
+                stance=Stance.SUPPORT,
+                recorded=True,
+                log_position=LogPosition(7),
+            )
+        }
     )
     record.assert_stances_recorded()
+
+
+def test_a_recorded_stance_without_a_log_position_cannot_be_constructed() -> None:
+    """Invariant 2 at construction time: provenance is not optional."""
+    with pytest.raises(ValueError, match="log position"):
+        StanceSnapshot(stakeholder=StakeholderId("stk_1"), stance=Stance.SUPPORT, recorded=True)
+
+
+def test_every_offending_stance_is_named_not_just_the_first() -> None:
+    record = _record(
+        {
+            StakeholderId("stk_a"): StanceSnapshot(
+                stakeholder=StakeholderId("stk_a"), stance=Stance.SUPPORT, recorded=False
+            ),
+            StakeholderId("stk_b"): StanceSnapshot(
+                stakeholder=StakeholderId("stk_b"), stance=Stance.OPPOSE, recorded=False
+            ),
+        }
+    )
+    with pytest.raises(StanceNotInHistory) as raised:
+        record.assert_stances_recorded()
+    assert raised.value.missing == ("stk_a", "stk_b")
+    assert len(raised.value.details) == 2
 
 
 def test_an_unrecorded_stance_fails_the_assertion_with_its_id() -> None:
