@@ -155,11 +155,23 @@ def test_value_objects_are_immutable_by_value() -> None:
 
 
 def test_stance_snapshot_classifies_approval_and_dissent() -> None:
-    from consensus_analysis.domain.values import StakeholderId
+    from consensus_analysis.domain.values import LogPosition, StakeholderId
 
-    support = StanceSnapshot(stakeholder=StakeholderId("stk_1"), stance=Stance.SUPPORT)
-    oppose = StanceSnapshot(stakeholder=StakeholderId("stk_2"), stance=Stance.OPPOSE)
-    abstain = StanceSnapshot(stakeholder=StakeholderId("stk_3"), stance=Stance.ABSTAIN)
+    support = StanceSnapshot(
+        stakeholder=StakeholderId("stk_1"),
+        stance=Stance.SUPPORT,
+        log_position=LogPosition(0),
+    )
+    oppose = StanceSnapshot(
+        stakeholder=StakeholderId("stk_2"),
+        stance=Stance.OPPOSE,
+        log_position=LogPosition(1),
+    )
+    abstain = StanceSnapshot(
+        stakeholder=StakeholderId("stk_3"),
+        stance=Stance.ABSTAIN,
+        log_position=LogPosition(2),
+    )
     assert support.supports is True
     assert oppose.disapproves is True
     assert abstain.supports is False

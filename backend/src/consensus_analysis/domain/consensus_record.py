@@ -125,9 +125,17 @@ class ConsensusRecord:
         return outcome
 
     def assert_stances_recorded(self) -> None:
-        """Refuse any stance whose log provenance is missing (AC 3)."""
+        """Refuse any stance whose log provenance is missing (AC 3).
+
+        Two ways to lack provenance are refused, and both are named in the error so the caller can
+        repair the input: a stance flagged as not recorded, and a stance that cites no log position.
+        The second is already impossible at construction time; checking it again here means the
+        aggregate does not depend on every producer having been careful.
+        """
         missing = tuple(
-            str(snapshot.stakeholder) for snapshot in ordered(self.stances) if not snapshot.recorded
+            str(snapshot.stakeholder)
+            for snapshot in ordered(self.stances)
+            if not snapshot.recorded or snapshot.log_position is None
         )
         if missing:
             raise StanceNotInHistory(missing)
