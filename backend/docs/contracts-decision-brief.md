@@ -88,6 +88,14 @@ recorded in #332; an empty run list is a legitimate "no refusals" result).
 Repositories (`domain/repositories.py`): `get(brief_id)`, `save(brief)`, `versions_for_run(run_id)`
 — all async. Table/column layout is **out of bounds**.
 
+## Immutability (#340)
+
+Publishing is a one-way freeze: after `publish()` succeeds, any attribute assignment raises
+`PublishedBriefIsImmutable`, and the section map becomes a `_FrozenSections` mapping whose every
+mutator (`__setitem__`, `__delitem__`, `clear`, `pop`, `popitem`, `setdefault`, `update`) raises the
+same error. The audit `events` list stays appendable by design — the outbox drains it. A *blocked*
+draft is not frozen, so a rejected publication can be fixed and retried; only `published` is final.
+
 ## Rejected-proposal disclosure (#337)
 
 `SectionAssembler.assemble` renders every record of `RunProjection.rejected_proposals` inside
