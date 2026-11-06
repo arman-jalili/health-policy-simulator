@@ -248,7 +248,7 @@ class SimulationRun:
         self._assert_mutable()
         self._assert_bound(stakeholder)
         round_ = self.current_round
-        position = round_.require_open_position(stakeholder, topic)
+        position = self.open_position(stakeholder, topic)
         if not reason.cites(argument_ids=self._argument_ids(), pack_ids=self._evidence_ids()):
             self.events.append(
                 PositionRevisionRejected(
@@ -367,7 +367,11 @@ class SimulationRun:
         return drained
 
     def open_position(self, stakeholder: StakeholderId, topic: TopicRef) -> Position:
-        return self.current_round.require_open_position(stakeholder, topic)
+        for round_ in reversed(self.rounds):
+            position = round_.open_position_for(stakeholder, topic)
+            if position is not None:
+                return position
+        raise PositionNotFound(f"no open position for {stakeholder} on {topic}")
 
     def position_by_id(self, position_id: PositionId) -> Position:
         for round_ in self.rounds:
