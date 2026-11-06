@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 from claim_validation.interfaces.published import ClaimVerdictView
 from consensus_analysis.application.dto import ReferenceFigureView
+from consensus_analysis.domain.errors import UnknownVetoClass
 from consensus_analysis.domain.values import DocumentedExample, ProposalClass
 from stakeholder_model.interfaces.published import StakeholderProfileView
 
@@ -22,10 +23,20 @@ class StakeholderPowersAcl:
     """Map the partner profile contract to the domain veto vocabulary."""
 
     def to_veto_classes(self, profile: StakeholderProfileView) -> frozenset[ProposalClass]:
-        """Return the classes this institution may block; an empty set is not "no veto record"."""
-        raise NotImplementedError(
-            "StakeholderPowersAcl.to_veto_classes is implemented by issue #309"
-        )
+        """Return the classes this institution may block.
+
+        An empty set means the institution declared no blocking competence — never "veto rights
+        were not loaded". An unrecognised class raises instead of being dropped, because dropping it
+        would restore consensus for a class that can in fact be blocked (AC 1).
+        """
+        classes: set[ProposalClass] = set()
+        for right in profile.veto_rights:
+            value = str(right.proposal_class)
+            try:
+                classes.add(ProposalClass(value))
+            except ValueError as error:
+                raise UnknownVetoClass(value) from error
+        return frozenset(classes)
 
 
 class ReferenceFigureAcl:
