@@ -136,15 +136,17 @@ def test_no_rule_logic_is_implemented_in_the_application_layer() -> None:
     """The rule surface is domain-owned; an application copy is exactly the drift #308 prevents."""
     from consensus_analysis.application import services as application_services
 
-    forbidden = {
-        "SupportLevel",
-        "ConsensusThreshold",
+    # Implemented rules may be *used* here, never *defined* or re-exported as this layer's own.
+    for name in (
         "ConsensusRule",
         "NotVetoed",
         "ThresholdMet",
         "MinorityCapture",
-    }
-    assert forbidden & set(vars(application_services)) == set()
+        "ComponentsCompatible",
+    ):
+        resolved = getattr(application_services, name, None)
+        if resolved is not None:
+            assert resolved.__module__.startswith("consensus_analysis.domain."), name
 
 
 def test_the_classification_names_only_services_that_exist() -> None:

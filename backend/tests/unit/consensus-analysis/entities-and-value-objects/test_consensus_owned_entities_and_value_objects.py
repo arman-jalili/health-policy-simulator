@@ -60,6 +60,7 @@ def test_entity_fields_are_frozen() -> None:
         "summary",
         "cost_eur",
         "requires",
+        "conflicts_with",
     ]
     assert field_names(RejectedProposal) == ["id", "measure", "support", "reason", "holders"]
     assert field_names(ImpactAssessment) == [
