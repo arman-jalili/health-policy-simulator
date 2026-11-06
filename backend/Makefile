@@ -4,7 +4,7 @@ PYTHON ?= .venv/bin/python
 
 # Idempotent local-demo bootstrap; refused outside ENV=local.
 demo-seed:
-	$(PYTHON) -m shared.demo_seed
+	@$(PYTHON) -m shared.demo_seed
 
 # Full HTTP walkthrough against a migrated database; starts and stops the API.
 demo-walkthrough:

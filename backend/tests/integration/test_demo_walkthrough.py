@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -42,6 +47,31 @@ async def demo_client() -> AsyncIterator[tuple[FastAPI, httpx.AsyncClient, str]]
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield app, client, seed.pack_ids["kassenstellen"]
     await app.state.db.dispose()
+
+
+def test_seed_cli_keeps_stdout_parseable_at_default_log_level() -> None:
+    backend = Path(__file__).resolve().parents[2]
+    env = {
+        **os.environ,
+        "ENV": "local",
+        "AUTH_MODE": "demo",
+        "PERSISTENCE": "memory",
+        "DATABASE_URL": DATABASE_URL,
+        "LOG_LEVEL": "INFO",
+        "LLM_PROVIDER": "scripted",
+    }
+    completed = subprocess.run(
+        [sys.executable, "-m", "shared.demo_seed"],
+        cwd=backend,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    payload = json.loads(completed.stdout)
+    assert payload["snapshot_id"].startswith("snp_")
+    assert completed.stderr  # structured logs went to stderr, not the JSON file
 
 
 async def test_seed_is_idempotent_in_the_memory_family() -> None:
