@@ -139,6 +139,48 @@ and the argument's invocation, and `/readyz` reports `governance_provenance: wir
 | D-003 | Retrieval evaluation set lacks paraphrase/synonym cases (issue #99 follow-up). Current artifact: lexical 0.20 → hybrid 1.00 on 50 near-identical synthetic strings | ~2 h (write 15 cases) | The delta measures digit discrimination, not semantic recall; do not quote it as retrieval quality |
 | D-004 | `semantic` score comes from `hashing-char3gram-v1` (morphology-aware fuzzy match), not a neural encoder | ~half day (bind encoder + pgvector HNSW) | Field name invites overclaiming; honest label is "semantic (hashing)" |
 
+## D-010 — Operator task: ingest the 3 GB PDF corpus
+
+**Status:** Deferred (not started; operator chore, no code change expected)
+**Owner:** operator (Arman)
+**Recorded:** 2026-11-06 · `main @ a309c11`
+**Estimate:** 1 h setup + unattended runtime (measure on one document first)
+**Runbook:** `docs/corpus-ingestion.md` · **tool:** `scripts/ingest_corpus.py` · **blocks:** nothing in CI
+
+### Why it is not done yet
+
+The user has a ~3 GB PDF corpus and will ingest it after the frontend is built. Nothing in the repository is
+waiting on it: the demo runs on `demo-corpus-v1` (one sample PDF, five topics). This entry exists so the task
+is not lost — the register is read by anyone opening the module docs, the issue tracker is not.
+
+### What is true today
+
+| Aspect | State |
+|---|---|
+| Ingestion over HTTP | **impossible for a corpus** — `POST /corpus/documents` extracts only; segmentation and indexing have no route (**#424**), `POST /corpus/ingestion-runs` only records a row |
+| Working path | `scripts/ingest_corpus.py` (offline, resumable, per-document commit, paragraph chunking, snapshot pin); verified end to end against a migrated database |
+| Corpus in the repo | `samples/demo-corpus.pdf` only (3 pages); `make demo-seed` pins `demo-corpus-v1` with 5 topics, 5 reference figures, 5 packs |
+| Existing packs | reference `demo-corpus-v1` — a new corpus needs new packs and a new seed JSON for the frontend |
+
+### Steps (carry them out in this order)
+
+1. **Run the backend suite first, not after**: `pytest -m integration` executes `alembic downgrade base` on
+   `DATABASE_URL` and wipes the database (**#421**). Ingest is the last step before a demo.
+2. Check for scans (`chars/page ≈ 0` ⇒ OCR at seconds per page, a different job) — snippet in the runbook.
+3. Split monoliths (`qpdf --split-pages=200`); target 20–80 MB / 100–500 pages per file.
+4. `python scripts/ingest_corpus.py material/ --snapshot-label corpus-2026 --dry-run`, then `--limit 10` to
+   measure the rate, then the full run under `nohup`.
+5. Assemble packs against the printed `snapshot_id` (`POST /evidence/packs`), or ingest a curated
+   `material/demo/` into its own `demo-corpus-v2` snapshot for the jury run.
+6. Update the seed JSON the frontend imports (`/settings → Demo-Bootstrap`) or re-run `make demo-seed`.
+
+### Exit criterion
+
+A pack assembled against the new snapshot returns passages from the ingested PDFs, and a run uses that pack for
+all nine positions. Then delete this entry and note the snapshot label here.
+
+---
+
 ## Closed deferrals
 
 | ID | Item | Closed by |

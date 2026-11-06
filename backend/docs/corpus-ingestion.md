@@ -2,6 +2,15 @@
 
 Canonical: `.pi/architecture/modules/evidence-corpus.md` (pipeline), `docs/demo-walkthrough.md` (small path).
 
+> **Status: not started (deferred as D-010, `.pi/architecture/DEFERRED.md`).**
+> The operator has a ~3 GB corpus to ingest *after* the frontend is built. Nothing depends on it today: the
+> demo runs on the one-document `demo-corpus-v1` snapshot. When the work is done, record the snapshot label in
+> D-010 and remove the entry.
+>
+> Before running anything: **finish the backend test suite first** — `pytest -m integration` runs
+> `alembic downgrade base` on `DATABASE_URL` and wipes the database (issue #421). Ingest is the last step
+> before a demo.
+
 ## The short version
 
 Ingest **offline, in a separate process, per document**, with `scripts/ingest_corpus.py`:
