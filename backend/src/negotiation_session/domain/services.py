@@ -36,7 +36,12 @@ class EvaluateStoppingCondition:
         round_cap: int,
         deadlocked: bool,
     ) -> StoppingCondition:
-        raise NotImplementedError("EvaluateStoppingCondition.evaluate is implemented by issue #292")
+        return StoppingCondition.evaluate(
+            consensus=consensus,
+            rounds_done=rounds_done,
+            round_cap=round_cap,
+            deadlocked=deadlocked,
+        )
 
 
 class DetectArgumentContradiction:

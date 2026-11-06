@@ -44,15 +44,20 @@ from negotiation_session.domain.events import (
     RoundClosed,
     RoundLearningCaptured,
     RoundOpened,
+    SimulationRunClosed,
     SimulationRunOpened,
 )
-from negotiation_session.domain.services import RoundRobinTurnOrder
+from negotiation_session.domain.services import (
+    EvaluateStoppingCondition,
+    RoundRobinTurnOrder,
+)
 from negotiation_session.domain.values import (
     ArgumentId,
     ArgumentStance,
     ClaimEvidence,
     ClaimStatement,
     CoalitionId,
+    ConflictStatus,
     ConflictTopicId,
     ConsensusLevel,
     EvidencePackId,
@@ -132,6 +137,7 @@ class SimulationRun:
         if self.rounds and not self.rounds[-1].is_closed:
             raise RoundStillOpen(f"round {self.rounds[-1].number} is still open in run {self.id}")
         if len(self.rounds) >= self.round_cap:
+            self.evaluate_stopping(ConsensusLevel.NONE)
             raise RoundCapExceeded(f"run {self.id} reached its round cap of {self.round_cap}")
         carried = self.rounds[-1].carry_learning() if self.rounds else None
         round_ = NegotiationRound.open(
@@ -339,7 +345,31 @@ class SimulationRun:
         )
 
     def evaluate_stopping(self, consensus: ConsensusLevel) -> StoppingCondition:
-        raise NotImplementedError("SimulationRun.evaluate_stopping is implemented by issue #292")
+        condition = EvaluateStoppingCondition().evaluate(
+            consensus=consensus,
+            rounds_done=len(self.rounds),
+            round_cap=self.round_cap,
+            deadlocked=self._is_deadlocked(),
+        )
+        if condition.fired:
+            if self.phase is not NegotiationPhase.CLOSED:
+                self.advance_phase(NegotiationPhase.CLOSED)
+            self.events.append(
+                SimulationRunClosed(
+                    run_id=self.id,
+                    condition=condition.name,
+                    rounds=len(self.rounds),
+                    final_phase=self.phase,
+                )
+            )
+        return condition
+
+    def _is_deadlocked(self) -> bool:
+        if not self.conflicts:
+            return False
+        return all(
+            conflict.status is ConflictStatus.DEADLOCKED for conflict in self.conflicts.values()
+        )
 
     def advance_phase(self, target: NegotiationPhase) -> None:
         if self.phase is target:
