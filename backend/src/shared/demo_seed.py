@@ -217,7 +217,7 @@ async def seed_demo(app: object) -> DemoSeed:
 
 
 async def _main() -> None:
-    app = create_app(get_settings())
+    app = create_app(get_settings(), log_stream=sys.stderr)
     try:
         seed = await seed_demo(app)
         sys.stdout.write(seed.as_json() + "\n")

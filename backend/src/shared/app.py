@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager, suppress
+from typing import TextIO
 
 import uvicorn
 from fastapi import FastAPI
@@ -124,10 +125,10 @@ from stakeholder_model.interfaces.http.router import router as stakeholder_model
 logger = get_logger(__name__)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, log_stream: TextIO | None = None) -> FastAPI:
     """Build the ASGI application. Configuration errors abort here, before serving."""
     app_settings = settings or get_settings()
-    configure_logging(app_settings)
+    configure_logging(app_settings, stream=log_stream)
     database = Database(app_settings)
 
     @asynccontextmanager
