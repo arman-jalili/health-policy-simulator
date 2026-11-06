@@ -294,6 +294,19 @@ Actions (each with optimistic pending state, error mapping, and a disabled-with-
 1–8000, `claims:[{text, claim_id?, verdict?}]`, `evidence_ids`, `unsupported`, `invocation_id`).
 If `closed`: replace the action bar with a "Run closed" panel showing the stopping condition
 (`{name, fired, parameters}`) and CTAs to Consensus / Brief.
+
+**Run provenance (mandatory).** Every run is either **manual** (positions and turns posted by this UI) or
+**automated** (`POST /runs/{id}:start` drove it). Store `driver: "manual" | "automated"` in the local run index
+and detect it for runs you did not start: `GET /runs/{id}/usage` with nine distinct `by_stakeholder` entries
+whose `invocations >= 1` means automated. Render a badge in the run header and — for automated runs — a
+persistent amber banner:
+
+> **Automatisierter Lauf (Platzhalter).** Alle Stellungnahmen werden vom Orchestrator als *Zustimmung*
+> gesetzt; Thema ist die gesamte Fragestellung. Zustimmungswerte sagen nichts über die Institutionen aus
+> (Backend #423).
+
+Do not soften this. Without the banner, a `support: 1.0` panel reads as evidence that nine real institutions
+agree.
 Also: `POST /runs/{id}/stakeholders:select` (`{mandate}`) and `POST /runs/{id}/stakeholders:bind`
 (`{stakeholder_ids}`) for late binding, in a "Mandat" drawer.
 
@@ -334,6 +347,16 @@ closed run produced no stances (this is a valid outcome, not an error: say "kein
 Emphasis: `veto_blocked` must be visually distinct and explained ("7/9 Zustimmung, aber Klasse
 `budget_frame` ist durch `oegk` veto-blockiert"), and minorities are always listed with their objections —
 never collapsed.
+
+**If the run is automated, the consensus screen is a placeholder** (backend #423: the orchestration hard-codes
+`stance=SUPPORT`, a placeholder proposal and the full question as the topic). Requirements for that case:
+- keep the banner from §5.3 visible on this screen too;
+- never render "Einigkeit" / "alle einig" / a green checkmark for `support: 1.0` on an automated run — label it
+  "Zustimmung (automatisch gesetzt)";
+- show an explicit empty state for minorities and blockers: "Automatisierte Läufe erzeugen keine Minderheiten"
+  with a link to the manual path (Console → Positionen/Turns);
+- `outcome: consensus` gets a "(Platzhalter)" suffix on automated runs, and `veto_blocked` keeps its real
+  label because that one is a genuine domain decision.
 
 ### 5.7 `/runs/[runId]/brief` — Decision brief
 Data: `POST /runs/{id}/brief` (no body) → `BriefResponse`
@@ -412,6 +435,11 @@ secondary encoding (shape, pattern, or label) — the jury may be colour-blind.
 Chart rules: no pie/donut beyond three categories (use bars), no 3D, no gradients as data encoding, no
 tooltip-only information (values must be reachable by keyboard), axes labelled in German with units
 ("EUR", "Tage", "Zustimmung %"), zero baselines on bars.
+
+**Degenerate data must be visible, not smoothed.** Automated runs produce no variance (#423): chart 2 (stance
+matrix) is one colour, chart 5 (timeline) has no abstentions/revisions, chart 6 (alignment) is uniformly high.
+In that case render the chart greyed with a footnote "Automatisierter Lauf — keine Varianz in den Daten" and do
+not let the visual imply measured agreement. Never synthesise variance to make a chart look interesting.
 
 ---
 
@@ -544,8 +572,8 @@ lost (the backend keeps the data; only this browser forgets).
    seed).
 3. `frontend/DEFERRED.md`: every place the UI had to work around the backend, with the reason and the exact
    backend behaviour — at minimum: no run list endpoint, no pack list endpoint, negotiation SSE shadowed
-   (#420), client-declared attribution, scripted LLM, `open_position_ids` non-empty after close, no settings
-   API. Use the same shape as `backend/.pi/architecture/DEFERRED.md` (one entry per gap: what is true, what the
+   (#420), **automated runs manufacture unanimity (#423)**, client-declared attribution, scripted LLM,
+   `open_position_ids` non-empty after close, no settings API. Use the same shape as `backend/.pi/architecture/DEFERRED.md` (one entry per gap: what is true, what the
    UI does instead, what would remove the gap).
 4. A short `docs/DEMO.md` in `frontend/` with the 8-minute script mapped to screens and the exact click path.
 
@@ -771,6 +799,7 @@ show `/readyz`.
 | `llm: scripted` by default (#416 closed, provider optional) | label arguments as scripted when `llm == "scripted"` |
 | `attribution: client-declared` | show the invocation id as client-supplied; never claim issuance |
 | `simulation_pricing: zero` allowed | show cost 0 with an explicit "unpriced" warning |
+| **Automated runs are uniform** (#423): `stance=SUPPORT` for every position and argument, placeholder proposal, topic = the full question, empty round learning → `support: 1.0`, no minorities | badge every run `manual`/`automated`; banner on automated runs; "(Platzhalter)" suffix on consensus; degenerate charts greyed with a footnote; never claim unanimity |
 | `open_position_ids` stays populated after close | label the field "Positionen (zuletzt offen)" and do not infer mutability |
 | `GET /positions/{id}/provenance` 404 until disclosed | treat 404 as "noch nicht offengelegt", offer the disclose action |
 | Integration tests wipe the demo DB (#421) | README: re-run `make demo-seed` after any backend test run |
