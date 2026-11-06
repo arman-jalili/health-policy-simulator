@@ -168,7 +168,7 @@ class ConsensusThreshold:
         cls, required_share: float, *, label: str = "mandate_threshold"
     ) -> ConsensusThreshold:
         """Build the threshold of one mandate; there is deliberately no default."""
-        raise NotImplementedError("ConsensusThreshold.from_mandate is implemented by issue #310")
+        return cls(required_share=required_share, label=label)
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,12 +213,27 @@ class SupportLevel:
 
     @classmethod
     def weighted(cls, stances: Mapping[StakeholderId, StanceSnapshot]) -> SupportLevel:
-        """Weight every recorded stance by negotiating power; unrecorded stances weigh nothing."""
-        raise NotImplementedError("SupportLevel.weighted is implemented by issue #310")
+        """Weight every recorded stance by negotiating power; unrecorded stances weigh nothing.
+
+        An abstention expresses no position, so it leaves the denominator instead of counting
+        against approval. A run where nobody expressed a position has zero support, never a
+        silent 1.0.
+        """
+        supporting = 0.0
+        total = 0.0
+        for snapshot in stances.values():
+            if not snapshot.recorded or snapshot.stance is Stance.ABSTAIN:
+                continue
+            total += snapshot.weight
+            if snapshot.supports:
+                supporting += snapshot.weight
+        if total <= 0.0:
+            return cls(value=0.0, total_weight=0.0)
+        return cls(value=min(1.0, supporting / total), total_weight=total)
 
     def meets(self, threshold: ConsensusThreshold) -> bool:
         """Return whether this level satisfies the mandate threshold (AC 2)."""
-        raise NotImplementedError("SupportLevel.meets is implemented by issue #310")
+        return self.value >= threshold.required_share
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,24 +286,28 @@ class ConsensusOutcome:
     @classmethod
     def consensus(cls, support: SupportLevel) -> ConsensusOutcome:
         """Threshold met and no veto applies."""
-        raise NotImplementedError("ConsensusOutcome.consensus is implemented by issue #310")
+        return cls(kind=ConsensusOutcomeKind.CONSENSUS, support=support)
 
     @classmethod
     def partial(
         cls, support: SupportLevel, minorities: Sequence[StakeholderId]
     ) -> ConsensusOutcome:
         """Threshold not met: the outcome is partial plus the recorded minority (AC 2)."""
-        raise NotImplementedError("ConsensusOutcome.partial is implemented by issue #310")
+        return cls(
+            kind=ConsensusOutcomeKind.PARTIAL,
+            support=support,
+            minorities=tuple(minorities),
+        )
 
     @classmethod
     def veto_blocked(cls, veto: VetoBlockedOutcome, support: SupportLevel) -> ConsensusOutcome:
         """A blocking competence applies, whatever the support level was (AC 1)."""
-        raise NotImplementedError("ConsensusOutcome.veto_blocked is implemented by issue #309")
+        return cls(kind=ConsensusOutcomeKind.VETO_BLOCKED, support=support, veto=veto)
 
     @classmethod
     def unresolved(cls, support: SupportLevel) -> ConsensusOutcome:
         """No threshold and no terminal position; the conflict stays open."""
-        raise NotImplementedError("ConsensusOutcome.unresolved is implemented by issue #310")
+        return cls(kind=ConsensusOutcomeKind.UNRESOLVED, support=support)
 
 
 @dataclass(frozen=True, slots=True)
