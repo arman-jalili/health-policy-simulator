@@ -50,6 +50,7 @@ from decision_brief.infrastructure.failclosed import (
     UnwiredProjectionBuilder,
     UnwiredProvenanceGate,
 )
+from decision_brief.infrastructure.projection import BriefProjectionAdapter
 from decision_brief.infrastructure.repository.memory import InMemoryDecisionBriefRepository
 from decision_brief.infrastructure.runtime import NoopUnitOfWork, UuidFactory
 from decision_brief.interfaces.http.deps import (
@@ -440,3 +441,33 @@ def test_the_runtime_binds_the_renderer_and_read_services() -> None:
     container = app.state.decision_brief
     assert isinstance(container.renderer, JsonBriefRenderer)
     assert container.get_decision_brief is not None
+
+
+# ── The projection adapter is the real builder the runtime binds (#346) ────────────
+
+
+def test_the_projection_adapter_builds_a_complete_draft() -> None:
+    adapter = BriefProjectionAdapter(ids=UuidFactory(), clock=SystemClock())
+
+    brief = adapter.build(run=RUN, consensus=CONSENSUS, disclaimer=DISCLAIMER)
+
+    assert len(brief.sections) == 8
+    assert [section.ordinal for section in brief.sections.values()] == list(range(1, 9))
+    assert brief.disclaimer is DISCLAIMER
+    assert brief.version.number == 1
+    assert brief.version.snapshot_ref == RUN.snapshot_ref
+    assert brief.rejected_proposals == RUN.rejected_proposals
+    assert brief.status is BriefStatus.DRAFT
+
+
+def test_the_runtime_binds_the_real_projection_adapter() -> None:
+    app = create_app(
+        Settings(
+            _env_file=None,
+            database_url=DATABASE_URL,
+            persistence=Persistence.MEMORY,
+        )
+    )
+
+    service = app.state.decision_brief.publish_decision_brief
+    assert isinstance(service.collaborators()[5], BriefProjectionAdapter)
