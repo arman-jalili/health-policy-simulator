@@ -198,3 +198,8 @@ into the image and every proxy call failed inside Docker.
 - No worker sidecar: the simulation worker runs inside the backend process, which is what the current
   design does (single-replica). Running two backend replicas would double-run jobs.
 - No secrets in images or `demo.env`: keys live in `demo.env.local` or the shell.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). The challenge brief in `material/` remains the property of its authors.
+
