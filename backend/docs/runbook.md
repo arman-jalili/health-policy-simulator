@@ -118,6 +118,9 @@ Simulation orchestration operations: `docs/runbook-simulation-orchestration.md` 
 Evidence retrieval operations: `docs/runbook-evidence-retrieval.md` (pack lifecycle, hybrid-search
 triage, retrieval readiness and reweighting).
 
+Decision brief operations: `docs/runbook-decision-brief.md` (publication gates, failure codes,
+immutability and successor versions); DR: `docs/dr-plan-decision-brief.md`.
+
 ## Evidence corpus operations
 
 The corpus context exposes eight endpoints under `/api/v1` (documents, ingestion runs, passages,
@@ -151,3 +154,4 @@ verifies the route inventory, enum vocabulary, authority rubric, event payloads,
 implementations and the absence of contract stubs in the domain/application layers.
 
 - GovernanceCompliance: `docs/runbook-governance-compliance.md`
+- DecisionBrief: `docs/runbook-decision-brief.md`
