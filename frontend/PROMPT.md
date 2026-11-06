@@ -175,19 +175,26 @@ There are two different "streams", and today **only one is reachable**:
   Reconnect with `Last-Event-ID`; an unknown id yields `400 UNKNOWN_LAST_EVENT_ID`.
 - The **negotiation event feed** at the same path is shadowed by the above (backend issue #420). Therefore:
 
-**Implement the run console against `GET /api/v1/runs/{run_id}/events`**, cursor-polled:
+**Implement the run console against `GET /api/v1/runs/{run_id}/events`**:
 
 ```
-GET /api/v1/runs/{run_id}/events?cursor=<lastSequence>&limit=50
+GET /api/v1/runs/{run_id}/events[?until_round=N]
 → { "items": [ { "sequence": 12, "event_type": "ArgumentSubmitted",
                  "payload": { … }, "occurred_at": "2026-11-06T06:22:11.412Z" } ],
     "state": { "run_id", "phase", "round", "round_cap", "closed",
                "bound_stakeholder_ids": [], "open_position_ids": [], "coalition_ids": [] } }
 ```
 
-Poll 750 ms while `closed == false`, back off to 3 s after 5 idle polls, stop on `closed == true`; the
-returned `state` is the canonical run snapshot — do not compute it from events. `?until_round=N` and
-`?limit=` exist; keyset pagination is by `sequence`.
+**There is no `cursor` and no `limit` parameter** — the endpoint replays the whole run log each call (verified
+against OpenAPI; this prompt previously claimed otherwise, and `frontend/DEFERRED.md` D-FE-004 records the
+correction). So: fetch the full log, sort by `sequence`, and render incrementally client-side (window the list).
+Poll 750 ms while `closed == false`, back off to 3 s after 5 idle polls, stop on `closed == true`; the returned
+`state` is the canonical run snapshot — do not compute it from events.
+
+**The negotiation SSE now exists** (#420 fixed): `GET /api/v1/runs/{run_id}/negotiation/stream` replays the
+domain events with `Last-Event-ID` (`id: <ordinal>`, `event: <name>`, `data: <json>`, `: ping` heartbeats).
+`/runs/{run_id}/stream` remains the job-progress feed. Keep the polling implementation behind one hook and switch
+when a run needs sub-750 ms updates.
 
 Event names you will see (map each to a feed item with icon + stakeholder + round):
 `SimulationRunOpened, RoundOpened, InitialPositionStated, PositionRevised, PositionRevisionRejected,
@@ -535,7 +542,8 @@ lost (the backend keeps the data; only this browser forgets).
 - One zod schema module per context under `features/<slice>/contracts.ts`, derived by hand from the OpenAPI
   components (do not generate 60 files; write the ~25 you need and mark the rest as `z.unknown()` with a
   comment).
-- React Query keys: `['run', id]`, `['run', id, 'events', cursor]` (use `keepPreviousData`), `['run', id,
+- React Query keys: `['run', id]`, `['run', id, 'events']` (the endpoint has no cursor — poll to a ref, not a
+  cache key), `['run', id,
   'rounds']`, `['run', id, 'consensus']`, `['run', id, 'usage']`, `['brief', id]`, `['readyz']`,
   `['stakeholders']`. Invalidate precisely on mutation success.
 - Retries: GET only, max 2, exponential 300/900 ms, **never** on 4xx. Mutations: no retry; show the error and
@@ -606,8 +614,9 @@ All under `/api/v1` unless noted. `→` shows the request body; response shapes 
 ```
 POST   /runs                              → OpenRunBody {question, round_cap?, stakeholder_ids?, consensus_threshold}   202
 GET    /runs/{run_id}                                                                                                200
-GET    /runs/{run_id}/events              ?cursor&limit&until_round  → {items[{sequence,event_type,payload,occurred_at}], state}  200
-GET    /runs/{run_id}/stream              SSE (currently orchestration progress — issue #420)                          200
+GET    /runs/{run_id}/events              ?until_round              → {items[{sequence,event_type,payload,occurred_at}], state}  200
+GET    /runs/{run_id}/negotiation/stream  SSE domain events (RoundOpened … SimulationRunClosed), Last-Event-ID       200
+GET    /runs/{run_id}/stream              SSE job progress (run.queued … run.stream_closed)                         200
 POST   /runs/{run_id}/rounds              → OpenRoundBody? {round?}                                                    201
 POST   /runs/{run_id}/rounds/{n}:close    → CloseRoundBody {learning[], convergence}                                  200
 GET    /runs/{run_id}/rounds                                                                                         200
