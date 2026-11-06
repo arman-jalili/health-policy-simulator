@@ -114,7 +114,7 @@ def _capturing_transport(seen: list[dict[str, object]]) -> httpx.MockTransport:
         return httpx.Response(
             200,
             json={
-                "model": "deepseek-flash",
+                "model": "vendor-model",
                 "choices": [{"message": {"role": "assistant", "content": '{"stance":"oppose"}'}}],
                 "usage": {"prompt_tokens": 5, "completion_tokens": 3},
             },
@@ -123,12 +123,12 @@ def _capturing_transport(seen: list[dict[str, object]]) -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
-async def test_deepseek_style_request_asks_for_json_and_non_thinking() -> None:
-    """DeepSeek defaults to thinking mode and only guarantees JSON with response_format."""
+async def test_a_provider_request_asks_for_json_and_optional_reasoning() -> None:
+    """JSON mode and reasoning control are provider-neutral fields on the same adapter."""
     seen: list[dict[str, object]] = []
     client = HttpLlmClient(
-        model_id="deepseek-flash",
-        base_url="https://api.deepseek.com",
+        model_id="vendor-model",
+        base_url="https://llm.example/v1",
         api_key="sk-test",
         json_mode=True,
         reasoning_effort="none",

@@ -88,11 +88,11 @@ outside `ENV=local` is refused; `/readyz` reports which provider is bound.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LLM_PROVIDER` | `scripted` | `scripted` (local only), `openai-compatible`, `azure_ai_foundry` |
-| `LLM_BASE_URL` | — | OpenAI-format endpoint; DeepSeek: `https://api.deepseek.com` |
-| `LLM_API_KEY` | `DEEPSEEK_API_KEY` | generic key; when unset the vendor variable is adopted, so a DeepSeek demo needs no file |
-| `LLM_MODEL` | `gpt-4o-mini` | model id; DeepSeek: `deepseek-flash` (`deepseek-chat` retired 2026-07-24) |
+| `LLM_BASE_URL` | — | API root without `/chat/completions`; include `/v1` where the provider requires it |
+| `LLM_API_KEY` | — | the credential for that endpoint; one generic variable, no vendor aliases |
+| `LLM_MODEL` | `gpt-4o-mini` | model id exactly as the provider names it |
 | `LLM_JSON_MODE` | `true` | send `response_format={"type":"json_object"}`; set false for servers that reject it |
-| `LLM_REASONING_EFFORT` | unset | provider reasoning control; DeepSeek defaults to *thinking*, `none` selects non-thinking |
+| `LLM_REASONING_EFFORT` | unset | optional reasoning control, for providers that expose one; leave empty otherwise |
 | `LLM_TIMEOUT_S` / `LLM_MAX_RETRIES` | `30` / `2` | bounded retries on 429/5xx and transport errors; no fallback to the echo |
 
 Failures are explicit: `LlmProviderFailed` (provider error after retries) and

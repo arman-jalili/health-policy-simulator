@@ -56,7 +56,7 @@ At 20 turns per session, this saves **15,000 tokens** on fast models alone.
 ## Model Classification
 
 ```
-Intelligence 5: Opus, GPT-5, Gemini Pro, Grok Reasoning, DeepSeek Pro
+Intelligence 5: Opus, GPT-5, Gemini Pro, Grok Reasoning, and other frontier models
 Intelligence 4: Sonnet, GPT-4, GPT-4-mini, Gemini Stable, Grok Fast
 Intelligence 3: Haiku, GPT-nano, Flash, Cerebras, Groq, local GGUF
 Intelligence 1-2: Tiny models, heavily quantized local models

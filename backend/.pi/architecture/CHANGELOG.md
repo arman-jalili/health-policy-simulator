@@ -75,20 +75,19 @@ Each entry follows this structure:
 - [x] Implementation updated
 
 
-## [2026-11-06] - Live DeepSeek provider: credential fallback, JSON mode, claim filtering
+## [2026-11-06] - Live model provider: credential handling, JSON mode, claim filtering
 
 ### Changed
 - SimulationOrchestration: the turn prompt now carries interests, constraints, red lines and veto
-  classes with an explicit anti-herding instruction; without it `deepseek-flash` returned
+  classes with an explicit anti-herding instruction; without it the model returned
   `conditional_accept` for all nine stakeholders and the run derived support 1.0.
 - SimulationOrchestration: `HttpLlmClient` sends `response_format={"type":"json_object"}` and an
-  optional `reasoning_effort` (`LLM_JSON_MODE`, `LLM_REASONING_EFFORT`). DeepSeek defaults to
-  *thinking* mode, which ignores temperature and costs more; `none` selects non-thinking.
+  optional `reasoning_effort` (`LLM_JSON_MODE`, `LLM_REASONING_EFFORT`), for providers that expose
+  a reasoning mode.
 - NegotiationSession ACL: model-written claims are pre-filtered through ClaimValidation
   (`claim_admissible`), so an unverifiable claim no longer dead-letters a paid run; the text stays
   narrative instead of being asserted.
-- Shared config: `DEEPSEEK_API_KEY` is the default for `LLM_API_KEY` (resolved as a field default so it
-  applies before the provider validator demands a key).
+- Shared config: one generic `LLM_API_KEY`; no vendor-specific variable names.
 
 ### Impact Analysis
 - Files affected: `src/shared/config.py`, `src/shared/app.py`,
@@ -100,8 +99,7 @@ Each entry follows this structure:
 - Validators: unit tests `claim-filtering`, `llm-provider`, `shared/test_llm_credentials`; full suite
 
 ### Migration Steps
-1. Export `DEEPSEEK_API_KEY` (or set `LLM_API_KEY`); set `LLM_MODEL=deepseek-flash`,
-   `LLM_REASONING_EFFORT=none`, `LLM_JSON_MODE=true`, `LLM_BASE_URL=https://api.deepseek.com`.
+1. Set `LLM_API_KEY` and the endpoint/model of whichever OpenAI-compatible provider you use.
 2. Rebuild the images (`docker compose up --build`) — the backend image changed.
 
 ### Status

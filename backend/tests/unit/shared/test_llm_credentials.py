@@ -1,4 +1,4 @@
-"""The vendor variable is the default, not a second source of truth (DeepSeek live demo)."""
+"""One generic credential for any OpenAI-compatible provider; no vendor fallback."""
 
 from __future__ import annotations
 
@@ -9,46 +9,42 @@ from tests.conftest import TEST_DATABASE_URL
 
 
 @pytest.fixture(autouse=True)
-def _clear_vendor_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+def _no_ambient_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
 
 
-def test_deepseek_api_key_is_adopted_when_the_generic_variable_is_unset(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-vendor-key")
+def test_the_key_comes_from_the_generic_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "sk-generic")
 
     settings = Settings(
         _env_file=None,
         database_url=TEST_DATABASE_URL,
         llm_provider="openai-compatible",
-        llm_base_url="https://api.deepseek.com",
+        llm_base_url="https://llm.example/v1",
     )
 
-    assert settings.llm_api_key == "sk-vendor-key"
+    assert settings.llm_api_key == "sk-generic"
 
 
-def test_explicit_llm_api_key_wins_over_the_vendor_variable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-vendor-key")
+def test_any_key_works_regardless_of_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two different endpoints, one credential path — nothing is vendor-specific."""
+    monkeypatch.setenv("LLM_API_KEY", "local-token")
 
-    settings = Settings(
-        _env_file=None,
-        database_url=TEST_DATABASE_URL,
-        llm_provider="openai-compatible",
-        llm_base_url="https://api.deepseek.com",
-        llm_api_key="sk-explicit",
-    )
-
-    assert settings.llm_api_key == "sk-explicit"
+    for base_url in ("https://api.openai.com/v1", "http://ollama:11434/v1"):
+        settings = Settings(
+            _env_file=None,
+            database_url=TEST_DATABASE_URL,
+            llm_provider="openai-compatible",
+            llm_base_url=base_url,
+        )
+        assert settings.llm_api_key == "local-token"
 
 
-def test_a_real_provider_still_requires_some_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_real_provider_still_requires_a_key() -> None:
     with pytest.raises(ValueError, match="LLM_API_KEY"):
         Settings(
             _env_file=None,
             database_url=TEST_DATABASE_URL,
             llm_provider="openai-compatible",
-            llm_base_url="https://api.deepseek.com",
+            llm_base_url="https://llm.example/v1",
         )

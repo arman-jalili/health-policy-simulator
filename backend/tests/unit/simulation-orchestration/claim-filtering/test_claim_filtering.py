@@ -3,7 +3,7 @@
 NegotiationSession refuses an inadmissible claim outright (correct for API
 clients). The orchestrated path asks ClaimValidation first and keeps only admitted
 claims, so a model's prose cannot dead-letter a paid run — observed live with a
-DeepSeek turn whose claim was `ambiguous`.
+live-model turn whose claim was `ambiguous`.
 """
 
 from __future__ import annotations

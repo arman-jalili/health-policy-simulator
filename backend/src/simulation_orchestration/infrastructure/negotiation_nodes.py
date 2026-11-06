@@ -69,9 +69,9 @@ class NegotiationTurnNode:
         self._negotiation = negotiation
         self._llm = llm
         self._model = model
-        self._synthetic = synthetic
         # Read per call: a demo can switch the backend at runtime, and the echo is only acceptable
-        # while the scripted variant is the one answering.
+        # while the scripted variant is the one answering. `synthetic` is the boot default used when
+        # no reader is injected; keeping it as a field would be an unread collaborator (W8).
         self._is_scripted = scripted or (lambda: synthetic)
 
     async def execute(self, state: GraphState) -> GraphState:

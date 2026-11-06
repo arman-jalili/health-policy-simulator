@@ -8,7 +8,7 @@ import { Providers } from "@/components/providers";
 // assert the contract the page relies on (two variants, active marked, unavailable absent).
 import { Button } from "@/components/ui/button";
 
-const provider = { active: "openai-compatible", model: "deepseek-flash", available: ["openai-compatible", "scripted"] };
+const provider = { active: "openai-compatible", model: "vendor-model", available: ["openai-compatible", "scripted"] };
 
 function ModelSwitch({ active, onPick }: { readonly active: string; readonly onPick: (name: string) => void }) {
   return (

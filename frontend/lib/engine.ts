@@ -1,7 +1,7 @@
 /**
  * The UI names the engine, never the model id: "Live-LLM" or "Skript (Platzhalter)".
  *
- * Model ids (`deepseek-flash`, `scripted-local`) are an implementation detail that changes with the
+ * Model ids (e.g. `gpt-4o-mini`, `scripted-local`) are an implementation detail that changes with the
  * provider; the jury only needs to know whether a real model wrote the turn or a deterministic
  * stand-in did.
  */

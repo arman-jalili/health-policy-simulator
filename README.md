@@ -58,62 +58,69 @@ docker compose exec -d backend sh -c \
 docker compose exec backend tail -f /tmp/ingest.log
 ```
 
-## 3. Switch to the live model (DeepSeek)
+## 3. Connect a live model
 
-The stack boots with the scripted provider so a rehearsal needs no key. For the live demo the key comes
-from the environment — the backend adopts `DEEPSEEK_API_KEY` when `LLM_API_KEY` is unset, so nothing has
-to be written to a file:
+The stack boots with the scripted provider so a rehearsal needs no key. Any **OpenAI-compatible**
+`/chat/completions` endpoint works: hosted APIs (OpenAI, Azure AI Foundry, OpenRouter, Mistral, Groq, …),
+a local runtime (Ollama, vLLM, LM Studio), or any vendor that exposes the same shape. Nothing in the code
+is bound to one provider.
+
+Two files, both git-ignored:
 
 ```bash
-export DEEPSEEK_API_KEY=sk-…                 # https://platform.deepseek.com/api_keys
+# .env at the repository root — the key only, read by compose
+LLM_API_KEY=sk-…                    # or any token your endpoint expects
+
+# demo.env.local — the endpoint, model and metering
+LLM_PROVIDER=openai-compatible      # live provider; `scripted` is the placeholder
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+LLM_REASONING_EFFORT=               # optional: low|medium|high, provider-specific
+LLM_JSON_MODE=true                  # sends response_format={"type":"json_object"}
+SIMULATION_INPUT_PRICE_PER_1K=0.00015
+SIMULATION_OUTPUT_PRICE_PER_1K=0.0006
+SIMULATION_ALLOW_ZERO_PRICE=false
+```
+
+```bash
 docker compose up -d --force-recreate backend
-curl -s localhost:3000/api/hps/_platform/readyz | python3 -m json.tool | grep -E '"llm|pricing'
-# "llm": "openai-compatible", "llm_model": "deepseek-flash", "simulation_pricing": "configured"
+curl -s localhost:3000/api/hps/_platform/readyz | grep -o '"llm[^,]*'
+# "llm": "openai-compatible", "llm_model": "<your model>", "simulation_pricing": "configured"
 ```
 
-`demo.env.local` (git-ignored, copy of `demo.env.example`) carries the non-secret half: provider, base
-URL, model, metering. Facts that matter, checked against
-[api-docs.deepseek.com](https://api-docs.deepseek.com/) on 2026-11-06:
+| Setting | Meaning |
+|---|---|
+| `LLM_BASE_URL` | API root **without** `/chat/completions`; the adapter appends it. Use `/v1` where the provider needs it |
+| `LLM_MODEL` | model id exactly as the provider names it |
+| `LLM_JSON_MODE` | asks for a JSON object; both OpenAI-style and self-hosted servers that support it will comply. Set `false` for servers that reject the field |
+| `LLM_REASONING_EFFORT` | optional; only for providers that expose reasoning control. Leave empty otherwise |
+| `LLM_TIMEOUT_S` / `LLM_MAX_RETRIES` | per-call timeout and retries on 429/5xx/transport errors |
+| `SIMULATION_*_PRICE_PER_1K` | your provider's price per 1k tokens, in **one** currency — the UI formats EUR, so either report EUR or say "USD" on stage |
 
-| Setting | Value | Why |
-|---|---|---|
-| `LLM_BASE_URL` | `https://api.deepseek.com` | OpenAI-compatible endpoint, no `/v1` suffix needed |
-| `LLM_MODEL` | `deepseek-flash` (V4.1-Flash) | `deepseek-chat` / `deepseek-reasoner` were retired 2026-07-24; `deepseek-v4-pro` also works |
-| `LLM_REASONING_EFFORT` | `none` | DeepSeek defaults to *thinking* mode: temperature is ignored and output costs more |
-| `LLM_JSON_MODE` | `true` | sends `response_format={"type":"json_object"}`; the turn parser needs JSON |
-| `SIMULATION_INPUT_PRICE_PER_1K` | `0.0003` | `deepseek-flash` cache-miss input, peak: $0.30 / 1M |
-| `SIMULATION_OUTPUT_PRICE_PER_1K` | `0.0012` | output, peak: $1.20 / 1M (off-peak is half) |
+Cost and latency depend entirely on the model you point at; nothing is calibrated to a specific vendor.
+With a real provider keep `SIMULATION_ALLOW_ZERO_PRICE=false`, otherwise every call is metered at 0 and the
+budget guard can only stop by invocation count. A run is 9 turns per round.
 
-Prices are **USD** per the provider; the UI formats money with an EUR locale. Label the number on stage
-as one or the other, or convert — do not mix. Keep `SIMULATION_ALLOW_ZERO_PRICE=false` with a real
-provider: at price 0 the budget guard could only stop by invocation count.
+Failures are explicit, never silent: a wrong key ends the job as `dead_letter` with
+`LlmProviderFailed … http_401`, an unusable reply with `LLM_OUTPUT_UNPARSEABLE`, and a claim the claim
+agent will not admit is dropped from the argument instead of being asserted.
 
-Measured live on this stack (9 stakeholders, `deepseek-flash`):
+### Switching between the live model and the placeholder at runtime
 
-```
-1 round,  9 turns   → 2 612 in / 2 293 out → cost 0.003536 → consensus partial, 7 minorities
-2 rounds, 18 turns  → 8 916 in / 4 958 out → cost 0.008627 → budget pause at 6 invocations, resume, both rounds closed
-```
-
-### Umschalten zur Laufzeit (beide Varianten zeigen)
-
-Das Backend hält beide Backends hinter einem Facade-Objekt: das Live-Modell und den deterministischen
-Skript-Stand-in. Der Wechsel gilt sofort, ohne Neustart, und nur für diesen Prozess (ein Neustart stellt
-`LLM_PROVIDER` aus der Umgebung wieder her).
+Both backends sit behind one facade, so a demo can show them back to back without a restart. The active
+choice is process state: a restart restores `LLM_PROVIDER`.
 
 ```bash
-make stack-provider     # {"active":"openai-compatible","model":"deepseek-flash","available":[...]}
-make stack-scripted     # Skript: Persona-Policy, Argumente mit [synthetic] … Begründung: …, Kosten 0
-make stack-live-llm     # zurück zum Live-Modell
+make stack-provider     # {"active":"openai-compatible","model":"<your model>","available":[…]}
+make stack-scripted     # placeholder: persona policy, [synthetic] … arguments, zero cost
+make stack-live-llm     # back to the live model
 ```
 
-In der Oberfläche sitzt derselbe Schalter unter **Einstellungen → Modell** („Live-LLM" / „Skript
-(Platzhalter)"), und die Status-Pille der Übersicht (`llm: …`) folgt ihm. Gemessen: ein Skript-Lauf
-kostet 0.000000 bei 9 Invocationen und meldet `model: scripted-local`; ein Live-Lauf kostet 0.006077 bei
-9 Invocationen und meldet `deepseek-flash`. `/usage` nennt immer das Modell, das die Zeilen tatsächlich
-geschrieben hat — nicht das gerade aktive.
+The same switch is in the UI under **Einstellungen → Modell** ("Live-LLM" / "Skript (Platzhalter)"), and
+the overview's status pill follows it. The UI names the *engine*, never the model id; `/usage` reports the
+model each run actually used, so runs made with either engine keep their own label.
 
-Pre-flight before the jury (also proves the pause/resume path):
+Pre-flight before the jury (this also exercises pause/resume and the budget guard):
 
 ```bash
 RUN=$(curl -s -X POST localhost:3000/api/hps/runs -H 'content-type: application/json' \
@@ -121,11 +128,6 @@ RUN=$(curl -s -X POST localhost:3000/api/hps/runs -H 'content-type: application/
 curl -s -X POST localhost:3000/api/hps/runs/$RUN:start -H 'content-type: application/json' -d '{"budget":{"max_invocations":12}}'
 curl -s localhost:3000/api/hps/runs/$RUN/usage | python3 -m json.tool
 ```
-
-A wrong key fails loudly and honestly: the job ends `dead_letter` with `LlmProviderFailed: … http_401`,
-never a silent fallback to the echo. An unusable model reply ends the same way with
-`LLM_OUTPUT_UNPARSEABLE`; a claim the claim agent will not admit is dropped from the argument, not
-asserted (the text still stands).
 
 ## 3b. Running the demo on the ingested 2020 press corpus
 
@@ -137,7 +139,7 @@ at the repository root so `docker compose up` needs no shell exports:
 ```bash
 # .env (git-ignored)
 DATABASE_URL=postgresql+asyncpg://hps:hps@host.docker.internal:5433/health_policy
-DEEPSEEK_API_KEY=sk-…
+LLM_API_KEY=sk-…
 ```
 
 ```bash

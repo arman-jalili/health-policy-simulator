@@ -47,7 +47,7 @@ Each model is scored on a 1–5 scale:
 |------|---------------|--------|
 | Large | 1M+ tokens | GPT-5, Gemini Pro/Flash, xAI Grok |
 | Standard | 200K tokens | Claude Opus/Sonnet/Haiku |
-| Small | 128K tokens | GPT-4 variants, DeepSeek |
+| Small | 128K tokens | GPT-4 variants, and other mid-size models |
 | Minimal | 32K tokens | Local GGUF models |
 
 ## Pricing Tiers

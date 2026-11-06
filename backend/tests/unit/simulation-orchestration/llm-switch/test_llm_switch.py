@@ -29,14 +29,14 @@ def _request() -> LLMRequest:
 
 def _switchable() -> SwitchableLlmClient:
     live = HttpLlmClient(
-        model_id="deepseek-flash",
-        base_url="https://api.deepseek.com",
+        model_id="vendor-model",
+        base_url="https://llm.example/v1",
         api_key="sk-test",
         transport=httpx.MockTransport(
             lambda _: httpx.Response(
                 200,
                 json={
-                    "model": "deepseek-flash",
+                    "model": "vendor-model",
                     "choices": [{"message": {"role": "assistant", "content": "live text"}}],
                     "usage": {"prompt_tokens": 4, "completion_tokens": 2},
                 },
@@ -54,7 +54,7 @@ async def test_switching_changes_which_adapter_answers_and_what_usage_says() -> 
 
     live = await client.complete(_request())
     assert live.text == "live text"
-    assert live.model == "deepseek-flash"
+    assert live.model == "vendor-model"
 
     client.switch("scripted")
     scripted = await client.complete(_request())
@@ -70,7 +70,7 @@ async def test_unknown_variant_is_refused_with_the_configured_names() -> None:
     client = _switchable()
 
     with pytest.raises(UnknownLlmProvider, match="openai-compatible"):
-        client.switch("deepseek")
+        client.switch("vendor-unknown")
 
 
 def test_switching_to_the_active_variant_is_a_no_op() -> None:
@@ -86,7 +86,7 @@ def test_services_expose_and_apply_the_switch() -> None:
 
     read = GetLlmProvider(control=client).execute()
     assert read.active == "openai-compatible"
-    assert read.model == "deepseek-flash"
+    assert read.model == "vendor-model"
     assert set(read.available) == {"openai-compatible", "scripted"}
 
     switched = SelectLlmProvider(control=client).execute(
@@ -98,7 +98,6 @@ def test_services_expose_and_apply_the_switch() -> None:
 
 def test_only_scripted_is_available_without_a_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """The compose default: no key, so the live variant does not exist and cannot be selected."""
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     settings = Settings(
         _env_file=None,
         database_url=TEST_DATABASE_URL,
