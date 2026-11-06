@@ -129,9 +129,14 @@ export default function SettingsPage() {
     push(t("settings.saved"), "ok");
   };
 
-  const importSeed = (): void => {
+  const importSeed = (raw?: string): void => {
+    const source = raw ?? seedText;
     try {
-      const parsed = SeedSchema.safeParse(JSON.parse(seedText));
+      if (source.trim() === "") {
+        setSeedError(t("settings.seedTextarea"));
+        return;
+      }
+      const parsed = SeedSchema.safeParse(JSON.parse(source));
       if (!parsed.success) {
         setSeedError(t("settings.seedInvalid"));
         return;
@@ -240,11 +245,16 @@ export default function SettingsPage() {
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (file === undefined) return;
-                  void file.text().then((text) => setSeedText(text));
+                  void file.text().then((text) => {
+                    setSeedText(text);
+                    // Import in one step: the picker used to only fill the textarea, so the
+                    // disabled "load" button looked like a broken file chooser.
+                    importSeed(text);
+                  });
                 }}
               />
             </label>
-            <Button onClick={importSeed} disabledReason={seedText.trim() === "" ? t("settings.seedTextarea") : undefined}>
+            <Button onClick={() => importSeed()}>
               {t("settings.seedLoad")}
             </Button>
             <Button
