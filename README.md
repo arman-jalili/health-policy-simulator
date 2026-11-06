@@ -61,26 +61,35 @@ docker compose exec backend tail -f /tmp/ingest.log
 ## 3. Connect a live model
 
 The stack boots with the scripted provider so a rehearsal needs no key. Any **OpenAI-compatible**
-`/chat/completions` endpoint works: hosted APIs (OpenAI, Azure AI Foundry, OpenRouter, Mistral, Groq, …),
-a local runtime (Ollama, vLLM, LM Studio), or any vendor that exposes the same shape. Nothing in the code
-is bound to one provider.
+`/chat/completions` endpoint works: hosted APIs (OpenAI, Azure AI Foundry, OpenRouter, …), a local runtime
+(Ollama, vLLM, LM Studio), or any vendor that exposes the same shape. Nothing in the code is bound to one
+provider.
 
-One git-ignored file, `demo.env.local` (copy of `demo.env.example`), holds the credential together with
-the endpoint, model and metering — compose loads it into the container, so no key is interpolated from your
-shell:
+**The credential never lives in the repository.** Export it in your shell profile (for example
+`~/.zshrc`) and compose injects it into the container at `up` time:
+
+```bash
+# ~/.zshrc
+export LLM_API_KEY=sk-…            # or any token your endpoint expects
+```
+
+`demo.env.local` (copy of `demo.env.example`, git-ignored) holds only the non-secret half — endpoint,
+model and metering:
 
 ```bash
 # demo.env.local
-LLM_API_KEY=sk-…                    # or any token your endpoint expects
 LLM_PROVIDER=openai-compatible      # live provider; `scripted` is the placeholder
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
-LLM_REASONING_EFFORT=               # optional: low|medium|high, provider-specific
+LLM_REASONING_EFFORT=               # optional, provider-specific
 LLM_JSON_MODE=true                  # sends response_format={"type":"json_object"}
 SIMULATION_INPUT_PRICE_PER_1K=0.00015
 SIMULATION_OUTPUT_PRICE_PER_1K=0.0006
 SIMULATION_ALLOW_ZERO_PRICE=false
 ```
+
+Compose treats the key as required (`${LLM_API_KEY:?…}`): a shell without it fails at `up` with a named
+error instead of booting a backend that cannot authenticate.
 
 ```bash
 docker compose up -d --force-recreate backend

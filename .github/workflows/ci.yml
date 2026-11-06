@@ -64,6 +64,18 @@ jobs:
         run: bash .pi/scripts/ci/check_ddd_structure.sh
       - name: ADR-008 modeling depth
         run: uv run python .pi/scripts/ci/check_modeling_depth.py
+      - name: No credentials in the tree
+        run: |
+          set -euo pipefail
+          if git grep -nI -E '(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' -- . ; then
+            echo "::error::a credential-shaped string is tracked; remove it and rotate the key"
+            exit 1
+          fi
+          if git ls-files | grep -E '(^|/)(\.env|demo\.env\.local)$'; then
+            echo "::error::a local env file is tracked; it belongs in .gitignore"
+            exit 1
+          fi
+          echo "no credentials tracked"
       - name: Canonical references
         run: bash .pi/scripts/validate-canonical.sh
       - name: Collaborator reachability (W8)

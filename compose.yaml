@@ -45,9 +45,11 @@ services:
         required: true
       - path: demo.env.local
         required: false
-    # The live-model credential, endpoint and model all come from demo.env.local (git-ignored), loaded
-    # above via env_file. Nothing here names a vendor and no key is interpolated from the shell.
+    # The live-model credential is injected from the shell at `docker compose up` time — export it in
+    # your shell profile (e.g. ~/.zshrc). It is never stored in a file inside this repository, and
+    # compose refuses to start without it (`:?` below) instead of booting with an empty key.
     environment:
+      LLM_API_KEY: ${LLM_API_KEY:?LLM_API_KEY is required; export it in your shell (e.g. ~/.zshrc)}
       # Default: the compose database. Override to run the demo against an already-ingested corpus in
       # another PostgreSQL (e.g. DATABASE_URL=postgresql+asyncpg://hps:hps@host.docker.internal:5433/health_policy).
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://hps:hps@db:5432/health_policy}
