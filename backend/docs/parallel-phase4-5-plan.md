@@ -75,7 +75,7 @@ aggregate-root code block, so that component parsed as status `briefstatus = bri
 ## 3. Launch sequence
 
 ```bash
-cd /Users/arman/project/ki-challange/health-policy-simulator
+cd <repository root>
 git switch main && git pull --ff-only
 # after Fix 1 + Fix 2 are merged:
 git worktree add ../hps-ns -b epic/negotiation-session

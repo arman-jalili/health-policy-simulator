@@ -151,7 +151,8 @@ and the argument's invocation, and `/readyz` reports `governance_provenance: wir
 
 | Quantity | Result |
 |---|---|
-| Source | `/Users/arman/Downloads/2020 Pressespiegel` (12 monthly folders, 2.5 GB) |
+| Source | A local yearly press-review archive (12 monthly folders, 2.5 GB), ingested as the
+  `pressespiegel-2020` snapshot; the corpus itself is not part of this repository |
 | Documents | 231 PDFs, 0 skipped, 0 failed |
 | Passages | 4,297 paragraph chunks, all indexed |
 | Monthly snapshots | `pressespiegel-2020-01` … `pressespiegel-2020-12` |
