@@ -70,6 +70,33 @@ class UnbackedEstimate(ValidationFailedError):
         )
 
 
+class MislabeledEstimate(ValidationFailedError):
+    """A figure's label disagrees with its basis (invariant 6, AC 6).
+
+    The label is what a reader sees. A figure computed from a model but labelled "assumed", or an
+    assumed figure labelled "evidenced", misrepresents its own provenance in either direction.
+    """
+
+    code = "MISLABELED_ESTIMATE"
+
+    def __init__(self, field: str, basis: str, label: str, expected: str) -> None:
+        self.field = field
+        self.basis = basis
+        self.label = label
+        self.expected = expected
+        super().__init__(
+            f"figure {field!r} has basis {basis!r} but label {label!r}; "
+            f"the honest label is {expected!r}",
+            details=[
+                {
+                    "message": f"label must be {expected!r} for basis {basis!r}",
+                    "field": field,
+                    "code": "MISLABELED_ESTIMATE",
+                }
+            ],
+        )
+
+
 class IllustrativeValueRefused(ValidationFailedError):
     """A documentation example was presented as a run outcome (invariant 8, AC 7)."""
 

@@ -21,8 +21,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from consensus_analysis.domain.entities import MajorityPosition, MinorityPosition, PackageComponent
-from consensus_analysis.domain.errors import UnbackedEstimate
+from consensus_analysis.domain.errors import MislabeledEstimate, UnbackedEstimate
 from consensus_analysis.domain.values import (
+    BasisKind,
     ConsensusOutcome,
     ConsensusThreshold,
     DocumentedExample,
@@ -181,14 +182,32 @@ class EstimateValidator:
     """Guard: a computed basis without enumerated inputs is refused (invariants 6, 7)."""
 
     def validate(self, figure: EstimatedFigure) -> None:
-        """Raise ``UnbackedEstimate`` when the claimed basis has no inputs (AC 5)."""
-        if figure.basis.is_backed():
-            return
-        raise UnbackedEstimate(figure.field, figure.basis.kind.value)
+        """Refuse an unbacked basis (AC 5) or a label that misstates it (AC 6)."""
+        if not figure.basis.is_backed():
+            raise UnbackedEstimate(figure.field, figure.basis.kind.value)
+        expected = self.label_for(figure.basis)
+        if figure.label is not expected:
+            raise MislabeledEstimate(
+                figure.field,
+                figure.basis.kind.value,
+                figure.label.value,
+                expected.value,
+            )
 
     def label_for(self, basis: EstimateBasis) -> UncertaintyLabel:
-        """Return the label a reader must see for this basis; assumed never renders computed."""
-        raise NotImplementedError("EstimateValidator.label_for is implemented by issue #314")
+        """Return the label a reader must see for this basis; assumed never renders computed.
+
+        Four bases collapse onto three labels because a reader needs to know how much to trust the
+        number, not which pipeline produced it: a reference figure is evidenced, a computation or a
+        model is modelled, and an assumption — or a refusal to estimate — is assumed.
+        """
+        match basis.kind:
+            case BasisKind.MEASURED:
+                return UncertaintyLabel.EVIDENCED
+            case BasisKind.DERIVED | BasisKind.MODELLED:
+                return UncertaintyLabel.MODELLED
+            case _:
+                return UncertaintyLabel.ASSUMED
 
 
 @dataclass(frozen=True, slots=True)
