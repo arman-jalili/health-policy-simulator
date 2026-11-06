@@ -22,7 +22,6 @@ from decision_brief.domain.errors import (
     DisclosureMissing,
     IncompleteBrief,
     PublishedBriefIsImmutable,
-    StatementWithoutCitation,
     UnresolvedCitation,
 )
 from decision_brief.domain.events import (
@@ -40,7 +39,6 @@ from decision_brief.domain.values import (
     BriefVersion,
     CitationReference,
     CitedStatement,
-    EvidenceStatus,
     RunId,
     SectionKind,
     SimulationDisclaimer,
@@ -115,8 +113,7 @@ class DecisionBrief:
 
     def assert_statement_evidence(self, statement: CitedStatement) -> None:
         """Raise ``StatementWithoutCitation`` for an evidenced statement with no citation (AC 5)."""
-        if statement.status is EvidenceStatus.EVIDENCED and not statement.citations:
-            raise StatementWithoutCitation(statement.text)
+        statement.assert_evidence()
 
     def assert_rejected_proposals_disclosed(self, run_rejected_measures: Sequence[str]) -> None:
         """Raise ``DisclosureMissing`` when a proposal rejected in the run is not disclosed (AC 3).
