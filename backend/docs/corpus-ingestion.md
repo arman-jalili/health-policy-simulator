@@ -76,6 +76,14 @@ binary**; it runs at ~300 dpi, i.e. seconds per page.
 `OCR_UNAVAILABLE`, and `GET /corpus/ingestion-runs/{id}` lists `(path, outcome, reason)` for every file, so a
 failed batch never reports only a bare counter (#427).
 
+Outcome semantics (`#434`):
+
+- `accepted` — searchable passages exist.
+- `quarantined` — extraction succeeded but the quality gate rejected the document. The reason names
+  `DOCUMENT_NOT_CITABLE`, the measured confidence and threshold, e.g.
+  `"quality 0.46 < 0.85 (1 page, 31 chars)"`. Re-running the shard reports `quarantined` again, not `failed`.
+- `failed` — an operational error: missing file, absent OCR stack, corrupt PDF. The reason names the cause.
+
 ```bash
 # is the OCR stack usable?
 python -c "import pytesseract; print(pytesseract.get_tesseract_version())" || echo "OCR unavailable"

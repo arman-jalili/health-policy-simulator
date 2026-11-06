@@ -15,6 +15,8 @@ from shared.errors import (
     ValidationFailedError,
 )
 
+from .values import DEFAULT_MINIMUM_CONFIDENCE, ExtractionQuality
+
 
 class AlreadyExtracted(ConflictError):
     """A document may be extracted exactly once (invariant 2)."""
@@ -35,12 +37,30 @@ class AuthorityAlreadyAssigned(ConflictError):
 
 
 class DocumentNotCitable(ConflictError):
-    """A quarantined or unclassified document may not produce citable passages."""
+    """A quarantined or unclassified document may not produce citable passages.
+
+    The message carries the measured quality when one exists, so an operator can triage a rejected
+    batch path without opening the database. Batch ingestion maps this refusal to `quarantined`.
+    """
 
     code = "DOCUMENT_NOT_CITABLE"
 
-    def __init__(self, document_id: str) -> None:
-        super().__init__(f"document {document_id} is not citable")
+    def __init__(
+        self,
+        document_id: str,
+        *,
+        quality: ExtractionQuality | None = None,
+        characters: int | None = None,
+    ) -> None:
+        message = f"document {document_id} is not citable"
+        if quality is not None:
+            message += (
+                f": quality {quality.confidence:.2f} < {DEFAULT_MINIMUM_CONFIDENCE:.2f}"
+                f" ({quality.page_count} page"
+                f"{'' if quality.page_count == 1 else 's'}"
+                f"{f', {characters} chars' if characters is not None else ''})"
+            )
+        super().__init__(message)
 
 
 class OffsetsOutOfBounds(ValidationFailedError):

@@ -48,14 +48,18 @@ services:
     # The vendor's documented variable name works as-is: DEEPSEEK_API_KEY=sk-… docker compose up
     # (the backend falls back to it when LLM_API_KEY is unset). Values from demo.env.local win.
     environment:
-      # The database address is owned by this file, never by a local override.
-      DATABASE_URL: postgresql+asyncpg://hps:hps@db:5432/health_policy
+      # Default: the compose database. Override to run the demo against an already-ingested corpus in
+      # another PostgreSQL (e.g. DATABASE_URL=postgresql+asyncpg://hps:hps@host.docker.internal:5433/health_policy).
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://hps:hps@db:5432/health_policy}
       # Demo auth: loopback plus the compose bridge. Override AUTH_DEMO_TRUSTED_CIDRS in demo.env.local
       # once you know your subnet (`docker network inspect hps-demo_default`); empty means loopback only.
       AUTH_DEMO_TRUSTED_CIDRS: ${AUTH_DEMO_TRUSTED_CIDRS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
       # Pass the vendor's documented variable through; the backend adopts it when LLM_API_KEY is empty,
       # so the key never has to touch a file.
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    # `host.docker.internal` lets the container reach a PostgreSQL on the host (Docker Desktop/OrbStack).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # The API is intentionally not published: the browser talks to the frontend, which proxies with
     # server-side credentials. Uncomment for `curl localhost:8000/docs` during development.
     # ports:

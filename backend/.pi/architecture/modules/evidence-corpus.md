@@ -278,6 +278,7 @@ class Document:
 | 3 | Passage offsets must lie within the parent Article text bounds and must not overlap sibling passages | A citation pointing at the wrong sentence |
 | 4 | A Document below the extraction quality threshold cannot produce citable Passages | Citing garbled OCR output as evidence |
 | 4a | Extraction prefers an existing text layer, however sparse; OCR is reserved for a missing text layer and refuses fast with `OCR_UNAVAILABLE` when the stack is absent | Discarding usable text because a system binary is missing (#427) |
+| 4b | A quality-gate refusal is `quarantined`, never `failed`; the outcome reason carries `DOCUMENT_NOT_CITABLE` plus measured confidence, threshold, pages and characters. `failed` is reserved for operational errors (missing file, absent OCR, corrupt PDF) | Permanently stuck content hashes misreported as operational failures (#434) |
 | 5 | A QuotationBlock attributed to a natural person must never enter an EvidencePack; an institution-attributed quotation is retained and citable with its attribution | Quoting real persons, or losing legitimate institutional statements |
 | 6 | Authority is evaluated per claim type (legislation for legal, statistics for quantitative, studies for causal) | A press statement outranking a statute on one global scale |
 | 7 | A Document must record its source type explicitly enough to be placed in a claim-type authority rule; unknown types cannot be promoted to authoritative | Unclassified material quietly becoming authoritative |

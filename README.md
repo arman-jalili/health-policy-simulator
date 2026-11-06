@@ -109,6 +109,40 @@ never a silent fallback to the echo. An unusable model reply ends the same way w
 `LLM_OUTPUT_UNPARSEABLE`; a claim the claim agent will not admit is dropped from the argument, not
 asserted (the text still stands).
 
+## 3b. Running the demo on the ingested 2020 press corpus
+
+The corpus lives in a PostgreSQL on the host (`hps-postgres`, port 5433) — 241 documents, 4 304
+passages, the annual snapshot `pressespiegel-2020` (231 documents, 4 297 indexed passages) plus the
+monthly snapshots. The stack reaches it through `host.docker.internal`, pinned in a git-ignored `.env`
+at the repository root so `docker compose up` needs no shell exports:
+
+```bash
+# .env (git-ignored)
+DATABASE_URL=postgresql+asyncpg://hps:hps@host.docker.internal:5433/health_policy
+DEEPSEEK_API_KEY=sk-…
+```
+
+```bash
+docker compose up -d            # backend now talks to the host database
+curl -s localhost:3000/api/hps/_platform/readyz | grep -o '"database": "[a-z]*"'
+```
+
+Then, in the browser:
+
+1. **Settings → Demo-Bootstrap** → import `backend/samples/pressespiegel-2020-seed.json`
+   (snapshot + five annual packs + five reference figures). Without it the manual "open position" form
+   has no pack to cite; the automated path assembles its own pack and does not need it.
+2. **Open a run by id** with the header field (`Lauf-ID suchen`) for runs created outside the browser,
+   or start a fresh one from *Neue Verhandlung*.
+
+Alternative, self-contained: re-ingest into the compose volume (`make stack-ingest`) and drop the
+`DATABASE_URL` line from `.env`. The ingest script now replaces segmentation's whole-body placeholder
+with paragraph-sized chunks, so a fresh corpus indexes properly.
+
+Known demo limits: the brief's eight sections are narrative — `citation_count` is 0 because the brief
+cites *admitted claims* and model prose carries none; provenance is shown on the Evidence tab. An
+automated round 2 adds arguments but no new positions, so the stance matrix fills in round 1 only.
+
 ## 4. Operating it
 
 ```bash

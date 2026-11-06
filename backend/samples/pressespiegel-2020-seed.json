@@ -1,34 +1,40 @@
 {
-  "document_id": "doc_01M6QYZD89EF625W3MNJCP3GQZ",
-  "snapshot_id": "snp_01M6QZB2CNYAP7JV18442G7JVC",
-  "figure_ids": [],
-  "pack_ids": {
-    "kassenstellen": "evp_01M6QZBHTW9AC6ERE61QRB6ATD",
-    "spitalsreform": "evp_01M6QZBS9F95X3H0292MHJB4DZ",
-    "pflegepersonal": "evp_01M6QZC10A5KVM6W9HYZQ29CJR",
-    "arzneimittelpreise": "evp_01M6QZC8FRDTRHXJ5TZ1GJB2NX",
-    "digitalisierung": "evp_01M6QZCG377EAS04FP7CP364TX"
+ "document_id": "doc_01M6QYZD89EF625W3MNJCP3GQZ",
+ "snapshot_id": "snp_01M6QZB2CNYAP7JV18442G7JVC",
+ "figure_ids": [
+  "fig_01M6QSBCA7TJ0V0HXDB37WHA1B",
+  "fig_01M6QSBCAEWTGFYPM25GDWPQ84",
+  "fig_01M6QSBCAMAAM296DRD5F959JH",
+  "fig_01M6QSBCARZGDSGTS7GMJFMQXC",
+  "fig_01M6QSBCAXXR40HAQ875N7ZDJJ"
+ ],
+ "pack_ids": {
+  "kassenstellen": "evp_01M6QZBHTW9AC6ERE61QRB6ATD",
+  "spitalsreform": "evp_01M6QZBS9F95X3H0292MHJB4DZ",
+  "pflegepersonal": "evp_01M6QZC10A5KVM6W9HYZQ29CJR",
+  "arzneimittelpreise": "evp_01M6QZC8FRDTRHXJ5TZ1GJB2NX",
+  "digitalisierung": "evp_01M6QZCG377EAS04FP7CP364TX"
+ },
+ "topics": [
+  {
+   "slug": "kassenstellen",
+   "claim": "Die Kassenstellen sollen ausgebaut werden."
   },
-  "topics": [
-    {
-      "slug": "kassenstellen",
-      "claim": "Die Kassenstellen sollen ausgebaut werden."
-    },
-    {
-      "slug": "spitalsreform",
-      "claim": "Die Spitalsreform verschiebt Mittel zu den Kassenstellen."
-    },
-    {
-      "slug": "pflegepersonal",
-      "claim": "Das Pflegepersonal braucht mehr Ausbildung."
-    },
-    {
-      "slug": "arzneimittelpreise",
-      "claim": "Die Arzneimittelpreise sollen transparent bleiben."
-    },
-    {
-      "slug": "digitalisierung",
-      "claim": "Die Digitalisierung umfasst die elektronische Gesundheitsakte."
-    }
-  ]
+  {
+   "slug": "spitalsreform",
+   "claim": "Die Spitalsreform verschiebt Mittel zu den Kassenstellen."
+  },
+  {
+   "slug": "pflegepersonal",
+   "claim": "Das Pflegepersonal braucht mehr Ausbildung."
+  },
+  {
+   "slug": "arzneimittelpreise",
+   "claim": "Die Arzneimittelpreise sollen transparent bleiben."
+  },
+  {
+   "slug": "digitalisierung",
+   "claim": "Die Digitalisierung umfasst die elektronische Gesundheitsakte."
+  }
+ ]
 }

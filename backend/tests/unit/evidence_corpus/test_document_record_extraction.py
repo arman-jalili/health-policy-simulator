@@ -72,6 +72,18 @@ class TestRecordExtractionFailureModes:
         assert error.code == "DOCUMENT_NOT_CITABLE"
         assert error.status_code == 409
 
+    def test_quarantine_reason_carries_the_measured_quality(self) -> None:
+        from evidence_corpus.domain.values import ExtractionMethod, ExtractionQuality
+
+        error = DocumentNotCitable(
+            "doc_01J0000000000000000000000A",
+            quality=ExtractionQuality(ExtractionMethod.NATIVE, 0.46, 0.0, page_count=1),
+            characters=31,
+        )
+
+        assert "quality 0.46 < 0.85" in str(error)
+        assert "(1 page, 31 chars)" in str(error)
+
     def test_extraction_failure_is_reported_not_swallowed(self) -> None:
         error = ExtractionFailed("scanned.pdf", "ocr backend unavailable")
 

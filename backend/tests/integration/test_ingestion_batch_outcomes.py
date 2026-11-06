@@ -1,4 +1,4 @@
-"""Integration: batch ingestion explains each path (#427)."""
+"""Integration: accepted, quarantined and failed batch outcomes stay distinct (#427, #434)."""
 
 from __future__ import annotations
 
@@ -52,24 +52,67 @@ async def _run_batch(client: httpx.AsyncClient, paths: list[str]) -> dict[str, A
     return payload
 
 
-async def test_good_and_thin_text_paths_both_report_a_reason(tmp_path: Path) -> None:
+async def test_accepted_quarantined_and_failed_paths_are_distinct(tmp_path: Path) -> None:
     good = _write_pdf(tmp_path / "good.pdf", "Die Kassenstellen werden aufgestockt. " * 40)
     thin = _write_pdf(tmp_path / "thin.pdf", "Kassenstellen")
+    missing = tmp_path / "does-not-exist.pdf"
     app = _app()
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
     ):
-        payload = await _run_batch(client, [str(good), str(thin)])
+        payload = await _run_batch(client, [str(good), str(thin), str(missing)])
+        thin_document = await client.post(
+            "/api/v1/corpus/documents",
+            json={
+                "source_uri": str(thin),
+                "publication": {
+                    "outlet": "Test",
+                    "published_on": "2020-01-01",
+                    "medium": "print",
+                },
+                "source_type": "press_report",
+            },
+        )
+        assert thin_document.status_code == 202, thin_document.text
+        indexed = await client.post(
+            f"/api/v1/corpus/documents/{thin_document.json()['document_id']}:index"
+        )
     await app.state.db.dispose()
 
     outcomes = {item["path"]: item for item in payload["outcomes"]}
     assert outcomes[str(good)]["outcome"] == "accepted"
-    assert outcomes[str(thin)]["outcome"] in {"accepted", "quarantined", "failed"}
-    if outcomes[str(thin)]["outcome"] != "accepted":
-        assert outcomes[str(thin)]["reason"]
-    assert all(item["reason"] for item in outcomes.values() if item["outcome"] == "failed")
+    assert outcomes[str(thin)]["outcome"] == "quarantined"
+    assert "quality" in outcomes[str(thin)]["reason"]
+    assert "< 0.85" in outcomes[str(thin)]["reason"]
+    assert outcomes[str(missing)]["outcome"] == "failed"
+    assert "ExtractionFailed" in outcomes[str(missing)]["reason"]
+    assert (payload["accepted"], payload["quarantined"], payload["failed"]) == (1, 1, 1)
+
+    assert indexed.status_code == 409, indexed.text
+    assert indexed.json()["code"] == "DOCUMENT_NOT_CITABLE"
+    assert indexed.json()["message"] == outcomes[str(thin)]["reason"].removeprefix(
+        "DOCUMENT_NOT_CITABLE: "
+    )
+
+
+async def test_resuming_a_quarantined_path_reports_quarantined_again(tmp_path: Path) -> None:
+    thin = _write_pdf(tmp_path / "thin-resume.pdf", "Kassenstellen")
+    app = _app()
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+    ):
+        first = await _run_batch(client, [str(thin)])
+        second = await _run_batch(client, [str(thin)])
+    await app.state.db.dispose()
+
+    assert first["quarantined"] == 1
+    assert second["quarantined"] == 1
+    assert second["failed"] == 0
+    assert second["outcomes"][0]["reason"] == first["outcomes"][0]["reason"]
 
 
 async def test_resuming_the_same_shard_is_idempotent(tmp_path: Path) -> None:

@@ -37,7 +37,11 @@ class IndexIngestedPassagesHandler:
         if document is None:
             raise DocumentNotFound(request.document_id)
         if not document.is_citable():
-            raise DocumentNotCitable(document.id)
+            raise DocumentNotCitable(
+                document.id,
+                quality=document.quality,
+                characters=len(document.extracted_text or ""),
+            )
 
         manifest = await self._writer.upsert_passages(document.id, _passage_views(document))
         await self._events.publish(

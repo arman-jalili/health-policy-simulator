@@ -36,7 +36,11 @@ class SegmentArticleHandler:
         if document is None:
             raise DocumentNotFound(request.document_id)
         if not document.is_citable() or document.extracted_text is None:
-            raise DocumentNotCitable(document.id)
+            raise DocumentNotCitable(
+                document.id,
+                quality=document.quality,
+                characters=len(document.extracted_text or ""),
+            )
 
         strategy = self._strategy or select_strategy(document.extracted_text)
         drafts = strategy.segment(document.extracted_text, document.publication)

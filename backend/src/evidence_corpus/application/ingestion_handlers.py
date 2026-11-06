@@ -31,7 +31,7 @@ from evidence_corpus.application.extraction_handler import ExtractDocumentTextHa
 from evidence_corpus.application.indexing_handler import IndexIngestedPassagesHandler
 from evidence_corpus.application.segmentation_handler import SegmentArticleHandler
 from evidence_corpus.domain.entities import Document, IngestionOutcome, IngestionRun, Publication
-from evidence_corpus.domain.errors import OcrUnavailable, RunNotFound
+from evidence_corpus.domain.errors import DocumentNotCitable, OcrUnavailable, RunNotFound
 from evidence_corpus.domain.repositories import DocumentRepository, IngestionRunRepository
 from evidence_corpus.domain.values import LANGUAGE_DE_AT, LanguageTag, SourceType
 from shared.ids import new_id
@@ -138,6 +138,12 @@ class StartIngestionRunHandler:
                         path=path,
                         reason="no citable passages after extraction/segmentation",
                     )
+            except DocumentNotCitable as error:
+                run.record(
+                    IngestionOutcome.QUARANTINED,
+                    path=path,
+                    reason=f"{error.code}: {error.message}",
+                )
             except OcrUnavailable as error:
                 run.record(
                     IngestionOutcome.FAILED,
