@@ -62,9 +62,8 @@ class NegotiationMandate:
     mandate_hash: str = ""
 
     def is_immutable_after_open(self) -> bool:
-        raise NotImplementedError(
-            "NegotiationMandate.is_immutable_after_open is implemented by issue #284"
-        )
+        """The mandate is frozen once the run left ``DRAFT``."""
+        return self.phase is not NegotiationPhase.DRAFT
 
 
 @dataclass(slots=True)
@@ -200,12 +199,19 @@ class ConflictTopic:
         topic: TopicRef,
         stances: Mapping[StakeholderId, ArgumentStance],
     ) -> ConflictTopic:
-        raise NotImplementedError("ConflictTopic.open is implemented by issue #284")
+        return cls(
+            id=conflict_id,
+            topic=topic,
+            status=ConflictStatus.OPEN,
+            stances=dict(stances),
+            history=[(0, stakeholder, stance) for stakeholder, stance in stances.items()],
+        )
 
     def record_stance(
         self, stakeholder: StakeholderId, stance: ArgumentStance, round_number: int
     ) -> None:
-        raise NotImplementedError("ConflictTopic.record_stance is implemented by issue #284")
+        self.stances[stakeholder] = stance
+        self.history.append((round_number, stakeholder, stance))
 
 
 @dataclass(slots=True)

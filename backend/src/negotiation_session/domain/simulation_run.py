@@ -35,6 +35,7 @@ from negotiation_session.domain.errors import (
 from negotiation_session.domain.events import (
     AbstentionRecorded,
     ArgumentSubmitted,
+    ConflictTopicOpened,
     DomainEvent,
     InitialPositionStated,
     NegotiationPhaseAdvanced,
@@ -51,6 +52,7 @@ from negotiation_session.domain.values import (
     ClaimEvidence,
     ClaimStatement,
     CoalitionId,
+    ConflictTopicId,
     ConsensusLevel,
     EvidencePackId,
     InvocationId,
@@ -292,7 +294,13 @@ class SimulationRun:
     def track_conflict(
         self, topic: TopicRef, stances: Mapping[StakeholderId, ArgumentStance]
     ) -> ConflictTopic:
-        raise NotImplementedError("SimulationRun.track_conflict is implemented by issue #284")
+        self._assert_mutable()
+        conflict = ConflictTopic.open(
+            conflict_id=ConflictTopicId(new_id("cft")), topic=topic, stances=stances
+        )
+        self.conflicts[topic] = conflict
+        self.events.append(ConflictTopicOpened(run_id=self.id, topic=topic, stances=dict(stances)))
+        return conflict
 
     def form_coalition(
         self,

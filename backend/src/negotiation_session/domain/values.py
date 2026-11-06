@@ -201,8 +201,9 @@ class ProposalComponent:
     support_record: tuple[EvidencePackId, ...] = ()
 
     def is_admissible_for_impact(self) -> bool:
-        raise NotImplementedError(
-            "ProposalComponent.is_admissible_for_impact is implemented by issue #284"
+        """Unquantified components may not enter an impact calculation (invariant 10)."""
+        return (
+            self.quantification is ProposalQuantification.QUANTIFIED and self.cost_eur is not None
         )
 
 
@@ -214,10 +215,17 @@ class Proposal:
     components: tuple[ProposalComponent, ...] = ()
 
     def quantified_components(self) -> tuple[ProposalComponent, ...]:
-        raise NotImplementedError("Proposal.quantified_components is implemented by issue #284")
+        return tuple(
+            component
+            for component in self.components
+            if component.quantification is ProposalQuantification.QUANTIFIED
+        )
 
     def is_fully_quantified(self) -> bool:
-        raise NotImplementedError("Proposal.is_fully_quantified is implemented by issue #284")
+        return all(
+            component.quantification is ProposalQuantification.QUANTIFIED
+            for component in self.components
+        )
 
 
 @dataclass(frozen=True, slots=True)
