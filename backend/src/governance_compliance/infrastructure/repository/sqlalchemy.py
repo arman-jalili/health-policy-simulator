@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -17,6 +18,7 @@ from governance_compliance.application.values import (
     ViolationId,
 )
 from governance_compliance.infrastructure.repository.models import ProvenanceRow, ViolationRow
+from shared.db import UnitOfWork as DbUnitOfWork
 
 
 def _violation(row: ViolationRow) -> ViolationRecord:
@@ -47,12 +49,40 @@ def _provenance(row: ProvenanceRow) -> ProvenanceRecord:
     )
 
 
-class SqlAlchemyViolationStore:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+class _SessionScope:
+    """Join the request transaction when one is supplied; otherwise own a short scope."""
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        unit_of_work: DbUnitOfWork | None,
+    ) -> None:
         self._session_factory = session_factory
+        self._unit_of_work = unit_of_work
+
+    def bind(self, unit_of_work: DbUnitOfWork) -> None:
+        self._unit_of_work = unit_of_work
+
+    @asynccontextmanager
+    async def __call__(self) -> AsyncIterator[AsyncSession]:
+        if self._unit_of_work is not None:
+            async with self._unit_of_work.session() as session:
+                yield session
+            return
+        async with self._session_factory() as session, session.begin():
+            yield session
+
+
+class SqlAlchemyViolationStore:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        unit_of_work: DbUnitOfWork | None = None,
+    ) -> None:
+        self._scope = _SessionScope(session_factory, unit_of_work)
 
     async def add(self, record: ViolationRecord) -> ViolationRecord:
-        async with self._session_factory() as session, session.begin():
+        async with self._scope() as session:
             existing = await session.scalar(
                 select(ViolationRow).where(ViolationRow.violation_hash == record.violation_hash)
             )
@@ -75,7 +105,7 @@ class SqlAlchemyViolationStore:
         return record
 
     async def get_by_hash(self, violation_hash: str) -> ViolationRecord | None:
-        async with self._session_factory() as session:
+        async with self._scope() as session:
             row = await session.scalar(
                 select(ViolationRow).where(ViolationRow.violation_hash == violation_hash)
             )
@@ -93,17 +123,24 @@ class SqlAlchemyViolationStore:
             query = query.where(ViolationRow.run_id == str(run_id))
         if violation_class is not None:
             query = query.where(ViolationRow.violation_class == violation_class.value)
-        async with self._session_factory() as session:
+        async with self._scope() as session:
             rows = (await session.scalars(query)).all()
             return tuple(_violation(row) for row in rows)
 
 
 class SqlAlchemyProvenanceStore:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
-        self._session_factory = session_factory
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        unit_of_work: DbUnitOfWork | None = None,
+    ) -> None:
+        self._scope = _SessionScope(session_factory, unit_of_work)
+
+    def bind_unit_of_work(self, unit_of_work: DbUnitOfWork) -> None:
+        self._scope.bind(unit_of_work)
 
     async def save(self, record: ProvenanceRecord) -> ProvenanceRecord:
-        async with self._session_factory() as session, session.begin():
+        async with self._scope() as session:
             existing = await session.get(
                 ProvenanceRow, {"position_id": str(record.position_id), "version": record.version}
             )
@@ -130,7 +167,7 @@ class SqlAlchemyProvenanceStore:
         query = query.order_by(ProvenanceRow.version.desc())
         if version is not None:
             query = query.where(ProvenanceRow.version == version)
-        async with self._session_factory() as session:
+        async with self._scope() as session:
             row = await session.scalar(query.limit(1))
             return _provenance(row) if row is not None else None
 
@@ -140,6 +177,6 @@ class SqlAlchemyProvenanceStore:
             .where(ProvenanceRow.position_id == str(position_id))
             .order_by(ProvenanceRow.version)
         )
-        async with self._session_factory() as session:
+        async with self._scope() as session:
             rows = (await session.scalars(query)).all()
             return tuple(_provenance(row) for row in rows)

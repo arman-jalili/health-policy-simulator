@@ -23,6 +23,7 @@ from negotiation_session.domain.values import (
     ClaimStatement,
     EvidencePackId,
     InvocationId,
+    PositionId,
     RunId,
     StakeholderId,
 )
@@ -95,6 +96,13 @@ class InvocationLookup(Protocol):
     """ACL to SimulationOrchestration: every argument carries the invocation that produced it."""
 
     async def require(self, run_id: RunId, invocation_id: InvocationId) -> None: ...
+
+
+@runtime_checkable
+class PositionProvenanceDisclosure(Protocol):
+    """Record the provenance the brief gate requires; incomplete facts return ``False``."""
+
+    async def disclose(self, position_id: PositionId) -> bool: ...
 
 
 @runtime_checkable

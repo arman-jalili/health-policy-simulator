@@ -42,6 +42,8 @@ class IndexWriterPort(Protocol):
 
     async def revert_passage(self, passage_id: str, reason: str) -> None: ...
 
+    async def search(self, query: str, limit: int = 20) -> list[str]: ...
+
 
 @runtime_checkable
 class ContentHasher(Protocol):

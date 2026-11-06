@@ -55,6 +55,7 @@ class ConsensusRecordResult:
     supporters: tuple[StakeholderId, ...] = ()
     minorities: tuple[MinorityResult, ...] = ()
     blockers: tuple[StakeholderId, ...] = ()
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

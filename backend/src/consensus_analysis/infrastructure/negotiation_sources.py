@@ -75,10 +75,9 @@ class NegotiationRunLogSource:
                         log_position=LogPosition(position),
                     )
                 )
-        if not snapshots:
-            raise ConsensusAnalysisUnavailable(
-                f"run {run_id} has no recorded stances; deriving would invent agreement"
-            )
+        # No stances is a legitimate domain outcome (everyone abstained), not a missing
+        # dependency: the projection records "unresolved" with zero support rather than inventing
+        # agreement or reporting an outage.
         return tuple(snapshots)
 
     async def position_of(

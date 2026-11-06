@@ -112,7 +112,7 @@ def build_container(
     embeddings = HashingEmbedding()
     reranker = OverlapReranker()
     passage_search = CorpusPassageSearch(
-        index=corpus.index_writer,  # type: ignore[arg-type]
+        index=corpus.index_writer,
         passages=corpus.passages,
         snapshots=corpus.snapshots,
         authority_rules=corpus.authority_rules,

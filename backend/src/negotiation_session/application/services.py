@@ -66,6 +66,7 @@ from negotiation_session.application.ports import (
     GovernanceGuard,
     IdFactory,
     InvocationLookup,
+    PositionProvenanceDisclosure,
     StakeholderDirectory,
     UnitOfWork,
 )
@@ -479,11 +480,13 @@ class CloseRound:
         runs: SimulationRunRepository,
         event_log: RunEventLog,
         events: EventPublisher,
+        provenance: PositionProvenanceDisclosure,
         uow: UnitOfWork,
     ) -> None:
         self._runs = runs
         self._event_log = event_log
         self._events = events
+        self._provenance = provenance
         self._uow = uow
         self._on_closed: Callable[[SimulationRun], Awaitable[None]] | None = None
 
@@ -499,6 +502,13 @@ class CloseRound:
         condition = run.evaluate_stopping(_consensus(request.convergence))
         async with self._uow.transaction():
             await _persist(run, self._runs, self._event_log, self._events)
+            # The brief gate reads disclosure rows, so the producer belongs to the lifecycle, not
+            # to the client. Writing here also joins the aggregate's transaction when the
+            # composition root shares one UnitOfWork with GovernanceCompliance.
+            for round_ in run.rounds:
+                for position in round_.positions.values():
+                    if position.is_open:
+                        await self._provenance.disclose(position.id)
         if run.is_closed and self._on_closed is not None:
             await self._on_closed(run)
         return CloseRoundResult(

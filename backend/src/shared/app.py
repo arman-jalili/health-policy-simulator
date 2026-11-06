@@ -85,7 +85,10 @@ from governance_compliance.interfaces.http.router import router as governance_co
 from identity_access.composition import build_identity_access_container
 from identity_access.interfaces.http.router import router as identity_access_router
 from negotiation_session.composition import build_container as build_negotiation_container
-from negotiation_session.infrastructure.acl import GovernanceGuardAdapter
+from negotiation_session.infrastructure.acl import (
+    GovernanceGuardAdapter,
+    PositionProvenanceAcl,
+)
 from negotiation_session.infrastructure.progress import InMemoryProgressBroker
 from negotiation_session.infrastructure.upstream import (
     ClaimVerdicts,
@@ -209,6 +212,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         invocations=RequiredInvocationLookup(),
         progress=app.state.negotiation_progress,
     )
+    if app_settings.persistence is Persistence.POSTGRES:
+        close_uow = app.state.negotiation_session.bind_position_provenance(
+            PositionProvenanceAcl(app.state.governance_compliance.disclose_position_provenance)
+        )
+        app.state.governance_compliance.bind_unit_of_work(close_uow)
     if app_settings.persistence is Persistence.POSTGRES:
         consensus_repository: ConsensusRepository = SqlAlchemyConsensusRepository(
             database.session_factory

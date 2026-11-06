@@ -59,12 +59,27 @@ lands.
 |-------|--------------|------|
 | **Domain** | — (none; ADR-008 forbids aggregates here) | `src/simulation_orchestration/domain/` |
 | **Application** | `RunSimulationJob`, `StreamSimulationProgress`, `PauseOrResumeSimulation`, `RecordAgentInvocation` | `src/simulation_orchestration/application/` |
-| **Infrastructure** | LangGraph graph, worker loop, LLM provider adapters, SSE broker, job repository | `src/simulation_orchestration/infrastructure/` |
+| **Infrastructure** | `SequentialWorkflowGraph` (not LangGraph), worker loop, **one** `LLMClient` adapter (`ScriptedLLMClient`), SSE broker, job repository | `src/simulation_orchestration/infrastructure/` |
 | **Interfaces** | REST routers (pause/resume/usage), SSE endpoint, prompt templates | `src/simulation_orchestration/interfaces/` |
 
 **The ownership rule (ADR-003):** the graph holds `{run_id, round, phase, next_actor, budget_used}`.
 Every node calls an application service in `NegotiationSession`, which loads the aggregate, applies
 the rule and persists. The graph is a sequencer, not a model.
+
+### Wiring reality (verified 2026-11-06 on `09b0073`)
+
+| Aspect | Documented | Actual |
+|---|---|---|
+| Graph | LangGraph | `SequentialWorkflowGraph` over two `_Bootstrap*` nodes ("temporary deterministic graph") |
+| Nodes drive the run | yes — every node calls NegotiationSession | **no**: the container binds `NoopNegotiationGateway`, so `POST /runs/{id}:start` completes with the run still at round 0, no rounds, no positions (**#415**) |
+| LLM | provider adapters, metered calls | one adapter, `ScriptedLLMClient`, which returns `"[{prompt_ref.identity}] {prompt}"`; tokens are `len(prompt)//4`, latency is `0` (**#416**) |
+| Config | — | only `LLM_HEALTH_URL`; no provider, key, base URL, timeout or retry setting exists |
+| Metering | real cost per stakeholder | real machinery, fictional inputs: every invocation is attributed to stakeholder `bootstrap`, cost `0` |
+
+The ports are the part that is right: `LLMClient`, `GraphNode`, `WorkflowGraph`, `NegotiationGateway`,
+`PromptRegistry`, `PriceTable` and `BudgetGuard` all exist and are exercised. What is missing is an
+implementation behind the first and last of them — do not describe this context as LLM-driven until
+#415 and #416 are closed.
 
 ## Related ADRs
 

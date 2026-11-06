@@ -46,6 +46,7 @@ from negotiation_session.application.services import (
 from negotiation_session.domain.events import DomainEvent
 from negotiation_session.domain.repositories import RunEventLog, SimulationRunRepository
 from negotiation_session.domain.values import RunId
+from negotiation_session.infrastructure.acl import PositionProvenanceAcl
 from negotiation_session.infrastructure.progress import InMemoryProgressBroker
 from negotiation_session.infrastructure.repository.memory import (
     InMemoryRunEventLog,
@@ -121,6 +122,11 @@ class NegotiationSessionContainer:
         self.close_round.subscribe_run_closed(handler)  # type: ignore[arg-type]
         self.open_round.subscribe_run_closed(handler)  # type: ignore[arg-type]
 
+    def bind_position_provenance(self, provenance: object) -> UnitOfWork:
+        """Bind the disclosure producer after the GovernanceCompliance container exists."""
+        self.close_round._provenance = provenance  # type: ignore[assignment]
+        return self.close_round._uow
+
     def readiness(self) -> tuple[str, str]:
         """Return ``(state, adapter)`` for the persistence family actually bound."""
         adapter = type(self.open_simulation_run._runs).__name__
@@ -148,11 +154,11 @@ def build_container(
     if settings.persistence is Persistence.POSTGRES:
         runs: SimulationRunRepository = SqlAlchemySimulationRunRepository(database.session_factory)
         event_log: RunEventLog = SqlAlchemyRunEventLog(database.session_factory)
-        uow: UnitOfWork = DbUnitOfWork(database.session_factory)
+        active_uow: UnitOfWork = DbUnitOfWork(database.session_factory)
     else:
         runs = InMemorySimulationRunRepository()
         event_log = InMemoryRunEventLog()
-        uow = _NullUnitOfWork()
+        active_uow = _NullUnitOfWork()
     broker: RunProgressStream = progress or InMemoryProgressBroker()
     publisher = _ProgressEventPublisher(broker)
     ids: IdFactory = UuidFactory()
@@ -166,16 +172,16 @@ def build_container(
             events=publisher,
             stakeholders=stakeholders,
             ids=ids,
-            uow=uow,
+            uow=active_uow,
         ),
-        open_round=OpenRound(runs=runs, event_log=event_log, events=publisher, uow=uow),
+        open_round=OpenRound(runs=runs, event_log=event_log, events=publisher, uow=active_uow),
         submit_initial_position=SubmitInitialPosition(
             runs=runs,
             event_log=event_log,
             events=publisher,
             evidence=evidence,
             guard=governance,
-            uow=uow,
+            uow=active_uow,
         ),
         take_negotiation_turn=TakeNegotiationTurn(
             runs=runs,
@@ -185,25 +191,31 @@ def build_container(
             claims=claims,
             guard=governance,
             invocations=invocations,
-            uow=uow,
+            uow=active_uow,
         ),
         revise_position=RevisePosition(
             runs=runs,
             event_log=event_log,
             events=publisher,
             guard=governance,
-            uow=uow,
+            uow=active_uow,
         ),
         record_abstention=RecordAbstention(
-            runs=runs, event_log=event_log, events=publisher, uow=uow
+            runs=runs, event_log=event_log, events=publisher, uow=active_uow
         ),
         track_conflict_topic=TrackConflictTopic(
-            runs=runs, event_log=event_log, events=publisher, uow=uow
+            runs=runs, event_log=event_log, events=publisher, uow=active_uow
         ),
         form_coalition=FormCoalition(
-            runs=runs, event_log=event_log, events=publisher, ids=ids, uow=uow
+            runs=runs, event_log=event_log, events=publisher, ids=ids, uow=active_uow
         ),
-        close_round=CloseRound(runs=runs, event_log=event_log, events=publisher, uow=uow),
+        close_round=CloseRound(
+            runs=runs,
+            event_log=event_log,
+            events=publisher,
+            provenance=PositionProvenanceAcl(),
+            uow=active_uow,
+        ),
         get_simulation_run=GetSimulationRun(runs=runs),
         list_rounds=ListRounds(runs=runs),
         list_conflict_topics=ListConflictTopics(runs=runs),

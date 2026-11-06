@@ -26,7 +26,7 @@ from .contract_helpers import field_names, method_names, parameter_names
 
 class TestIndexWriterPort:
     def test_upserts_passages_and_can_withdraw_them(self) -> None:
-        assert method_names(IndexWriterPort) == {"upsert_passages", "revert_passage"}
+        assert method_names(IndexWriterPort) == {"upsert_passages", "revert_passage", "search"}
 
     def test_upsert_is_keyed_by_document_so_reindexing_is_idempotent(self) -> None:
         assert parameter_names(IndexWriterPort.upsert_passages) == [
@@ -152,8 +152,8 @@ class TestIndexingPassages:
 
         assert first.passage_count == 2
         assert second.passage_count == 2
-        assert writer.search("Kassenstellen")
-        assert len(writer.search("aufgestockt")) == 1
+        assert await writer.search("Kassenstellen")
+        assert len(await writer.search("aufgestockt")) == 1
 
     async def test_non_citable_document_cannot_be_indexed(self) -> None:
         from datetime import date

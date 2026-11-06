@@ -10,6 +10,7 @@ from governance_compliance.application.commands import ValidateInstitutionalAllo
 from governance_compliance.application.dto import ProvenanceFacts
 from governance_compliance.application.errors import AllowlistContainsPerson, AllowlistEmpty
 from governance_compliance.application.ports import AllowlistSource, FigureVerdictLookup
+from governance_compliance.application.ports import UnitOfWork as GovernanceUnitOfWork
 from governance_compliance.application.repositories import ProvenanceStore, ViolationStore
 from governance_compliance.application.rules import (
     ContradictedFigureRule,
@@ -43,6 +44,7 @@ from governance_compliance.infrastructure.resolver import AllowlistInstitutionRe
 from shared.clock import SystemClock
 from shared.config import Settings
 from shared.db import Database
+from shared.db import UnitOfWork as DbUnitOfWork
 from shared.enums import Persistence
 from shared.log_setup import get_logger
 
@@ -66,6 +68,13 @@ class GovernanceComplianceContainer:
     get_position_provenance: GetPositionProvenance
     list_allowlist: ListAllowlist
 
+    def bind_unit_of_work(self, unit_of_work: DbUnitOfWork) -> None:
+        """Join the negotiation close transaction so disclosure and the run commit together."""
+        self.disclose_position_provenance._uow = unit_of_work
+        store = self.disclose_position_provenance._store
+        if isinstance(store, SqlAlchemyProvenanceStore):
+            store.bind_unit_of_work(unit_of_work)
+
 
 def build_container(
     settings: Settings,
@@ -85,12 +94,13 @@ def build_container(
             raise AllowlistEmpty("institutional allowlist is empty")
         raise AllowlistContainsPerson("; ".join(validation.problems))
     clock = SystemClock()
-    uow = _NoopUnitOfWork()
+    uow: GovernanceUnitOfWork = _NoopUnitOfWork()
     if settings.persistence is Persistence.POSTGRES:
         if database is None:
             raise ValueError("PERSISTENCE=postgres requires a Database")
         violations: ViolationStore = SqlAlchemyViolationStore(database.session_factory)
         provenance: ProvenanceStore = SqlAlchemyProvenanceStore(database.session_factory)
+        uow = DbUnitOfWork(database.session_factory)
     else:
         violations = InMemoryViolationStore()
         provenance = InMemoryProvenanceStore()

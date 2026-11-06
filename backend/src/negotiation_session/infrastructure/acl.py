@@ -10,11 +10,19 @@ from collections.abc import Sequence
 
 from claim_validation.interfaces.published import ClaimVerdictView
 from evidence_retrieval.interfaces.published import EvidencePackView
-from governance_compliance.application.commands import EnforceInstitutionOnlyOutputRequest
-from governance_compliance.application.services import EnforceInstitutionOnlyOutput
+from governance_compliance.application.commands import (
+    DisclosePositionProvenanceRequest,
+    EnforceInstitutionOnlyOutputRequest,
+)
+from governance_compliance.application.errors import ProvenanceIncomplete
+from governance_compliance.application.services import (
+    DisclosePositionProvenance,
+    EnforceInstitutionOnlyOutput,
+)
 from governance_compliance.application.values import (
     InvocationId as GovernanceInvocationId,
 )
+from governance_compliance.application.values import PositionId as GovernancePositionId
 from governance_compliance.application.values import RunId as GovernanceRunId
 from governance_compliance.application.values import SpeakerKind
 from governance_compliance.interfaces.published import GuardVerdictView
@@ -27,6 +35,7 @@ from negotiation_session.domain.errors import GovernanceGuardUnavailable
 from negotiation_session.domain.values import (
     ClaimEvidence,
     InvocationId,
+    PositionId,
     RunId,
     StakeholderBinding,
     StakeholderId,
@@ -56,6 +65,26 @@ class StakeholderProfileAcl:
             persona_version=persona_version,
             allowed_evidence_tiers=allowed_evidence_tiers,
         )
+
+
+class PositionProvenanceAcl:
+    """Produce the disclosure row when the run closes; incomplete facts stay missing."""
+
+    def __init__(self, disclose: DisclosePositionProvenance | None = None) -> None:
+        self._disclose = disclose
+
+    async def disclose(self, position_id: PositionId) -> bool:
+        if self._disclose is None:
+            return False
+        try:
+            await self._disclose.execute(
+                DisclosePositionProvenanceRequest(
+                    position_id=GovernancePositionId(str(position_id))
+                )
+            )
+        except ProvenanceIncomplete:
+            return False
+        return True
 
 
 class ClaimVerdictAcl:

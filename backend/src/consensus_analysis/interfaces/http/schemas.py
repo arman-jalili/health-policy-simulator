@@ -73,6 +73,7 @@ class ConsensusRecordBody(BaseModel):
     supporters: list[str] = Field(default_factory=list)
     minorities: list[MinorityBody] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
+    reason: str | None = None
 
 
 class ConsensusResponse(BaseModel):

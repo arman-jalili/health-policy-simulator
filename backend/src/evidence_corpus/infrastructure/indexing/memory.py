@@ -55,17 +55,18 @@ class InMemoryIndexWriter:
             for passage_id in sorted(self._passages_by_document.get(document_id, set()))
         ]
 
-    def search(self, query: str) -> list[PassageView]:
+    async def search(self, query: str, limit: int = 20) -> list[str]:
+        """Return passage ids in rank order, matching the PostgreSQL writer's port."""
         terms = tuple(term for term in query_terms(query) if term not in self.german_stopwords)
         if not terms:
             return []
         require_all = not is_disjunctive(query)
-        matches: list[PassageView] = []
-        for passage in self._rows.values():
+        matches: list[str] = []
+        for passage_id, passage in self._rows.items():
             tokens = tuple(
                 token for token in text_tokens(passage.text) if token not in self.german_stopwords
             )
             results = [term_prefix_matches(term, tokens) for term in terms]
             if all(results) if require_all else any(results):
-                matches.append(passage)
-        return matches
+                matches.append(passage_id)
+        return matches[:limit]

@@ -12,8 +12,8 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, Protocol, cast
 
+from evidence_corpus.application.ports import IndexWriterPort
 from evidence_corpus.domain.published import PassageView, SnapshotIndexView
 from evidence_corpus.domain.repositories import (
     AuthorityRuleRepository,
@@ -27,17 +27,13 @@ from evidence_retrieval.domain.values import SnapshotId, StanceLabel
 from shared.text_embedding import MODEL_ID, embed_texts
 
 
-class _SearchableIndex(Protocol):
-    def search(self, query: str, limit: int = 20) -> Any: ...
-
-
 class CorpusPassageSearch:
     """Adapter from retrieval's port to EvidenceCorpus' published language."""
 
     def __init__(
         self,
         *,
-        index: _SearchableIndex,
+        index: IndexWriterPort,
         passages: PassageRepository,
         snapshots: CorpusSnapshotRepository,
         authority_rules: AuthorityRuleRepository,
@@ -51,12 +47,9 @@ class CorpusPassageSearch:
 
     async def search(self, query: str, snapshot_id: SnapshotId, limit: int) -> list[PassageView]:
         allowed = set(await self._snapshots.list_document_ids(str(snapshot_id)))
-        raw = self._search_index(query, limit)
-        if raw and isinstance(raw[0], str):
-            resolved = [await self._passages.get(passage_id) for passage_id in raw]
-            passages = [passage for passage in resolved if passage is not None]
-        else:
-            passages = cast(list[PassageView], raw)
+        passage_ids = await self._index.search(query, limit)
+        resolved = [await self._passages.get(passage_id) for passage_id in passage_ids]
+        passages = [passage for passage in resolved if passage is not None]
         return [passage for passage in passages if not allowed or passage.document_id in allowed][
             :limit
         ]
@@ -117,12 +110,6 @@ class CorpusPassageSearch:
         for document_id in allowed:
             cached.extend(list_cached(document_id))
         return cached
-
-    def _search_index(self, query: str, limit: int) -> Any:
-        try:
-            return self._index.search(query, limit)
-        except TypeError:
-            return self._index.search(query)
 
 
 class RuleBasedStanceModel:

@@ -329,6 +329,7 @@ def _record_body(record: ConsensusRecordResult) -> ConsensusRecordBody:
         supporters=[str(item) for item in record.supporters],
         minorities=[_minority_body(item) for item in record.minorities],
         blockers=[str(item) for item in record.blockers],
+        reason=record.reason,
     )
 
 

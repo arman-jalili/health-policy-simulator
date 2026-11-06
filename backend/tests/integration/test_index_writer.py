@@ -163,8 +163,8 @@ async def _postgres_ids(writer: PostgresIndexWriter, query: str) -> set[str]:
     return set(await writer.search(query, limit=100)) & _COMPOUND_IDS
 
 
-def _memory_ids(memory: InMemoryIndexWriter, query: str) -> set[str]:
-    return {passage.passage_id for passage in memory.search(query)} & _COMPOUND_IDS
+async def _memory_ids(memory: InMemoryIndexWriter, query: str) -> set[str]:
+    return set(await memory.search(query)) & _COMPOUND_IDS
 
 
 async def test_facharzttermine_is_found_through_the_rewritten_query(
@@ -197,7 +197,7 @@ async def test_memory_and_postgres_adapters_agree_on_every_query_shape(
     rewrite = GermanQueryRewrite().rewrite("Kassenstellen")
 
     for query in ("Kassenstellen", rewrite.expanded, "Spitalsreform", "Weltraumtourismus"):
-        assert _memory_ids(memory, query) == await _postgres_ids(writer, query), query
+        assert await _memory_ids(memory, query) == await _postgres_ids(writer, query), query
 
 
 async def test_rewrite_never_loses_recall_on_the_postgres_adapter(

@@ -668,4 +668,5 @@ def _record_result(record: ConsensusRecord) -> ConsensusRecordResult:
             for position in record.minorities
         ),
         blockers=outcome.veto.holders if outcome is not None and outcome.veto else (),
+        reason="no_recorded_stances" if not record.stances else None,
     )
