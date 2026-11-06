@@ -390,6 +390,7 @@ class SimulationRun:
         )
 
     def evaluate_stopping(self, consensus: ConsensusLevel) -> StoppingCondition:
+        self._assert_mutable()
         condition = EvaluateStoppingCondition().evaluate(
             consensus=consensus,
             rounds_done=len(self.rounds),
