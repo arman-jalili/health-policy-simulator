@@ -69,14 +69,11 @@ jobs:
       - name: Collaborator reachability (W8)
         run: uv run python .pi/scripts/ci/check_collaborator_reachability.py
       # Loop, never a hand-maintained module list: a new proofing script is gated the moment it
-      # lands. check_judgment_contracts.sh is environment-dependent and deliberately excluded.
+      # lands.
       - name: Module contract proofing
         run: |
           set -euo pipefail
           for script in .pi/scripts/ci/check_*_contracts.sh; do
-            case "$script" in
-              *judgment*) echo "Skipping environment-dependent $script"; continue ;;
-            esac
             echo "::group::$script"
             bash "$script"
             echo "::endgroup::"

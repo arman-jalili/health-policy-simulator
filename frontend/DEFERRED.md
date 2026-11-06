@@ -5,7 +5,7 @@
 > `backend/.pi/architecture/DEFERRED.md`.
 >
 > Contract source of truth: the live `openapi.json` generated from `backend/src/shared/app.py`
-> (63 paths). Where `PROMPT.md` and OpenAPI disagreed, **OpenAPI won**.
+> (63 paths). Where the build specification and OpenAPI disagreed, **OpenAPI won**.
 
 The same list is rendered at `/deferred` from `lib/deferred.ts`.
 
@@ -36,7 +36,7 @@ the five pack ids are shown by topic and feed every picker.
 ## D-FE-004 — Events endpoint has no `cursor` / `limit`
 
 **What is true:** per OpenAPI, `GET /runs/{id}/events` accepts only `until_round`.
-The `cursor` and `limit` parameters named in `PROMPT.md` §3.3 do not exist.
+The `cursor` and `limit` parameters assumed by the build specification do not exist.
 
 **UI instead:** the console fetches the full event log and sorts client-side by `sequence`; the feed
 renders 120 items at a time and can reveal more.
@@ -48,7 +48,7 @@ renders 120 items at a time and can reveal more.
 ## D-FE-005 — Brief sections carry `statements`, not `title`/`body`
 
 **What is true:** `BriefSectionBody = {kind, ordinal, statements[]}`. The `{title, body}` shape in
-`PROMPT.md` Appendix B does not exist. `schema_version` is `"1.0"`, not `"1"`.
+The build specification's Appendix B does not exist. `schema_version` is `"1.0"`, not `"1"`.
 
 **UI instead:** each `CitedStatement` is rendered with its evidence status and citation numbers;
 the section heading comes from the localized `kind`.

@@ -19,7 +19,7 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
 # Named exclusions must be explicit and commented in the workflow; template is not a module.
 EXCLUDED_DOCS = {"module-template.md"}
-EXCLUDED_SCRIPTS = {"check_judgment_contracts.sh"}
+EXCLUDED_SCRIPTS: set[str] = set()
 
 
 def contract_scripts(slug: str) -> list[Path]:
