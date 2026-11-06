@@ -25,6 +25,7 @@
 #   15. simulation_orchestration_proofing — Contract implementation + real coverage gate
 #   16. governance_compliance_proofing — Contract implementation + real coverage gate
 #   17. negotiation_session_proofing — Contract implementation + real coverage gate
+#   18. decision_brief_proofing — Contract implementation + real coverage gate
 
 set -euo pipefail
 
@@ -259,6 +260,10 @@ run_stage "16" "governance_compliance_proofing" \
 
 run_stage "17" "negotiation_session_proofing" \
     "${SCRIPTS_DIR}/stage_negotiation-session_proofing.sh" \
+    "always"
+
+run_stage "18" "decision_brief_proofing" \
+    "${SCRIPTS_DIR}/stage_decision-brief_proofing.sh" \
     "always"
 
 # ── Summary ──
