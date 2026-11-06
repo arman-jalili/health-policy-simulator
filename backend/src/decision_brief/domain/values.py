@@ -177,6 +177,19 @@ class SimulationDisclaimer:
     model_reference: str
     prompt_version: str
 
+    @classmethod
+    def canonical(cls, *, model_reference: str, prompt_version: str) -> SimulationDisclaimer:
+        """Build the mandatory disclosure with the frozen wording (never a free-form caveat).
+
+        The model and prompt reference are required: a disclaimer without them would state that
+        results are probabilistic without saying what produced them (AC 10).
+        """
+        return cls(
+            text=DEFAULT_DISCLAIMER_TEXT,
+            model_reference=model_reference,
+            prompt_version=prompt_version,
+        )
+
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ValueError("the simulation disclaimer requires text")

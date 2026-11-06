@@ -42,7 +42,9 @@ Domain imports no outer layer and no other bounded context. Upstream published v
 | `DecisionBrief` | aggregate | `id`, `run_id`, `version`, `sections`, `rejected_proposals`, `disclaimer`, `outcomes`, `status`, `events` |
 
 `REQUIRED_SECTIONS` is exactly the eight `SectionKind` members. `DEFAULT_DISCLAIMER_TEXT` is the
-fixed disclosure wording.
+fixed disclosure wording, and `SimulationDisclaimer.canonical(model_reference=,
+prompt_version=)` is the only sanctioned way to build the disclosure (#338): the wording cannot be
+rewritten per client, and the generation reference stays mandatory.
 
 Construction invariants (#333) — a value that exists is valid; violations raise `ValueError`:
 
