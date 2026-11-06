@@ -86,12 +86,25 @@ def test_the_record_can_attach_a_minority() -> None:
     ]
 
 
-def test_entity_factories_are_not_implemented_yet() -> None:
-    with pytest.raises(NotImplementedError, match="#316"):
-        MinorityPosition.record(holders=(StakeholderId("stk_1"),))
-    with pytest.raises(NotImplementedError, match="#316"):
+def test_entity_factories_record_what_they_are_given() -> None:
+    position = MinorityPosition.record(
+        holders=(StakeholderId("stk_1"),), objections=("scoped too narrowly",), proposal="x"
+    )
+    assert position.holders == (StakeholderId("stk_1"),)
+    assert position.objections == ("scoped too narrowly",)
+    assert position.covers((StakeholderId("stk_1"),)) is True
+
+
+def test_no_supporters_means_no_majority() -> None:
+    with pytest.raises(ValueError, match="supporter"):
         MajorityPosition.carry(
             proposal="extend the catalogue",
             supporters=(),
             support=SupportLevel(value=0.0),
         )
+    majority = MajorityPosition.carry(
+        proposal="extend the catalogue",
+        supporters=(StakeholderId("stk_1"),),
+        support=SupportLevel(value=0.6),
+    )
+    assert majority.supporters == (StakeholderId("stk_1"),)
