@@ -24,9 +24,9 @@ from decision_brief.infrastructure.acl import EvidenceCorpusCitationResolver
 from decision_brief.infrastructure.failclosed import (
     UnwiredConsensusSource,
     UnwiredHistorySource,
-    UnwiredProjectionBuilder,
     UnwiredProvenanceGate,
 )
+from decision_brief.infrastructure.projection import BriefProjectionAdapter
 from decision_brief.infrastructure.repository.memory import InMemoryDecisionBriefRepository
 from decision_brief.infrastructure.runtime import (
     LoggingEventPublisher,
@@ -176,7 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         consensus=UnwiredConsensusSource(),
         citations=EvidenceCorpusCitationResolver(app.state.corpus.resolve_passage),
         provenance=UnwiredProvenanceGate(),
-        projection=UnwiredProjectionBuilder(),
+        projection=BriefProjectionAdapter(ids=UuidFactory(), clock=SystemClock()),
         disclaimer=SimulationDisclaimer.canonical(
             model_reference=app_settings.simulation_model_id,
             prompt_version=BRIEF_PROMPT_VERSION,

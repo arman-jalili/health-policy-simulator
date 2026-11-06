@@ -262,6 +262,18 @@ All five travel through the shared outbox; the two blocked-publication events ar
 
 Error bodies use the shared envelope `{code, message, details, trace_id}`.
 
+## Runtime integration (#346)
+
+`BriefProjectionAdapter` (infrastructure) is the real `BriefProjectionBuilder`: it runs the pure
+`SectionAssembler` and adds only identity and version from the clock/ids ports. It is bound in
+`shared/app.py`.
+
+The remaining unbound ports are recorded in `.pi/architecture/DEFERRED.md` **D-007** with owners and
+exit criteria: NegotiationSession publishes no question text or corpus snapshot pin, the
+consensus-analysis container is not mounted yet, and GovernanceCompliance has no run-level
+provenance query. They stay fail-closed (`503 BRIEF_GATE_UNAVAILABLE` / `409 BRIEF_SOURCE_INCOMPLETE`)
+rather than being filled with fabricated values.
+
 ## Wiring (#345)
 
 1. `shared/app.py` binds `app.state.decision_brief = build_container(...)` and

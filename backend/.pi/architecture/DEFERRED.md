@@ -146,3 +146,39 @@ W8 table.
 
 *Canonical: `.pi/architecture/DEFERRED.md`. Referenced from ADR-011, the stakeholder-model module doc
 and the implementation roadmap's post-hackathon section.*
+
+---
+
+## D-007 — DecisionBrief upstream bindings
+
+**Status:** Deferred (fail-closed, not skipped)
+**Owner:** consensus-analysis epic + governance-compliance epic
+**Recorded:** 2026-11-06 · epic decision-brief (#330), issue #346
+**Estimate:** 4–6 h once the two upstream contexts publish the missing reads
+
+### What is true today
+
+| Aspect | State |
+|---|---|
+| Router, container, publication use case | mounted in `shared/app.py`; `POST /api/v1/runs/{id}/brief` reaches the real use case |
+| Projection builder | real (`BriefProjectionAdapter` + `SectionAssembler`) |
+| Citation resolver | real (`EvidenceCorpusCitationResolver` over `corpus.resolve_passage`) |
+| Run-history port | **unwired** (`UnwiredHistorySource`) — NegotiationSession publishes run state, round summaries and conflict topics but no question text and no corpus snapshot pin, and `BriefVersion` requires both |
+| Consensus port | **unwired** (`UnwiredConsensusSource`) — the consensus-analysis container is not mounted in `shared/app.py` yet |
+| Provenance gate | **unwired** (`UnwiredProvenanceGate`) — GovernanceCompliance exposes per-position provenance, not a run-level disclosure query |
+| Persistence | in-memory repository; migration `0502_decision_brief` has no SQLAlchemy adapter |
+| Events | `LoggingEventPublisher`; not yet on the shared outbox |
+| Signal | publication returns `503 BRIEF_GATE_UNAVAILABLE` (or `409 BRIEF_SOURCE_INCOMPLETE`), never a 201 with a skipped gate |
+
+### Why it was accepted
+
+Publication must fail closed rather than invent a question, a snapshot or a disclosure. Binding a
+port to a fabricated value would defeat the epic's purpose (a brief that proves transparency).
+
+### Exit criteria
+
+1. NegotiationSession publishes `question` and the pinned corpus snapshot for a closed run.
+2. ConsensusAnalysis is mounted at `app.state.consensus_analysis` and exposes `GetConsensus`.
+3. GovernanceCompliance exposes disclosed provenance for all positions of a run (or the gate reads
+   positions and checks each).
+4. Migration `0502_decision_brief` gets its SQLAlchemy adapter and the events use the shared outbox.
