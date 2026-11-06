@@ -369,14 +369,10 @@ class NegotiationRound:
             )
 
     def _is_accounted_for(self, stakeholder: StakeholderId) -> bool:
+        """A stakeholder is accounted for by a turn or a recorded abstention (invariant 1)."""
         if stakeholder in self.abstentions:
             return True
-        if any(argument.stakeholder == stakeholder for argument in self.arguments):
-            return True
-        return any(
-            position.stakeholder == stakeholder and position.is_open
-            for position in self.positions.values()
-        )
+        return any(argument.stakeholder == stakeholder for argument in self.arguments)
 
     def attach_learning(self, learning: RoundLearning) -> None:
         if learning is None:
