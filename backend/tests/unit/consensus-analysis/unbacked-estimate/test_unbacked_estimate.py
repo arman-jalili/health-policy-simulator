@@ -21,6 +21,7 @@ from consensus_analysis.domain.errors import UnbackedEstimate
 from consensus_analysis.domain.events import UnbackedEstimateBlocked
 from consensus_analysis.domain.services import EstimateValidator
 from consensus_analysis.domain.values import (
+    AssessmentId,
     BasisKind,
     DerivationInput,
     DerivationInputKind,
@@ -84,15 +85,60 @@ def test_the_metered_model_client_is_a_port_not_a_sdk() -> None:
     assert parameter_names(ReferenceFigures.resolve) == ["self", "reference_figure_id"]
 
 
-def test_a_computed_basis_without_inputs_is_not_implemented_yet() -> None:
-    with pytest.raises(NotImplementedError, match="#313"):
-        EstimateBasis(kind=BasisKind.DERIVED).requires_inputs()
-    with pytest.raises(NotImplementedError, match="#313"):
-        ImpactAssessment.assess(
-            scenario_id=ScenarioId("scn_1"),
-            package_id=PackageId("pkg_1"),
-            figures=(),
-        )
+def test_a_computed_basis_demands_inputs_and_an_unbacked_one_is_visible() -> None:
+    unbacked = EstimateBasis(kind=BasisKind.DERIVED)
+    backed = EstimateBasis(
+        kind=BasisKind.DERIVED,
+        inputs=(DerivationInput(kind=DerivationInputKind.TALLY, reference_id="tally_1"),),
+    )
+    assumed = EstimateBasis(kind=BasisKind.ASSUMED)
+    assert unbacked.requires_inputs() is True
+    assert unbacked.is_backed() is False
+    assert backed.is_backed() is True
+    assert assumed.requires_inputs() is False
+    assert assumed.is_backed() is True
+
+
+def test_an_assessment_reports_the_weakest_basis_of_its_figures() -> None:
+    measured = EstimatedFigure(
+        field="cost_eur",
+        value=Decimal("1"),
+        basis=EstimateBasis(
+            kind=BasisKind.MEASURED,
+            inputs=(DerivationInput(kind=DerivationInputKind.REFERENCE_FIGURE, reference_id="f1"),),
+        ),
+        label=UncertaintyLabel.EVIDENCED,
+    )
+    assumed = EstimatedFigure(
+        field="waiting_times_p50_days",
+        value=Decimal("22"),
+        basis=EstimateBasis(kind=BasisKind.ASSUMED),
+        label=UncertaintyLabel.ASSUMED,
+    )
+    assessment = ImpactAssessment.assess(
+        scenario_id=ScenarioId("scn_1"),
+        package_id=PackageId("pkg_1"),
+        assessment_id=AssessmentId("imp_1"),
+        figures=(measured, assumed),
+    )
+    assert assessment.basis.kind is BasisKind.ASSUMED
+    assert {(item.kind, item.reference_id) for item in assessment.basis.inputs} == {
+        (DerivationInputKind.REFERENCE_FIGURE, "f1")
+    }
+    assert [figure.field for figure in assessment.figures] == [
+        "cost_eur",
+        "waiting_times_p50_days",
+    ]
+
+
+def test_an_assessment_without_figures_is_not_estimated() -> None:
+    assessment = ImpactAssessment.assess(
+        scenario_id=ScenarioId("scn_1"),
+        package_id=PackageId("pkg_1"),
+        assessment_id=AssessmentId("imp_1"),
+        figures=(),
+    )
+    assert assessment.basis.kind is BasisKind.NOT_ESTIMATED
 
 
 def test_the_request_makes_inputs_explicit() -> None:

@@ -65,15 +65,21 @@ def test_the_guard_signature_is_frozen() -> None:
         )
 
 
-def test_a_feasibility_rating_is_not_yet_judged_complete() -> None:
-    rating = FeasibilityRating(
+def test_an_unrated_dimension_is_not_a_complete_rating() -> None:
+    complete = FeasibilityRating(
         political=FeasibilityLevel.HIGH,
         legal=FeasibilityLevel.HIGH,
         administrative=FeasibilityLevel.HIGH,
         basis=EstimateBasis(kind=BasisKind.MODELLED),
     )
-    with pytest.raises(NotImplementedError, match="#318"):
-        rating.is_fully_rated()
+    partial = FeasibilityRating(
+        political=FeasibilityLevel.HIGH,
+        legal=FeasibilityLevel.HIGH,
+        administrative=FeasibilityLevel.UNKNOWN,
+        basis=EstimateBasis(kind=BasisKind.MODELLED),
+    )
+    assert complete.is_fully_rated() is True
+    assert partial.is_fully_rated() is False
 
 
 def test_the_rating_event_names_the_blockers() -> None:

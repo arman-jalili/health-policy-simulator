@@ -345,12 +345,19 @@ class EstimateBasis:
     inputs: tuple[DerivationInput, ...] = ()
 
     def requires_inputs(self) -> bool:
-        """Return whether this basis may only be claimed with enumerated inputs."""
-        raise NotImplementedError("EstimateBasis.requires_inputs is implemented by issue #313")
+        """Return whether this basis may only be claimed with enumerated inputs.
+
+        ``measured`` and ``derived`` are computations, so they must enumerate what they computed
+        from. ``modelled`` cites the metered invocation instead, and ``assumed`` is honest
+        precisely because it claims no computation (invariant 7).
+        """
+        return self.kind in (BasisKind.MEASURED, BasisKind.DERIVED)
 
     def is_backed(self) -> bool:
         """Return whether the claimed basis is honest for the enumerated inputs (AC 5)."""
-        raise NotImplementedError("EstimateBasis.is_backed is implemented by issue #313")
+        if not self.requires_inputs():
+            return True
+        return bool(self.inputs)
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,8 +374,16 @@ class EstimatedFigure:
         _require_text(self.field, "EstimatedFigure.field")
 
     def is_computable(self) -> bool:
-        """Return whether the figure may be rendered as a computed value (AC 6)."""
-        raise NotImplementedError("EstimatedFigure.is_computable is implemented by issue #314")
+        """Return whether the figure may be rendered as a computed value (AC 6).
+
+        Label and basis must agree and the basis must be backed: an assumed figure has no shape in
+        which it can be presented as a calculation.
+        """
+        if self.label is UncertaintyLabel.ASSUMED:
+            return False
+        if self.basis.kind in (BasisKind.ASSUMED, BasisKind.NOT_ESTIMATED):
+            return False
+        return self.basis.is_backed()
 
 
 @dataclass(frozen=True, slots=True)
@@ -394,8 +409,12 @@ class FeasibilityRating:
     blockers: tuple[StakeholderId, ...] = ()
 
     def is_fully_rated(self) -> bool:
-        """Return whether all three dimensions were rated (AC 11 requires all three)."""
-        raise NotImplementedError("FeasibilityRating.is_fully_rated is implemented by issue #318")
+        """Return whether all three dimensions were rated (AC 11 requires all three).
+
+        ``unknown`` is an explicit "not rated", not a neutral default, so it fails the check.
+        """
+        levels = (self.political, self.legal, self.administrative)
+        return all(level is not FeasibilityLevel.UNKNOWN for level in levels)
 
 
 @dataclass(frozen=True, slots=True)

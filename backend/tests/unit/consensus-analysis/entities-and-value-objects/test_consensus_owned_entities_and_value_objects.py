@@ -198,6 +198,7 @@ def test_entity_factories_are_frozen() -> None:
         "scenario_id",
         "package_id",
         "figures",
+        "assessment_id",
         "limitation",
         "feasibility",
     ]

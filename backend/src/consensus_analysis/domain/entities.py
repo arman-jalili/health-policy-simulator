@@ -14,7 +14,9 @@ from decimal import Decimal
 
 from consensus_analysis.domain.values import (
     AssessmentId,
+    BasisKind,
     ComponentId,
+    DerivationInput,
     EstimateBasis,
     EstimatedFigure,
     EstimateLimitation,
@@ -26,10 +28,31 @@ from consensus_analysis.domain.values import (
     SupportLevel,
 )
 
+_BASIS_STRENGTH: dict[BasisKind, int] = {
+    BasisKind.MEASURED: 0,
+    BasisKind.DERIVED: 1,
+    BasisKind.MODELLED: 2,
+    BasisKind.ASSUMED: 3,
+    BasisKind.NOT_ESTIMATED: 4,
+}
+
 
 def _require_text(value: str, field_name: str) -> None:
     if not value.strip():
         raise ValueError(f"{field_name} must be non-empty")
+
+
+def _weakest_basis(figures: Sequence[EstimatedFigure]) -> EstimateBasis:
+    """Return the least trustworthy basis present, with every input the figures enumerated."""
+    if not figures:
+        return EstimateBasis(kind=BasisKind.NOT_ESTIMATED)
+    weakest = max(figures, key=lambda figure: _BASIS_STRENGTH[figure.basis.kind]).basis
+    inputs: list[DerivationInput] = []
+    for figure in figures:
+        for derivation_input in figure.basis.inputs:
+            if derivation_input not in inputs:
+                inputs.append(derivation_input)
+    return EstimateBasis(kind=weakest.kind, inputs=tuple(inputs))
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,8 +70,14 @@ class MajorityPosition:
     def carry(
         cls, *, proposal: str, supporters: Sequence[StakeholderId], support: SupportLevel
     ) -> MajorityPosition:
-        """Record the carried stance of one topic (AC 2)."""
-        raise NotImplementedError("MajorityPosition.carry is implemented by issue #316")
+        """Record the carried stance of one topic (AC 2).
+
+        No supporters means no majority: recording one anyway would manufacture the very
+        agreement this context must never invent.
+        """
+        if not supporters:
+            raise ValueError("MajorityPosition.carry requires at least one supporter")
+        return cls(proposal=proposal, supporters=tuple(supporters), support=support)
 
     def covers(self, stakeholders: Sequence[StakeholderId]) -> bool:
         """Return whether every named institution appears among the supporters."""
@@ -76,7 +105,11 @@ class MinorityPosition:
         proposal: str = "",
     ) -> MinorityPosition:
         """Record dissent so it cannot disappear from the derived result (AC 8)."""
-        raise NotImplementedError("MinorityPosition.record is implemented by issue #316")
+        return cls(
+            holders=tuple(holders),
+            objections=tuple(reason.strip() for reason in objections if reason.strip()),
+            proposal=proposal,
+        )
 
     def covers(self, stakeholders: Sequence[StakeholderId]) -> bool:
         """Return whether every named institution appears among the holders."""
@@ -132,8 +165,23 @@ class ImpactAssessment:
         scenario_id: ScenarioId,
         package_id: PackageId,
         figures: Sequence[EstimatedFigure],
+        assessment_id: AssessmentId,
         limitation: EstimateLimitation | None = None,
         feasibility: FeasibilityRating | None = None,
     ) -> ImpactAssessment:
-        """Assemble one assessment for exactly one scenario and one package (AC 5, AC 6)."""
-        raise NotImplementedError("ImpactAssessment.assess is implemented by issue #313")
+        """Assemble one assessment for exactly one scenario and one package (AC 5, AC 6).
+
+        The assessment carries the weakest basis of its figures: a bundle is only as trustworthy as
+        its least backed number, and stating that once prevents the headline from quoting the best
+        one.
+        """
+        collected = tuple(figures)
+        return cls(
+            id=assessment_id,
+            scenario_id=scenario_id,
+            package_id=package_id,
+            basis=_weakest_basis(collected),
+            figures=collected,
+            limitation=limitation,
+            feasibility=feasibility,
+        )
