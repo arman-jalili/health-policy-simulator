@@ -545,7 +545,7 @@ def _fold_events(
         elif isinstance(event, RoundOpened):
             current_round = event.round
             phase = event.phase
-        elif isinstance(event, InitialPositionStated) or isinstance(event, PositionRevised):
+        elif isinstance(event, (InitialPositionStated, PositionRevised)):
             positions[(event.stakeholder_id, event.topic)] = event.position_id
         elif isinstance(event, CoalitionFormed):
             coalitions.add(event.coalition_id)

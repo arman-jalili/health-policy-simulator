@@ -31,9 +31,10 @@ from decision_brief.application.ports import (
     RunHistorySource,
     UnitOfWork,
 )
+from decision_brief.domain.errors import BriefNotFound, BriefNotPublished
 from decision_brief.domain.repositories import DecisionBriefRepository
 from decision_brief.domain.services import BriefProjectionBuilder
-from decision_brief.domain.values import SimulationDisclaimer
+from decision_brief.domain.values import BriefStatus, SimulationDisclaimer
 
 
 class PublishDecisionBrief:
@@ -127,9 +128,10 @@ class GetDecisionBrief:
         return (self._briefs,)
 
     async def execute(self, request: GetDecisionBriefRequest) -> BriefResult:
-        raise NotImplementedError(
-            "GetDecisionBrief.execute is implemented by issue-decision-brief-wiring"
-        )
+        brief = await self._briefs.get(request.brief_id)
+        if brief is None:
+            raise BriefNotFound(f"brief {request.brief_id} was not found")
+        return BriefResult(brief=brief, citation_count=brief.citation_count())
 
 
 class ListBriefVersions:
@@ -143,8 +145,12 @@ class ListBriefVersions:
         return (self._briefs,)
 
     async def execute(self, request: ListBriefVersionsRequest) -> BriefListResult:
-        raise NotImplementedError(
-            "ListBriefVersions.execute is implemented by issue-decision-brief-lineage"
+        versions = await self._briefs.versions_for_run(request.run_id)
+        return BriefListResult(
+            items=tuple(
+                BriefResult(brief=brief, citation_count=brief.citation_count())
+                for brief in versions
+            )
         )
 
 
@@ -159,6 +165,22 @@ class ListCitations:
         return (self._briefs,)
 
     async def execute(self, request: ListCitationsRequest) -> CitationListResult:
-        raise NotImplementedError(
-            "ListCitations.execute is implemented by issue-decision-brief-citation-gate"
+        brief = await self._briefs.get(request.brief_id)
+        if brief is None:
+            raise BriefNotFound(f"brief {request.brief_id} was not found")
+        if brief.status not in (BriefStatus.PUBLISHED, BriefStatus.SUPERSEDED):
+            raise BriefNotPublished(
+                f"brief {request.brief_id} has no published citations to list yet"
+            )
+        citations = tuple(
+            citation
+            for section in brief.sections.values()
+            if request.section is None or section.kind is request.section
+            for statement in section.statements
+            for citation in statement.citations
+        )
+        return CitationListResult(
+            brief_id=request.brief_id,
+            section=request.section,
+            citations=citations,
         )

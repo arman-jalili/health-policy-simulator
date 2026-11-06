@@ -122,6 +122,16 @@ application = the five use cases; domain = `BriefProjectionBuilder`, `Reproducti
 `OutcomeHonestyPolicy`; infrastructure = `CitationResolver`, `ProvenanceDisclosureGate`;
 interfaces = `BriefRenderer`.
 
+Classification is machine-checked (#334): a test resolves each classified name to the file that
+defines it and fails when the declared layer is not the owning layer, when a port is not an
+application-layer runtime protocol, or when an infrastructure-classified port has no adapter with a
+matching method signature.
+
+Implemented services: `GetDecisionBrief`, `ListBriefVersions` and `ListCitations` read through
+`DecisionBriefRepository` (`BriefNotFound` for unknown ids; `BriefNotPublished` before publishing).
+`PublishDecisionBrief`, `VersionDecisionBrief` and `DecisionBrief.supersede_by` remain stubs owned by
+their gate issues.
+
 ## API contract (frozen)
 
 All routes are under `/api/v1` and declare `x-required-scope` (enforced, not decorative).
