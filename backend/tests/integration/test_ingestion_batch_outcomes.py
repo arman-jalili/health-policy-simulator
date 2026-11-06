@@ -14,6 +14,8 @@ from shared.config import Settings
 from shared.enums import AuthMode, Persistence
 from tests.conftest import TEST_DATABASE_URL
 
+pytestmark = pytest.mark.integration
+
 
 def _write_pdf(path: Path, body: str) -> Path:
     import pymupdf
