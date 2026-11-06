@@ -266,8 +266,18 @@ class EpicManager {
 			try { if (existsSync(trackingBodyFile)) unlinkSync(trackingBodyFile); } catch { /* ignore */ }
 		}
 
+		// Issue ids are module-scoped so that two epics for different modules can run in
+		// parallel worktrees. A shared id would mean a shared branch name, and
+		// PipelineManager.reconcile() marks an item done when *any* merged PR carries that
+		// branch name — i.e. a second epic would silently adopt the first epic's merges.
+		const moduleSlug = slice.module
+			.replace(/^module-/, "")
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-|-$/g, "");
+
 		// 1. Contract freeze
-		const freezeId = "issue-contract-freeze";
+		const freezeId = `issue-${moduleSlug}-contract-freeze`;
 		const freezeEntry = {
 			id: freezeId,
 			title: "Contract Freeze: Define interfaces and contracts",
@@ -289,7 +299,7 @@ class EpicManager {
 		for (let i = 0; i < slice.nextLogicalSlice.length; i++) {
 			const comp = slice.nextLogicalSlice[i];
 			const moduleId = slice.module.replace(/^module-/, "");
-			const id = `issue-${comp.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+			const id = `issue-${moduleSlug}-${comp.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 			const entry = {
 				id,
 				title: `Implement ${comp.name} — ${moduleId}`,
@@ -313,7 +323,7 @@ class EpicManager {
 		// implementation issues and before proofing so "implemented but never
 		// wired" cannot be deferred by a scope note.
 		if (moduleHasRuntimeIntegration(this.cwd, slice.module)) {
-			const integrationId = "issue-runtime-integration";
+			const integrationId = `issue-${moduleSlug}-runtime-integration`;
 			const integrationEntry = {
 				id: integrationId,
 				title: "Runtime Integration & Legacy Migration",
@@ -333,7 +343,7 @@ class EpicManager {
 		}
 
 		// 3. Proofing
-		const proofingId = "issue-proofing";
+		const proofingId = `issue-${moduleSlug}-proofing`;
 		const proofingEntry = {
 			id: proofingId,
 			title: "Proofing: Validation scripts + CI integration",
@@ -352,7 +362,7 @@ class EpicManager {
 		issues.push(proofingEntry);
 
 		// 4. Architecture readiness
-		const readinessId = "issue-architecture-readiness";
+		const readinessId = `issue-${moduleSlug}-architecture-readiness`;
 		const readinessEntry = {
 			id: readinessId,
 			title: "Architecture Readiness: Runbook, DR, docs, CI enforcement",

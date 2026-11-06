@@ -341,6 +341,8 @@ export function discoverModules(cwd: string): string[] {
 	}
 }
 
+const COMPONENT_STATUSES = new Set(["planned", "in-progress", "implemented", "deprecated"]);
+
 export function parseModuleFile(filePath: string): ModuleComponent[] {
 	if (!existsSync(filePath)) return [];
 	const content = readFileSync(filePath, "utf-8");
@@ -433,7 +435,11 @@ export function parseModuleFile(filePath: string): ModuleComponent[] {
 		if (!currentName) continue;
 
 		if (trimmed.startsWith("status:")) {
-			currentStatus = trimmed.replace("status:", "").trim().toLowerCase();
+			// Only a declared component status counts. A fenced Python snippet in the module doc
+			// can also contain a line such as `status: BriefStatus = BriefStatus.DRAFT`, and
+			// accepting it would drop the component from the next logical slice.
+			const value = trimmed.replace("status:", "").trim().toLowerCase();
+			if (COMPONENT_STATUSES.has(value)) currentStatus = value;
 		} else if (trimmed.startsWith("depends:")) {
 			const depsStr = trimmed.replace("depends:", "").trim();
 			if (depsStr && depsStr !== "none" && depsStr !== "[TODO") {

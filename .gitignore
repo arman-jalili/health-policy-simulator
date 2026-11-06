@@ -30,5 +30,6 @@ coverage/
 backend/guardian-sessions.json
 backend/.pi/.guardian-epic-state.json
 backend/.pi/.guardian-pipeline-state.json
+backend/.pi/.guardian-kanban.json
 backend/.pi/preflight_report.json
 backend/.pi/workspaces/
