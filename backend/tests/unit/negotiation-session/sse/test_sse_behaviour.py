@@ -35,9 +35,9 @@ def test_last_event_id_parsing_is_strict() -> None:
     assert parse_last_event_id(None) is None
     assert parse_last_event_id("") is None
     assert parse_last_event_id("3") == 3
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="invalid Last-Event-ID"):
         parse_last_event_id("not-a-number")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="invalid Last-Event-ID"):
         parse_last_event_id("-1")
 
 
