@@ -51,6 +51,7 @@ def _snapshot(
     return stakeholder, StanceSnapshot(
         stakeholder=stakeholder,
         stance=stance,
+        topic=TOPIC,
         weight=weight,
         recorded=recorded,
         log_position=LogPosition(position),

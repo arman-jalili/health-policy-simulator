@@ -48,6 +48,40 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ConsensusAnalysis contract amendment: rebuild inputs (#312)
+
+### Changed
+- Module: consensus-analysis
+  - `StanceSnapshot` gained `topic`. A stance without its topic cannot be attributed to a record,
+    so the rebuild could not fold the log with the previous shape.
+  - New value object `AgendaItem(topic, proposal_class)`: the proposal class decides whether a veto
+    applies, so the class is a log fact and not a presentational label.
+  - `RunLogPort` gained `agenda(run_id)`; `ProjectionRebuilder.rebuild` gained the `agenda`
+    argument it must replay. Both are additive to the frozen surface.
+
+### Impact Analysis
+- Files affected:
+  - src/consensus_analysis/domain/values.py
+  - src/consensus_analysis/domain/repositories.py
+  - src/consensus_analysis/application/ports.py
+  - src/consensus_analysis/infrastructure/projection.py
+  - tests/unit/consensus-analysis/
+- Canonical refs to update:
+  - .pi/architecture/modules/consensus-analysis.md#contract-freeze-issue-305
+- Validators required:
+  - ci, tests, architecture
+
+### Migration Steps
+1. Build `StanceSnapshot` with its `topic`; build `AgendaItem` per topic of the run.
+2. A `RunLogPort` implementation must replay the agenda as well as the stances.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated
+- [x] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-06] - ConsensusAnalysis contract frozen (#305)
 
 ### Changed

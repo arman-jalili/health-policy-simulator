@@ -20,6 +20,7 @@ from consensus_analysis.domain.entities import (
     RejectedProposal,
 )
 from consensus_analysis.domain.values import (
+    AgendaItem,
     BaselineRef,
     BasisKind,
     ComparisonDimension,
@@ -42,6 +43,7 @@ from consensus_analysis.domain.values import (
     Stance,
     StanceSnapshot,
     SupportLevel,
+    TopicRef,
     UncertaintyLabel,
     UnresolvedConflict,
     VetoBlockedOutcome,
@@ -76,6 +78,7 @@ def test_value_object_fields_are_frozen() -> None:
     assert field_names(StanceSnapshot) == [
         "stakeholder",
         "stance",
+        "topic",
         "weight",
         "recorded",
         "log_position",
@@ -85,6 +88,7 @@ def test_value_object_fields_are_frozen() -> None:
     assert field_names(UnresolvedConflict) == ["topic", "positions"]
     assert field_names(ResolvedConflict) == ["topic", "resolution", "holders"]
     assert field_names(ConsensusOutcome) == ["kind", "support", "veto", "minorities"]
+    assert field_names(AgendaItem) == ["topic", "proposal_class"]
     assert field_names(DerivationInput) == ["kind", "reference_id", "description"]
     assert field_names(EstimateLimitation) == ["statement", "ignored_factors"]
     assert field_names(EstimateBasis) == ["kind", "inputs"]
@@ -160,16 +164,19 @@ def test_stance_snapshot_classifies_approval_and_dissent() -> None:
     support = StanceSnapshot(
         stakeholder=StakeholderId("stk_1"),
         stance=Stance.SUPPORT,
+        topic=TopicRef("waiting_times"),
         log_position=LogPosition(0),
     )
     oppose = StanceSnapshot(
         stakeholder=StakeholderId("stk_2"),
         stance=Stance.OPPOSE,
+        topic=TopicRef("waiting_times"),
         log_position=LogPosition(1),
     )
     abstain = StanceSnapshot(
         stakeholder=StakeholderId("stk_3"),
         stance=Stance.ABSTAIN,
+        topic=TopicRef("waiting_times"),
         log_position=LogPosition(2),
     )
     assert support.supports is True

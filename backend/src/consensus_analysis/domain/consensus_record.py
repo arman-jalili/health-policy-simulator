@@ -10,6 +10,8 @@ of the aggregate's contract, not an ordering accident: a blocked class yields
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -172,8 +174,50 @@ class ConsensusRecord:
         return drained
 
     def digest(self) -> str:
-        """Stable hash of the derived content; equal digests prove a rebuild (AC 4)."""
-        raise NotImplementedError("ConsensusRecord.digest is implemented by issue #312")
+        """Stable hash of the derived content; equal digests prove a rebuild (AC 4).
+
+        Identity and run are excluded on purpose: a rebuild allocates fresh ids, so only what the
+        derivation *concluded* may be compared. Everything else — topic, class, threshold, outcome,
+        support, veto, dissent, unresolved conflicts and the log position it was keyed by — is in.
+        """
+        payload = {
+            "topic": str(self.topic),
+            "proposal_class": self.proposal_class.value,
+            "threshold": round(self.threshold.required_share, 12),
+            "log_position": int(self.log_position),
+            "outcome": self.outcome.kind.value if self.outcome is not None else None,
+            "support": (
+                round(self.outcome.support.value, 12) if self.outcome is not None else None
+            ),
+            "veto": (
+                {
+                    "proposal_class": self.outcome.veto.proposal_class.value,
+                    "holders": [str(holder) for holder in self.outcome.veto.holders],
+                }
+                if self.outcome is not None and self.outcome.veto is not None
+                else None
+            ),
+            "supporters": [str(holder) for holder in self.supporting_stakeholders()],
+            "minorities": [
+                {
+                    "holders": [str(holder) for holder in position.holders],
+                    "objections": list(position.objections),
+                }
+                for position in self.minorities
+            ],
+            "unresolved": [
+                {
+                    "topic": str(conflict.topic),
+                    "positions": [
+                        {"holder": str(position.stakeholder), "stance": position.stance.value}
+                        for position in conflict.positions
+                    ],
+                }
+                for conflict in self.unresolved
+            ],
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     def minority_holders(self) -> tuple[StakeholderId, ...]:
         """Flatten every recorded minority into the holders the audit row must name."""

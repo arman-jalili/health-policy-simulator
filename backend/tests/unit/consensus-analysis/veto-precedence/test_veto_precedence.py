@@ -15,6 +15,7 @@ from consensus_analysis.domain.values import (
     ProposalClass,
     StakeholderId,
     SupportLevel,
+    TopicRef,
     VetoBlockedOutcome,
 )
 from stakeholder_model.domain.values import (
@@ -81,6 +82,7 @@ def test_the_rule_blocks_a_seven_of_nine_class_that_would_otherwise_carry() -> N
         return stakeholder, StanceSnapshot(
             stakeholder=stakeholder,
             stance=stance,
+            topic=TopicRef("waiting_times"),
             log_position=LogPosition(index),
         )
 
@@ -189,6 +191,7 @@ def test_a_veto_over_unanimous_support_is_still_blocked() -> None:
         StakeholderId(f"stk_{index}"): StanceSnapshot(
             stakeholder=StakeholderId(f"stk_{index}"),
             stance=Stance.SUPPORT,
+            topic=TopicRef("waiting_times"),
             log_position=LogPosition(index),
         )
         for index in range(9)
@@ -217,6 +220,7 @@ def test_every_veto_holder_is_named_not_just_the_first() -> None:
         StakeholderId("stk_a"): StanceSnapshot(
             stakeholder=StakeholderId("stk_a"),
             stance=Stance.SUPPORT,
+            topic=TopicRef("waiting_times"),
             log_position=LogPosition(0),
         )
     }
