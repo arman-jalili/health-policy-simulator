@@ -118,6 +118,13 @@ async def readyz(request: Request) -> JSONResponse:
         checks["stakeholder_model"] = "ok" if institution_count == 9 else "degraded"
         checks["stakeholder_institutions"] = str(institution_count)
 
+    consensus = getattr(request.app.state, "consensus_analysis", None)
+    if consensus is not None:
+        # Derived projections are always "ok" as a store; the inputs are what can be missing, and a
+        # missing input is a named refusal on the derivation path rather than a broken probe.
+        checks["consensus_analysis"] = "ok"
+        checks["consensus_analysis_projection"] = str(settings.persistence)
+
     claims = getattr(request.app.state, "claim_validation", None)
     if claims is not None:
         checks["claim_validation"] = "ok"

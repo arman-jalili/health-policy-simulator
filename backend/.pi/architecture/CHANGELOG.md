@@ -48,6 +48,43 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ConsensusAnalysis operational readiness (#323)
+
+### Changed
+- Module: consensus-analysis
+  - `docs/runbook-consensus-analysis.md`: startup, the three named fail-closed refusals and what each
+    means, the rebuild procedure with `verify_only`, and the three deliberately unbuilt gaps.
+  - `docs/dr-plan-consensus-analysis.md`: recovery thesis (no input state), per-scenario table,
+    verification commands and escalation.
+  - `/readyz` reports `consensus_analysis` and `consensus_analysis_projection`; the projection store
+    is always ok, because a missing *input* is a named refusal rather than a broken probe.
+  - `build_container` logs `consensus_analysis_wired` with the registered estimation bases and the
+    fail-closed note.
+  - The proofing stage also asserts both documents, the refusal text and the readiness check.
+
+### Impact Analysis
+- Files affected:
+  - docs/runbook-consensus-analysis.md
+  - docs/dr-plan-consensus-analysis.md
+  - src/shared/http/health.py
+  - src/consensus_analysis/composition.py
+  - .pi/scripts/ci/check_consensus-analysis_contracts.sh
+- Canonical refs to update:
+  - .pi/architecture/modules/consensus-analysis.md
+- Validators required:
+  - ci, tests, operations, canonical
+
+### Migration Steps
+1. Operators read the runbook before the first derive request.
+2. Add per-module readiness checks where a module gains a liveness-bearing dependency.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+- [x] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-06] - ConsensusAnalysis mounted in the app shell (#321)
 
 ### Changed

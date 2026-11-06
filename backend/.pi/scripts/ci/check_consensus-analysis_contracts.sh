@@ -102,6 +102,11 @@ require_literal "$SRC/infrastructure/sources.py" "class UnavailablePowers" "veto
 require_literal "$SRC/application/services.py" "SERVICE_CLASSIFICATION" "service classification"
 require_literal ".pi/architecture/decisions/ADR-016-consensus-analysis-runtime-integration.md" \
   "**Status:** Accepted" "runtime ADR accepted"
+require_file "docs/runbook-consensus-analysis.md"
+require_file "docs/dr-plan-consensus-analysis.md"
+require_literal "docs/runbook-consensus-analysis.md" "CONSENSUS_ANALYSIS_UNAVAILABLE" "runbook refusal"
+require_literal "docs/dr-plan-consensus-analysis.md" "RTO" "DR recovery objective"
+require_literal "src/shared/http/health.py" "consensus_analysis" "readiness check"
 
 # ── Proofs exist ─────────────────────────────────────────────────────────────────────────────
 require_file "tests/integration/test_consensus_e2e.py"

@@ -52,6 +52,9 @@ from consensus_analysis.domain.services import (
 from consensus_analysis.domain.values import BasisKind
 from shared.config import Settings
 from shared.db import Database
+from shared.log_setup import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +96,12 @@ def build_container(
     Nothing is defaulted here: a missing mandate threshold source, rebuild strategy or event
     publisher stops the boot rather than producing a container that cannot derive.
     """
+    logger.info(
+        "consensus_analysis_wired",
+        persistence=settings.persistence.value,
+        estimation_bases=sorted(kind.value for kind in estimation),
+        note="derivation fails closed until the log, threshold and vetoes are published",
+    )
     components_compatible = ComponentsCompatible()
     validator = EstimateValidator()
     illustrative = IllustrativeValueGuard()

@@ -2,9 +2,10 @@
 
 ## Module Status
 
-**Status:** Contract Frozen (implementation pending)
+**Status:** Implemented (derivation fails closed until the run log is published)
 **Depends:** NegotiationSession (open-host — published session events are the derivation input), StakeholderModel (veto rights and negotiating power)
 **Last reviewed:** 2026-11-06
+**Operational docs:** `docs/runbook-consensus-analysis.md`, `docs/dr-plan-consensus-analysis.md`
 **Source session:** 87433e56-b1a2-4464-a232-2dc4fe6f9dfd
 
 ## Description
@@ -384,6 +385,12 @@ and `MinorityPositionRecorded` are audit-critical (they record refusals and diss
 | Persistence | Migration `0501` applied; derived rows rebuildable | rebuild-from-log equality test |
 | Events | Consensus, veto blocks and blocked estimates published through the outbox | `ConsensusBlockedByVeto` row present |
 | Estimation | `AssessImpact` uses the shared metered LLM client, never a direct provider SDK call | usage report shows the invocation |
+
+**Runtime state (ADR-016).** The router and container are mounted. Reads answer from the projection.
+Derivation refuses with `503 CONSENSUS_ANALYSIS_UNAVAILABLE` and names the missing input while
+NegotiationSession publishes no run-log read model, no per-run mandate threshold and no bulk veto map
+— each of those three defaults would manufacture agreement. `ProjectionRebuilder` is reachable
+through `RebuildProjections`, which verifies a replay against the persisted rows before writing.
 
 
 ### Collaborator reachability (W8)
