@@ -48,6 +48,41 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Live DeepSeek provider: credential fallback, JSON mode, claim filtering
+
+### Changed
+- SimulationOrchestration: the turn prompt now carries interests, constraints, red lines and veto
+  classes with an explicit anti-herding instruction; without it `deepseek-flash` returned
+  `conditional_accept` for all nine stakeholders and the run derived support 1.0.
+- SimulationOrchestration: `HttpLlmClient` sends `response_format={"type":"json_object"}` and an
+  optional `reasoning_effort` (`LLM_JSON_MODE`, `LLM_REASONING_EFFORT`). DeepSeek defaults to
+  *thinking* mode, which ignores temperature and costs more; `none` selects non-thinking.
+- NegotiationSession ACL: model-written claims are pre-filtered through ClaimValidation
+  (`claim_admissible`), so an unverifiable claim no longer dead-letters a paid run; the text stays
+  narrative instead of being asserted.
+- Shared config: `DEEPSEEK_API_KEY` is the default for `LLM_API_KEY` (resolved as a field default so it
+  applies before the provider validator demands a key).
+
+### Impact Analysis
+- Files affected: `src/shared/config.py`, `src/shared/app.py`,
+  `src/simulation_orchestration/infrastructure/{llm,negotiation_nodes,negotiation_session}.py`,
+  `src/simulation_orchestration/composition.py`, `README.md`, `demo.env*`,
+  `docs/configuration.md`
+- Canonical refs: `.pi/architecture/modules/simulation-orchestration.md`,
+  `.pi/architecture/modules/negotiation-session.md` (claims), ADR-006/ADR-012
+- Validators: unit tests `claim-filtering`, `llm-provider`, `shared/test_llm_credentials`; full suite
+
+### Migration Steps
+1. Export `DEEPSEEK_API_KEY` (or set `LLM_API_KEY`); set `LLM_MODEL=deepseek-flash`,
+   `LLM_REASONING_EFFORT=none`, `LLM_JSON_MODE=true`, `LLM_BASE_URL=https://api.deepseek.com`.
+2. Rebuild the images (`docker compose up --build`) — the backend image changed.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+
+
 ## [2026-11-06] - Containerized demo: trusted demo networks, JSON-safe progress payloads
 
 ### Changed

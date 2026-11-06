@@ -8,7 +8,7 @@ round when every bound actor is accounted for. No stance, topic or proposal is s
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from negotiation_session.application.commands import (
@@ -65,6 +65,13 @@ class EvidenceBriefing:
 
 
 EvidencePackForClaim = Callable[[str], Awaitable[EvidenceBriefing]]
+ClaimAdmissible = Callable[[str], Awaitable[bool]]
+"""Ask ClaimValidation whether one model-written claim may enter an argument.
+
+NegotiationSession refuses an inadmissible claim with ``ClaimVerdictRejected`` — a client must not
+push unverified assertions into the record. A model writes prose, not verdicts, so the orchestrated
+path asks first and passes only what the claim agent admits; the rest stays narrative text.
+"""
 
 
 class NegotiationSessionGateway:
@@ -79,6 +86,7 @@ class NegotiationSessionGateway:
         take_turn: TakeNegotiationTurn,
         close_round: CloseRound,
         evidence_pack_for: EvidencePackForClaim,
+        claim_admissible: ClaimAdmissible | None = None,
     ) -> None:
         self._runs = runs
         self._open_round = open_round
@@ -86,6 +94,17 @@ class NegotiationSessionGateway:
         self._take_turn = take_turn
         self._close_round = close_round
         self._evidence_pack_for = evidence_pack_for
+        self._claim_admissible = claim_admissible
+
+    async def _admissible_claims(self, claims: Sequence[str]) -> tuple[str, ...]:
+        """Drop claims the claim agent will not admit; never fabricate a verdict."""
+        if self._claim_admissible is None or not claims:
+            return ()
+        admitted: list[str] = []
+        for claim in claims:
+            if await self._claim_admissible(claim):
+                admitted.append(claim)
+        return tuple(admitted)
 
     async def load_state(self, run_id: RunId) -> NegotiationRunView:
         run = await self._runs.load(NegotiationRunId(str(run_id)))
@@ -178,7 +197,10 @@ class NegotiationSessionGateway:
                 target=TargetRef(topic=topic),
                 stance=stance,
                 text=command.text or f"{actor} states its position on {topic}.",
-                claims=tuple(ClaimStatement(text=claim) for claim in command.claims),
+                claims=tuple(
+                    ClaimStatement(text=claim)
+                    for claim in await self._admissible_claims(command.claims)
+                ),
                 evidence_ids=tuple(
                     EvidencePackId(item) for item in (command.evidence_ids or (pack_id,))
                 ),

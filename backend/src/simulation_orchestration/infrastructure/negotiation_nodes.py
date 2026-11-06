@@ -87,10 +87,17 @@ class NegotiationTurnNode:
             f"Veto classes: {', '.join(briefing.veto_classes) or 'none'}.\n"
             f"Current stances: {briefing.current_stances or 'none'}.\n"
             f"Previous learning: {briefing.previous_learning or 'none'}.\n"
-            "Write one institutional argument. Return JSON only with keys "
-            '"stance" (support|oppose|qualify|conditional_accept), '
-            '"proposal" (short string), "claims" (array of strings), and "argument" (string). '
-            "Do not name or quote a natural person."
+            "Write one institutional argument in this persona's own voice, grounded in the "
+            "interests, constraints and red lines above.\n"
+            "Choose the stance the mandate actually requires, not the agreeable one: oppose when "
+            "the measure hurts a priority interest or crosses a red line; qualify or conditionally "
+            "accept when it helps only under stated conditions; support only when nothing in the "
+            "card is in tension with the measure. Do not mirror the current stances just because "
+            "others took them: a negotiation in which everyone agrees is a failed simulation.\n"
+            'Return JSON only with keys "stance" (support|oppose|qualify|conditional_accept), '
+            '"proposal" (one sentence naming the measure and its condition, if any), '
+            '"claims" (array of factual statements you would defend, or []), and '
+            '"argument" (3-5 sentences, concrete, no personal names, no quotations).'
         )
         started = time.perf_counter()
         response = await self._llm.complete(

@@ -56,6 +56,8 @@ class HttpLlmClient:
         max_retries: int = 2,
         temperature: float = 0.2,
         max_output_tokens: int = 1024,
+        json_mode: bool = True,
+        reasoning_effort: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.model_id = model_id
@@ -65,15 +67,21 @@ class HttpLlmClient:
         self._max_retries = max_retries
         self._temperature = temperature
         self._max_output_tokens = max_output_tokens
+        self._json_mode = json_mode
+        self._reasoning_effort = reasoning_effort
         self._transport = transport
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
-        payload = {
+        payload: dict[str, object] = {
             "model": request.model or self.model_id,
             "messages": [{"role": "user", "content": request.prompt}],
             "temperature": self._temperature,
             "max_tokens": self._max_output_tokens,
         }
+        if self._json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        if self._reasoning_effort:
+            payload["reasoning_effort"] = self._reasoning_effort
         started = time.perf_counter()
         last_error = "provider returned no response"
         for attempt in range(self._max_retries + 1):

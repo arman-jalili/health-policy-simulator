@@ -17,8 +17,10 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from claim_validation.application.commands import VerifyClaimRequest
 from claim_validation.composition import build_container as build_claim_validation_container
 from claim_validation.interfaces.http.router import router as claim_validation_router
+from claim_validation.interfaces.published import to_verdict_view
 from consensus_analysis.application.commands import RunClosedRequest as ConsensusRunClosedRequest
 from consensus_analysis.application.dto import ModelledEstimate
 from consensus_analysis.application.estimators import AssumedEstimator
@@ -87,6 +89,7 @@ from governance_compliance.infrastructure.figures import ClaimValidationFigureVe
 from governance_compliance.interfaces.http.router import router as governance_compliance_router
 from identity_access.composition import build_identity_access_container
 from identity_access.interfaces.http.router import router as identity_access_router
+from negotiation_session.application.mappers import claim_is_admissible
 from negotiation_session.composition import build_container as build_negotiation_container
 from negotiation_session.infrastructure.acl import (
     GovernanceGuardAdapter,
@@ -263,10 +266,30 @@ def create_app(settings: Settings | None = None, *, log_stream: TextIO | None = 
             )
         return EvidenceBriefing(pack_id=str(assembled.pack_id))
 
+    async def _claim_admissible(text: str) -> bool:
+        """Ask ClaimValidation whether a model-written claim may enter an argument (ADR-012).
+
+        The negotiation domain refuses inadmissible claims outright; the orchestrated path therefore
+        filters first and lets the remaining text stand as narrative.
+        """
+        result = await app.state.claim_validation.verify_claim.execute(
+            VerifyClaimRequest(text=text)
+        )
+        return claim_is_admissible(
+            to_verdict_view(
+                claim_id=result.claim_id,
+                verdict=result.verdict.value,
+                claim_type=result.claim_type.value,
+                sources=tuple(result.sources),
+                delta=result.delta,
+            )
+        )
+
     app.state.simulation_orchestration = build_simulation_container(
         app_settings,
         database,
         negotiation=NegotiationSessionGateway(
+            claim_admissible=_claim_admissible,
             runs=app.state.negotiation_session.get_simulation_run,
             open_round=app.state.negotiation_session.open_round,
             submit_position=app.state.negotiation_session.submit_initial_position,

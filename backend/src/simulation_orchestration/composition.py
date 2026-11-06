@@ -120,6 +120,8 @@ def build_container(
             max_retries=settings.llm_max_retries,
             temperature=settings.llm_temperature,
             max_output_tokens=settings.llm_max_output_tokens,
+            json_mode=settings.llm_json_mode,
+            reasoning_effort=settings.llm_reasoning_effort,
         )
     prices = StaticPriceTable(
         {

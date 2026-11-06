@@ -9,6 +9,7 @@ Canonical: .pi/architecture/decisions/ADR-005-authentication-authorization.md
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from ipaddress import ip_network
 from typing import Annotated, Any
@@ -57,12 +58,23 @@ class Settings(BaseSettings):
     # OpenRouter, vLLM and Ollama. There is no silent fallback from a failing provider to the echo.
     llm_provider: str = "scripted"
     llm_base_url: str | None = None
-    llm_api_key: str | None = Field(default=None, repr=False)
+    # Prefer LLM_API_KEY; fall back to the vendor's documented variable
+    # (`DEEPSEEK_API_KEY=sk-… docker compose up`). The fallback is the *default*, so it is resolved
+    # before the provider validator demands a key.
+    llm_api_key: str | None = Field(
+        default_factory=lambda: os.environ.get("DEEPSEEK_API_KEY") or None, repr=False
+    )
     llm_model: str = "gpt-4o-mini"
     llm_timeout_s: Annotated[float, Field(gt=0, le=300)] = 30.0
     llm_max_retries: Annotated[int, Field(ge=0, le=10)] = 2
     llm_temperature: Annotated[float, Field(ge=0, le=2)] = 0.2
     llm_max_output_tokens: Annotated[int, Field(ge=1, le=100000)] = 1024
+    # Ask the provider for a JSON object (`response_format`). Both OpenAI and DeepSeek honour it and
+    # the turn prompt already demands JSON; set false for servers that reject the field.
+    llm_json_mode: bool = True
+    # Optional provider reasoning control (`reasoning_effort`). DeepSeek defaults to *thinking*
+    # enabled, which ignores temperature and costs more; `none` selects non-thinking mode.
+    llm_reasoning_effort: str | None = None
     llm_health_url: str | None = None
     simulation_model_id: str = "scripted-local"
     simulation_input_price_per_1k: float = 0.0

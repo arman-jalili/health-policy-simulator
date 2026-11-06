@@ -83,6 +83,23 @@ APP_SECRET=some-example-value   # same value in .env.example
 A real provider without `LLM_BASE_URL` or `LLM_API_KEY` aborts boot with a named reason. `scripted`
 outside `ENV=local` is refused; `/readyz` reports which provider is bound.
 
+## LLM provider, credentials, JSON mode
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `LLM_PROVIDER` | `scripted` | `scripted` (local only), `openai-compatible`, `azure_ai_foundry` |
+| `LLM_BASE_URL` | — | OpenAI-format endpoint; DeepSeek: `https://api.deepseek.com` |
+| `LLM_API_KEY` | `DEEPSEEK_API_KEY` | generic key; when unset the vendor variable is adopted, so a DeepSeek demo needs no file |
+| `LLM_MODEL` | `gpt-4o-mini` | model id; DeepSeek: `deepseek-flash` (`deepseek-chat` retired 2026-07-24) |
+| `LLM_JSON_MODE` | `true` | send `response_format={"type":"json_object"}`; set false for servers that reject it |
+| `LLM_REASONING_EFFORT` | unset | provider reasoning control; DeepSeek defaults to *thinking*, `none` selects non-thinking |
+| `LLM_TIMEOUT_S` / `LLM_MAX_RETRIES` | `30` / `2` | bounded retries on 429/5xx and transport errors; no fallback to the echo |
+
+Failures are explicit: `LlmProviderFailed` (provider error after retries) and
+`LlmOutputUnparseable` (no usable JSON/stance/argument) both end the job as `dead_letter` with the
+reason. Inadmissible claims never reach the record: the orchestrated path asks ClaimValidation first
+and keeps only admitted ones, leaving the rest as narrative text.
+
 ## Test database isolation
 
 Integration tests derive `TEST_DATABASE_URL` as `<DATABASE_URL database>_test` when it is not set

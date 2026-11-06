@@ -60,35 +60,54 @@ docker compose exec backend tail -f /tmp/ingest.log
 
 ## 3. Switch to the live model (DeepSeek)
 
-The stack boots with the scripted provider so a rehearsal needs no key. For the live demo:
+The stack boots with the scripted provider so a rehearsal needs no key. For the live demo the key comes
+from the environment — the backend adopts `DEEPSEEK_API_KEY` when `LLM_API_KEY` is unset, so nothing has
+to be written to a file:
 
 ```bash
-cp demo.env.example demo.env.local          # git-ignored
-$EDITOR demo.env.local                      # set LLM_API_KEY=sk-…
+export DEEPSEEK_API_KEY=sk-…                 # https://platform.deepseek.com/api_keys
 docker compose up -d --force-recreate backend
-curl -s localhost:3000/api/hps/_platform/readyz | grep -o '"llm[^,]*'
-# llm: openai-compatible   llm_model: deepseek-chat   simulation_pricing: configured
+curl -s localhost:3000/api/hps/_platform/readyz | python3 -m json.tool | grep -E '"llm|pricing'
+# "llm": "openai-compatible", "llm_model": "deepseek-flash", "simulation_pricing": "configured"
 ```
 
-`demo.env` holds the committed defaults; `demo.env.local` is loaded after it, so only the values you
-change there take effect. Prices in `demo.env.example` are DeepSeek's list prices per 1k tokens — the UI
-formats money as **EUR**, DeepSeek bills **USD**; label the number on stage as one or the other, do not
-mix. Keep `SIMULATION_ALLOW_ZERO_PRICE=false` with a real provider: at price 0 the budget guard could only
-stop by invocation count.
+`demo.env.local` (git-ignored, copy of `demo.env.example`) carries the non-secret half: provider, base
+URL, model, metering. Facts that matter, checked against
+[api-docs.deepseek.com](https://api-docs.deepseek.com/) on 2026-11-06:
 
-Verify the path before the jury sees it:
+| Setting | Value | Why |
+|---|---|---|
+| `LLM_BASE_URL` | `https://api.deepseek.com` | OpenAI-compatible endpoint, no `/v1` suffix needed |
+| `LLM_MODEL` | `deepseek-flash` (V4.1-Flash) | `deepseek-chat` / `deepseek-reasoner` were retired 2026-07-24; `deepseek-v4-pro` also works |
+| `LLM_REASONING_EFFORT` | `none` | DeepSeek defaults to *thinking* mode: temperature is ignored and output costs more |
+| `LLM_JSON_MODE` | `true` | sends `response_format={"type":"json_object"}`; the turn parser needs JSON |
+| `SIMULATION_INPUT_PRICE_PER_1K` | `0.0003` | `deepseek-flash` cache-miss input, peak: $0.30 / 1M |
+| `SIMULATION_OUTPUT_PRICE_PER_1K` | `0.0012` | output, peak: $1.20 / 1M (off-peak is half) |
+
+Prices are **USD** per the provider; the UI formats money with an EUR locale. Label the number on stage
+as one or the other, or convert — do not mix. Keep `SIMULATION_ALLOW_ZERO_PRICE=false` with a real
+provider: at price 0 the budget guard could only stop by invocation count.
+
+Measured live on this stack (9 stakeholders, `deepseek-flash`):
+
+```
+1 round,  9 turns   → 2 612 in / 2 293 out → cost 0.003536 → consensus partial, 7 minorities
+2 rounds, 18 turns  → 8 916 in / 4 958 out → cost 0.008627 → budget pause at 6 invocations, resume, both rounds closed
+```
+
+Pre-flight before the jury (also proves the pause/resume path):
 
 ```bash
-# a run driven by the model (not the UI), with a budget that pauses it:
-curl -s -X POST localhost:3000/api/hps/runs -H 'content-type: application/json' \
-  -d '{"question":"Kassenstellen aufstocken und Kosten senken?","round_cap":1}' | tee /tmp/run.json
-RUN=$(python3 -c "import json;print(json.load(open('/tmp/run.json'))['run_id'])")
-curl -s -X POST localhost:3000/api/hps/runs/$RUN:start -H 'content-type: application/json' -d '{"budget":{"max_invocations":9}}'
+RUN=$(curl -s -X POST localhost:3000/api/hps/runs -H 'content-type: application/json' \
+  -d '{"question":"Kassenstellen aufstocken und Kosten senken?","round_cap":1}' | python3 -c 'import json,sys;print(json.load(sys.stdin)["run_id"])')
+curl -s -X POST localhost:3000/api/hps/runs/$RUN:start -H 'content-type: application/json' -d '{"budget":{"max_invocations":12}}'
 curl -s localhost:3000/api/hps/runs/$RUN/usage | python3 -m json.tool
 ```
 
-A wrong key fails loudly and honestly: the job ends `dead_letter` with
-`LlmProviderFailed: … http_401: Authentication Fails …` — never a silent fallback to the echo.
+A wrong key fails loudly and honestly: the job ends `dead_letter` with `LlmProviderFailed: … http_401`,
+never a silent fallback to the echo. An unusable model reply ends the same way with
+`LLM_OUTPUT_UNPARSEABLE`; a claim the claim agent will not admit is dropped from the argument, not
+asserted (the text still stands).
 
 ## 4. Operating it
 

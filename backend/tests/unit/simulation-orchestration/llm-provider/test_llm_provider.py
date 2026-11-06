@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 from tests.conftest import TEST_DATABASE_URL
@@ -104,3 +106,53 @@ async def test_scripted_adapter_is_still_available_for_local_tests() -> None:
     client = ScriptedLLMClient("scripted-local")
     response = await client.complete(_request())
     assert "stakeholder-turn@1" in response.text
+
+
+def _capturing_transport(seen: list[dict[str, object]]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "model": "deepseek-flash",
+                "choices": [{"message": {"role": "assistant", "content": '{"stance":"oppose"}'}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+            },
+        )
+
+    return httpx.MockTransport(handler)
+
+
+async def test_deepseek_style_request_asks_for_json_and_non_thinking() -> None:
+    """DeepSeek defaults to thinking mode and only guarantees JSON with response_format."""
+    seen: list[dict[str, object]] = []
+    client = HttpLlmClient(
+        model_id="deepseek-flash",
+        base_url="https://api.deepseek.com",
+        api_key="sk-test",
+        json_mode=True,
+        reasoning_effort="none",
+        transport=_capturing_transport(seen),
+    )
+
+    await client.complete(_request())
+
+    assert seen[0]["response_format"] == {"type": "json_object"}
+    assert seen[0]["reasoning_effort"] == "none"
+    assert seen[0]["model"] == "gpt-test"
+
+
+async def test_provider_neutral_request_omits_the_optional_fields() -> None:
+    seen: list[dict[str, object]] = []
+    client = HttpLlmClient(
+        model_id="gpt-4o-mini",
+        base_url="https://api.openai.com/v1",
+        api_key="sk-test",
+        json_mode=False,
+        transport=_capturing_transport(seen),
+    )
+
+    await client.complete(_request())
+
+    assert "response_format" not in seen[0]
+    assert "reasoning_effort" not in seen[0]
