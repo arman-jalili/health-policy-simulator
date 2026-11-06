@@ -1,0 +1,327 @@
+@import "tailwindcss";
+
+/*
+  HealthPolicy Simulator — instrument-panel design system.
+  Institutional public-service aesthetic: warm paper, Austrian red accent,
+  slate ink, precise 2/4/8 radii, tabular numerals, two shadows maximum.
+*/
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-quiet: var(--accent-quiet);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-ok-quiet: var(--ok-quiet);
+  --color-warn: var(--warn);
+  --color-warn-quiet: var(--warn-quiet);
+  --color-danger: var(--danger);
+  --color-danger-quiet: var(--danger-quiet);
+  --color-veto: var(--veto);
+  --color-veto-quiet: var(--veto-quiet);
+  --color-info: var(--info);
+  --color-info-quiet: var(--info-quiet);
+
+  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-source-code), ui-monospace, monospace;
+
+  /* Six-step type scale: 13 / 14 / 16 / 18 / 24 / 34 */
+  --text-2xs: 0.8125rem;
+  --text-2xs--line-height: 1.35;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.45;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.45;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.25;
+  --text-2xl: 2.125rem;
+  --text-2xl--line-height: 1.12;
+  --text-2xl--letter-spacing: -0.02em;
+
+  --radius-xs: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+
+  --shadow-1: 0 1px 2px rgb(18 22 23 / 0.06), 0 1px 1px rgb(18 22 23 / 0.04);
+  --shadow-2: 0 4px 8px rgb(18 22 23 / 0.07), 0 12px 28px rgb(18 22 23 / 0.08);
+
+  --container-content: 90rem;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+:root {
+  color-scheme: light;
+  --surface: #ffffff;
+  --surface-muted: #f5f4ef;
+  --surface-raised: #ffffff;
+  --ink: #1f2426;
+  --ink-muted: #5a6567;
+  --ink-subtle: #7d8789;
+  --line: #d9d7cf;
+  --line-strong: #b9b6ab;
+  --accent: #a81e2e;
+  --accent-hover: #8a1725;
+  --accent-quiet: #f9e1e4;
+  --on-accent: #ffffff;
+  --ok: #1d6b4f;
+  --ok-quiet: #e3f1ea;
+  --warn: #8a5a00;
+  --warn-quiet: #fbf0d9;
+  --danger: #a81e2e;
+  --danger-quiet: #f9e1e4;
+  --veto: #6e141f;
+  --veto-quiet: #f3d8dc;
+  --info: #1a5f8a;
+  --info-quiet: #e1eef6;
+  --row-height: 44px;
+  --nav-width: 240px;
+}
+
+[data-theme="ink"] {
+  color-scheme: dark;
+  --surface: #14181a;
+  --surface-muted: #1b2023;
+  --surface-raised: #20262a;
+  --ink: #f2f0ea;
+  --ink-muted: #b2bab9;
+  --ink-subtle: #8b9697;
+  --line: #333b3e;
+  --line-strong: #4a5457;
+  --accent: #e06370;
+  --accent-hover: #ef7c87;
+  --accent-quiet: #3a1a20;
+  --on-accent: #14181a;
+  --ok: #7fc8a9;
+  --ok-quiet: #1a2e27;
+  --warn: #e3b463;
+  --warn-quiet: #302715;
+  --danger: #e06370;
+  --danger-quiet: #3a1a20;
+  --veto: #f08b96;
+  --veto-quiet: #401820;
+  --info: #8fc4e8;
+  --info-quiet: #172833;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #0f1214;
+  --surface-muted: #171b1d;
+  --surface-raised: #1d2225;
+  --ink: #eef1f1;
+  --ink-muted: #aeb7b8;
+  --ink-subtle: #859092;
+  --line: #2b3335;
+  --line-strong: #414b4e;
+  --accent: #e06370;
+  --accent-hover: #ef7c87;
+  --accent-quiet: #35171d;
+  --on-accent: #0f1214;
+  --ok: #7fc8a9;
+  --ok-quiet: #14261f;
+  --warn: #e3b463;
+  --warn-quiet: #292313;
+  --danger: #e06370;
+  --danger-quiet: #35171d;
+  --veto: #f08b96;
+  --veto-quiet: #381520;
+  --info: #8fc4e8;
+  --info-quiet: #132430;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    color-scheme: dark;
+    --surface: #0f1214;
+    --surface-muted: #171b1d;
+    --surface-raised: #1d2225;
+    --ink: #eef1f1;
+    --ink-muted: #aeb7b8;
+    --ink-subtle: #859092;
+    --line: #2b3335;
+    --line-strong: #414b4e;
+    --accent: #e06370;
+    --accent-hover: #ef7c87;
+    --accent-quiet: #35171d;
+    --on-accent: #0f1214;
+    --ok: #7fc8a9;
+    --ok-quiet: #14261f;
+    --warn: #e3b463;
+    --warn-quiet: #292313;
+    --danger: #e06370;
+    --danger-quiet: #35171d;
+    --veto: #f08b96;
+    --veto-quiet: #381520;
+    --info: #8fc4e8;
+    --info-quiet: #132430;
+  }
+}
+
+[data-theme="ink"] .elevated,
+[data-theme="dark"] .elevated {
+  box-shadow: none;
+}
+
+[data-density="compact"] {
+  --row-height: 32px;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--surface-muted);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-feature-settings: "kern", "liga", "calt";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--ink);
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-decoration-color: color-mix(in oklab, var(--accent) 35%, transparent);
+    text-underline-offset: 0.2em;
+  }
+
+  a:hover {
+    color: var(--accent-hover);
+    text-decoration-color: currentColor;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--on-accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+
+  [data-motion="reduced"] *,
+  [data-motion="reduced"] ::before,
+  [data-motion="reduced"] ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .skip-link {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 100;
+    transform: translateY(-150%);
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 0.75rem;
+    box-shadow: var(--shadow-2);
+  }
+
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
+  .brief-document {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .brief-document h2,
+  .brief-document h3 {
+    font-family: var(--font-serif);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media print {
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  .brief-document {
+    max-width: none;
+  }
+
+  a {
+    color: #111111 !important;
+    text-decoration: none !important;
+  }
+}
