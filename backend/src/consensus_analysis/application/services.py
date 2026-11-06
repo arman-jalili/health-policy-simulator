@@ -33,14 +33,18 @@ from consensus_analysis.application.dto import (
     ComparisonEntryResult,
     ComparisonResult,
     ComposePackageResult,
+    ConsensusRecordResult,
     ConsensusResult,
     EstimatedFigureResult,
     EstimateRequest,
+    MinorityResult,
     PackageListResult,
+    PackageSummaryResult,
     RebuildResult,
     RunClosedResult,
     ScenarioResult,
     UnresolvedConflictListResult,
+    UnresolvedConflictResult,
 )
 from consensus_analysis.application.estimators import EstimateStrategy
 from consensus_analysis.application.ports import (
@@ -50,6 +54,7 @@ from consensus_analysis.application.ports import (
     EventPublisher,
     IdFactory,
     IllustrativeValueSource,
+    MandateThresholdSource,
     ProjectionRebuilder,
     UnitOfWork,
 )
@@ -83,6 +88,7 @@ from consensus_analysis.domain.values import (
     AssessmentId,
     BasisKind,
     ComparisonDimension,
+    ConsensusOutcomeKind,
     EstimatedFigure,
     LogPosition,
     PackageId,
@@ -131,6 +137,8 @@ class DeriveConsensus:
         consensus: ConsensusRepository,
         log: RunLogPort,
         powers: StakeholderPowersPort,
+        mandate: MandateThresholdSource,
+        rebuilder: ProjectionRebuilder,
         events: EventPublisher,
         clock: Clock,
         ids: IdFactory,
@@ -139,6 +147,8 @@ class DeriveConsensus:
         self._consensus = consensus
         self._log = log
         self._powers = powers
+        self._mandate = mandate
+        self._rebuilder = rebuilder
         self._events = events
         self._clock = clock
         self._ids = ids
@@ -150,6 +160,8 @@ class DeriveConsensus:
             self._consensus,
             self._log,
             self._powers,
+            self._mandate,
+            self._rebuilder,
             self._events,
             self._clock,
             self._ids,
@@ -157,7 +169,36 @@ class DeriveConsensus:
         )
 
     async def execute(self, request: DeriveConsensusRequest) -> ConsensusResult:
-        raise NotImplementedError("DeriveConsensus.execute is implemented by issue #306")
+        """Derive the records of one closed run from its log and persist them.
+
+        The threshold comes from the mandate, the veto map from StakeholderModel and the stances
+        from the log; nothing here is defaulted. Derivation is idempotent: the rows are replaced,
+        never appended to, so a replayed run cannot double-count a topic.
+        """
+        threshold = await self._mandate.threshold(request.run_id)
+        agenda = await self._log.agenda(request.run_id)
+        stances = await self._log.stances(request.run_id)
+        stakeholders = sorted({snapshot.stakeholder for snapshot in stances}, key=str)
+        vetoes = await self._powers.veto_classes(stakeholders)
+        records = tuple(
+            await self._rebuilder.rebuild(
+                run_id=request.run_id,
+                agenda=agenda,
+                stances=stances,
+                vetoes=vetoes,
+                threshold=threshold,
+            )
+        )
+        selected = (
+            tuple(record for record in records if record.topic in set(request.topics))
+            if request.topics
+            else records
+        )
+        async with self._uow.transaction():
+            await self._consensus.replace_for_run(request.run_id, selected)
+            events = tuple(event for record in selected for event in record.drain_events())
+            await self._events.publish(events)
+        return ConsensusResult(records=tuple(_record_result(row) for row in selected))
 
 
 class GetConsensus:
@@ -171,7 +212,9 @@ class GetConsensus:
         return (self._consensus,)
 
     async def execute(self, request: GetConsensusRequest) -> ConsensusResult:
-        raise NotImplementedError("GetConsensus.execute is implemented by issue #306")
+        """Return the persisted projection; the read never recomputes the outcome."""
+        records = await self._consensus.for_run(request.run_id)
+        return ConsensusResult(records=tuple(_record_result(row) for row in records))
 
 
 class ListUnresolvedConflicts:
@@ -187,7 +230,14 @@ class ListUnresolvedConflicts:
     async def execute(
         self, request: ListUnresolvedConflictsRequest
     ) -> UnresolvedConflictListResult:
-        raise NotImplementedError("ListUnresolvedConflicts.execute is implemented by issue #306")
+        """Return every conflict that was still open when the run closed."""
+        records = await self._consensus.for_run(request.run_id)
+        conflicts = tuple(
+            UnresolvedConflictResult(topic=conflict.topic, positions=conflict.positions)
+            for record in records
+            for conflict in record.unresolved
+        )
+        return UnresolvedConflictListResult(conflicts=conflicts)
 
 
 class ComposeCompromisePackage:
@@ -283,7 +333,19 @@ class ListPackages:
         return (self._packages,)
 
     async def execute(self, request: ListPackagesRequest) -> PackageListResult:
-        raise NotImplementedError("ListPackages.execute is implemented by issue #317")
+        """Return the composed packages of one run with their provenance counters."""
+        packages = await self._packages.for_run(request.run_id)
+        return PackageListResult(
+            packages=tuple(
+                PackageSummaryResult(
+                    package_id=package.id,
+                    state=package.state,
+                    component_count=len(package.components),
+                    rejected_count=len(package.rejected_proposals),
+                )
+                for package in packages
+            )
+        )
 
 
 class AssessImpact:
@@ -549,7 +611,9 @@ class HandleRunClosed:
         return (self._derive,)
 
     async def execute(self, request: RunClosedRequest) -> RunClosedResult:
-        raise NotImplementedError("HandleRunClosed.execute is implemented by issue #320")
+        """Derive from the notice alone: closing a run needs no API call (AC 12)."""
+        derived = await self._derive.execute(DeriveConsensusRequest(run_id=request.run_id))
+        return RunClosedResult(run_id=request.run_id, records=len(derived.records))
 
 
 def _projection_drift(
@@ -584,4 +648,24 @@ def _package_cost(package: CompromisePackage) -> Decimal | None:
     return sum(
         (component.cost_eur for component in package.components if component.cost_eur is not None),
         Decimal("0"),
+    )
+
+
+def _record_result(record: ConsensusRecord) -> ConsensusRecordResult:
+    """Map a derived record to its API shape, keeping support, dissent and blockers together."""
+    outcome = record.outcome
+    return ConsensusRecordResult(
+        consensus_id=record.id,
+        run_id=record.run_id,
+        topic=record.topic,
+        proposal_class=record.proposal_class,
+        outcome=outcome.kind if outcome is not None else ConsensusOutcomeKind.UNRESOLVED,
+        support=outcome.support.value if outcome is not None else 0.0,
+        threshold=record.threshold.required_share,
+        supporters=record.supporting_stakeholders(),
+        minorities=tuple(
+            MinorityResult(holders=position.holders, objections=position.objections)
+            for position in record.minorities
+        ),
+        blockers=outcome.veto.holders if outcome is not None and outcome.veto else (),
     )

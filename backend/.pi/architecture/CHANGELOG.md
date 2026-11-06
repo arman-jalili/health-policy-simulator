@@ -48,6 +48,39 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - ConsensusAnalysis contract amendment: derivation inputs (#320)
+
+### Changed
+- Module: consensus-analysis
+  - New port `MandateThresholdSource` (`threshold(run_id)`): the W8 table requires the threshold to
+    come from the mandate and names "a default threshold is used" as the failure. Without a source
+    that obligation was unenforceable.
+  - New port `RunClosedSubscription` (`subscribe(handler)`): the registration point the runtime uses,
+    so "subscribed" is a call site rather than a claim.
+  - `DeriveConsensus` gained `mandate` and `rebuilder`; `build_container` gained `mandate`,
+    `components`, `clock`, `ids` and `uow`.
+
+### Impact Analysis
+- Files affected:
+  - src/consensus_analysis/application/ports.py
+  - src/consensus_analysis/application/services.py
+  - src/consensus_analysis/composition.py
+- Canonical refs to update:
+  - .pi/architecture/modules/consensus-analysis.md#contract-freeze-issue-305
+- Validators required:
+  - ci, tests, architecture
+
+### Migration Steps
+1. Supply a `MandateThresholdSource` adapter at boot; derivation fails closed without it.
+2. Register `container.handle_run_closed.execute` on the run-closed notice.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [ ] Implementation updated
+- [x] Canonical refs updated
+- [ ] Validators run
+
 ## [2026-11-06] - ConsensusAnalysis contract amendment: package assembly (#317)
 
 ### Changed
