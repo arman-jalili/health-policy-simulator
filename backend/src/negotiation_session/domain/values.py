@@ -295,7 +295,19 @@ class StoppingCondition:
         round_cap: int,
         deadlocked: bool,
     ) -> StoppingCondition:
-        raise NotImplementedError("StoppingCondition.evaluate is implemented by issue #292")
+        parameters: dict[str, object] = {
+            "consensus": consensus.value,
+            "rounds_done": rounds_done,
+            "round_cap": round_cap,
+            "deadlocked": deadlocked,
+        }
+        if consensus is ConsensusLevel.SUFFICIENT:
+            return cls(name=StoppingConditionName.CONSENSUS, fired=True, parameters=parameters)
+        if rounds_done >= round_cap:
+            return cls(name=StoppingConditionName.ROUND_CAP, fired=True, parameters=parameters)
+        if deadlocked:
+            return cls(name=StoppingConditionName.DEADLOCK, fired=True, parameters=parameters)
+        return cls(name=StoppingConditionName.ROUND_CAP, fired=False, parameters=parameters)
 
 
 @dataclass(frozen=True, slots=True)
