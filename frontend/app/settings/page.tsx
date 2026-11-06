@@ -321,7 +321,7 @@ export default function SettingsPage() {
           )}
           <p className="text-2xs text-ink-muted">{t("settings.seedCommand")}:</p>
           <code className="block rounded-xs border border-line bg-surface-muted px-2 py-1.5 font-mono text-2xs">
-            LOG_LEVEL=ERROR make -s demo-seed &gt; /tmp/demo-seed.json
+            backend/samples/pressespiegel-2020-seed.json
           </code>
           {seed !== null && (
             <>

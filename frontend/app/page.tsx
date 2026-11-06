@@ -170,7 +170,7 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <p className="text-sm text-ink-muted">{t("dashboard.seedMissing")}</p>
                 <code className="block rounded-xs border border-line bg-surface-muted px-2 py-1.5 font-mono text-2xs">
-                  LOG_LEVEL=ERROR make -s demo-seed &gt; /tmp/demo-seed.json
+                  backend/samples/pressespiegel-2020-seed.json
                 </code>
                 <Link href="/settings" className="text-sm">
                   {t("dashboard.seedLink")}

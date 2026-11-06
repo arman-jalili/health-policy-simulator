@@ -657,6 +657,12 @@ const messages = {
     de: "Diese Institutionen brauchen noch ein Wort oder eine Enthaltung.",
     en: "These institutions still need a turn or an abstention.",
   },
+  "console.working": { de: "Läuft", en: "Running" },
+  "console.idle": { de: "Bereit", en: "Ready" },
+  "console.progressLine": {
+    de: "Runde {round}/{cap} · {arguments} Beiträge",
+    en: "Round {round}/{cap} · {arguments} contributions",
+  },
   "console.jobStarted": { de: "Auftrag gestartet: {job}", en: "Job started: {job}" },
   "console.noStakeholders": { de: "Keine Institutionen geladen.", en: "No institutions loaded." },
   "console.claimPlaceholder": { de: "Behauptung", en: "Claim" },

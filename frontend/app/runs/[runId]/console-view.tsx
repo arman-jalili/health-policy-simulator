@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { useSettings, useToast } from "@/components/providers";
+import { StatusPill } from "@/components/ui/status-pill";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui/states";
 import { EventFeed } from "@/features/run/components/event-feed";
 import {
@@ -75,13 +76,14 @@ export default function RunConsolePage() {
     const closed = feed.events.filter((event) => event.event_type === "RoundClosed");
     return !closed.some((event) => event.payload["round"] === round);
   }, [feed.events, round]);
+  const contributions = useMemo(
+    () => feed.events.filter((event) => event.event_type === "ArgumentSubmitted").length,
+    [feed.events],
+  );
   const closeError = closeRound.error instanceof ApiError ? closeRound.error : null;
-  const startDisabledReason =
-    state?.closed === true
-      ? t("run.closed")
-      : seed === null
-        ? t("dashboard.seedMissing")
-        : undefined;
+  // Starting the run does not need the demo seed: the orchestrator assembles an evidence pack from the
+  // corpus snapshot itself. The seed only supplies pack ids for the manual position/turn forms.
+  const startDisabledReason = state?.closed === true ? t("run.closed") : undefined;
 
   if (run.isLoading && feed.state === null) {
     return <LoadingBlock rows={6} />;
@@ -174,11 +176,28 @@ export default function RunConsolePage() {
         {startRun.error !== null && startRun.error !== undefined && (
           <ErrorState error={startRun.error} />
         )}
-        {jobId !== null && (
-          <div className="rounded-md border border-line bg-surface px-3 py-2 text-sm">
-            <p className="font-mono text-2xs text-ink-muted">{jobId}</p>
+        {state !== null && !state.closed && (
+          <div
+            role="status"
+            className="rounded-md border border-line bg-surface-muted px-3 py-2 text-sm"
+          >
+            <p className="flex flex-wrap items-center gap-2">
+              <StatusPill tone={jobId !== null ? "ok" : "neutral"}>
+                {jobId !== null ? t("console.working") : t("console.idle")}
+              </StatusPill>
+              <span className="text-ink-muted">
+                {t("console.progressLine", {
+                  round: state.round,
+                  cap: state.round_cap,
+                  arguments: contributions,
+                })}
+              </span>
+            </p>
+            {jobId !== null && (
+              <p className="mt-1 font-mono text-2xs text-ink-muted">{jobId}</p>
+            )}
             <Link href={`/runs/${runId}/usage`} className="mt-1 inline-block text-sm">
-              {t("run.tabs.usage")}
+              {t("run.tabs.usage")} · {t("usage.pause")}/{t("usage.resume")}
             </Link>
           </div>
         )}

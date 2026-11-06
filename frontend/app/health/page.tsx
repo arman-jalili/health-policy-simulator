@@ -38,6 +38,8 @@ export default function HealthPage() {
   const groups = useMemo(() => {
     const map = new Map<string, [string, string][]>();
     for (const [key, value] of Object.entries(readyz.data?.checks ?? {})) {
+      // Model ids are an implementation detail; the UI speaks "Live-LLM" / "Skript (Platzhalter)".
+      if (key === "llm_model" || key === "simulation_model") continue;
       const group = GROUPS.find((prefix) => key.startsWith(prefix)) ?? "other";
       const entries = map.get(group) ?? [];
       entries.push([key, value]);
@@ -127,7 +129,11 @@ export default function HealthPage() {
                                     : "neutral"
                               }
                             >
-                              {value}
+                              {key === "llm"
+                                ? value === "scripted"
+                                  ? t("settings.modelScripted")
+                                  : t("settings.modelLive")
+                                : value}
                             </StatusPill>
                           </TD>
                         </TR>
