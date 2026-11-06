@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from identity_access.infrastructure.demo import LoopbackDemoPolicy
-from identity_access.interfaces.demo import is_loopback_host
+from identity_access.interfaces.demo import is_loopback_host, is_trusted_demo_host
 from identity_access.interfaces.ports import DemoModePolicy
 from shared.app import create_app
 from shared.config import Settings
@@ -74,3 +74,31 @@ async def test_demo_mode_rejects_a_non_loopback_client() -> None:
 
     assert response.status_code == 401, response.text
     assert response.json()["code"] == "UNAUTHENTICATED"
+
+
+def test_trusted_cidrs_extend_demo_access_without_opening_it() -> None:
+    """A container bridge is opt-in; the default stays loopback-only."""
+    assert is_trusted_demo_host("172.18.0.5", ["172.16.0.0/12"]) is True
+    assert is_trusted_demo_host("172.18.0.5") is False
+    assert is_trusted_demo_host("8.8.8.8", ["172.16.0.0/12"]) is False
+    assert is_trusted_demo_host(None, ["172.16.0.0/12"]) is False
+    assert is_trusted_demo_host("127.0.0.1", ["172.16.0.0/12"]) is True
+
+
+def test_demo_policy_port_honours_trusted_cidrs() -> None:
+    policy = LoopbackDemoPolicy(["172.16.0.0/12"])
+
+    assert policy.permits("172.18.0.5") is True
+    assert policy.permits("127.0.0.1") is True
+    assert policy.permits("203.0.113.9") is False
+    assert LoopbackDemoPolicy().permits("172.18.0.5") is False
+
+
+def test_unparseable_trusted_cidr_is_refused_at_boot() -> None:
+    with pytest.raises(ValidationError, match="AUTH_DEMO_TRUSTED_CIDRS"):
+        Settings(
+            _env_file=None,
+            database_url=DATABASE_URL,
+            persistence=Persistence.MEMORY,
+            auth_demo_trusted_cidrs=["not-a-network"],
+        )

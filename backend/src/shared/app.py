@@ -146,7 +146,10 @@ def create_app(settings: Settings | None = None, *, log_stream: TextIO | None = 
         if app_settings.is_demo:
             logger.warning(
                 "demo_auth_mode_enabled",
-                detail="anonymous reads and runs:write are allowed from localhost only",
+                detail="anonymous reads and runs:write are allowed from localhost only"
+                if not app_settings.auth_demo_trusted_cidrs
+                else "anonymous access is allowed from loopback and AUTH_DEMO_TRUSTED_CIDRS",
+                trusted_cidrs=",".join(app_settings.auth_demo_trusted_cidrs) or "loopback",
             )
         try:
             await database.ping()

@@ -48,6 +48,38 @@ Each entry follows this structure:
 
 ## Entries
 
+## [2026-11-06] - Containerized demo: trusted demo networks, JSON-safe progress payloads
+
+### Changed
+- IdentityAccess: `AUTH_DEMO_TRUSTED_CIDRS` (default empty) extends the demo principal from loopback to
+  explicitly named networks, so a frontend container can call the backend. Empty keeps ADR-005's
+  loopback-only posture; the boot log and `/readyz` (`auth_demo_trusted`) report the setting.
+- SimulationOrchestration: progress payloads are JSON-normalised before the insert
+  (`_json_safe`), so a `Decimal` cost no longer aborts `simulation_orchestration_progress` and
+  dead-letters the run on the first paid model call.
+- Packaging: `httpx` moved from the dev group to runtime dependencies (health probe + LLM adapter);
+  the image could not start with `uv sync --no-dev` without it.
+
+### Impact Analysis
+- Files affected: `src/identity_access/interfaces/demo.py`,
+  `src/identity_access/infrastructure/demo.py`, `src/identity_access/interfaces/http/dependencies.py`,
+  `src/shared/config.py`, `src/shared/http/health.py`, `src/shared/app.py`,
+  `src/simulation_orchestration/application/progress.py`, `pyproject.toml`, `uv.lock`
+- Canonical refs: `.pi/architecture/modules/identity-access.md`, `docs/configuration.md`
+- Validators: demo-guard unit tests, `tests/unit/simulation-orchestration/progress-payload`,
+  architecture conformance (unchanged, 17/0)
+
+### Migration Steps
+1. None for the database. Set `AUTH_DEMO_TRUSTED_CIDRS` only when a non-loopback client must reach a
+   demo deployment (compose.yaml does this for the frontend container).
+2. Rebuild images after pulling: `docker compose up --build`.
+
+### Status
+- [x] Architecture doc updated
+- [x] CHANGELOG entry added
+- [x] Implementation updated
+
+
 ## [2026-11-06] - Negotiation write path, durability and the analysis/delivery chain (#404-#409)
 
 ### Changed

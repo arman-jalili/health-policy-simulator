@@ -9,7 +9,8 @@ isolation); ``infrastructure.demo.LoopbackDemoPolicy`` implements the same port 
 
 from __future__ import annotations
 
-from ipaddress import ip_address
+from collections.abc import Sequence
+from ipaddress import ip_address, ip_network
 
 from identity_access.interfaces.types import Principal, Role, Scope
 
@@ -29,6 +30,30 @@ def is_loopback_host(host: str | None) -> bool:
         return ip_address(normalized).is_loopback
     except ValueError:
         return False
+
+
+def is_trusted_demo_host(host: str | None, trusted_cidrs: Sequence[str] = ()) -> bool:
+    """Loopback, or a client inside an explicitly trusted network (containerised demos).
+
+    ``AUTH_DEMO_TRUSTED_CIDRS`` is empty by default: demo mode stays loopback-only unless an
+    operator names the networks, and the boot log plus ``/readyz`` report the setting so the
+    relaxation is never invisible. Invalid entries are refused by the settings validator.
+    """
+    if is_loopback_host(host):
+        return True
+    if host is None or not trusted_cidrs:
+        return False
+    try:
+        address = ip_address(host.strip())
+    except ValueError:
+        return False
+    for cidr in trusted_cidrs:
+        try:
+            if address in ip_network(cidr, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def demo_principal() -> Principal:

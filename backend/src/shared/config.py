@@ -10,10 +10,11 @@ Canonical: .pi/architecture/decisions/ADR-005-authentication-authorization.md
 from __future__ import annotations
 
 from functools import lru_cache
+from ipaddress import ip_network
 from typing import Annotated, Any
 
-from pydantic import Field, PostgresDsn, ValidationError, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, PostgresDsn, ValidationError, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from shared.enums import AuthMode, Environment, LogFormat, Persistence
 
@@ -43,6 +44,11 @@ class Settings(BaseSettings):
 
     env: Environment = Environment.LOCAL
     auth_mode: AuthMode = AuthMode.DEMO
+    # Demo auth is loopback-only unless an operator names networks (e.g. a container bridge).
+    # Empty by default; /readyz and the boot log report it whenever it is set.
+    # ``NoDecode`` keeps pydantic-settings from demanding JSON: the env form is a comma-separated
+    # list of CIDRs, which is what an operator writes in compose.
+    auth_demo_trusted_cidrs: Annotated[list[str], NoDecode] = Field(default_factory=list)
     # PostgreSQL is the safe default: memory must be chosen explicitly (ADR-002, issue #26).
     persistence: Persistence = Persistence.POSTGRES
 
@@ -100,6 +106,24 @@ class Settings(BaseSettings):
                 raise ValueError("LLM_BASE_URL is required for LLM_PROVIDER=openai-compatible")
             if not self.llm_api_key:
                 raise ValueError("LLM_API_KEY is required for LLM_PROVIDER=openai-compatible")
+        return self
+
+    @field_validator("auth_demo_trusted_cidrs", mode="before")
+    @classmethod
+    def _split_trusted_demo_cidrs(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def _validate_trusted_demo_cidrs(self) -> Settings:
+        for entry in self.auth_demo_trusted_cidrs:
+            try:
+                ip_network(entry, strict=False)
+            except ValueError as error:
+                raise ValueError(
+                    f"AUTH_DEMO_TRUSTED_CIDRS entry {entry!r} is not a network (CIDR)"
+                ) from error
         return self
 
     @model_validator(mode="after")

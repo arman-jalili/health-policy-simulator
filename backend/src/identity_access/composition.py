@@ -62,5 +62,5 @@ def build_identity_access_container(
         principal_port=KeyResolver(store),
         api_key_admin=store,
         readiness=readiness,
-        demo_policy=LoopbackDemoPolicy(),
+        demo_policy=LoopbackDemoPolicy(settings.auth_demo_trusted_cidrs),
     )

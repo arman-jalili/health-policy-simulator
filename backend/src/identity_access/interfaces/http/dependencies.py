@@ -15,7 +15,7 @@ from typing import cast
 
 from fastapi import Request
 
-from identity_access.interfaces.demo import demo_principal, is_loopback_host
+from identity_access.interfaces.demo import demo_principal, is_trusted_demo_host
 from identity_access.interfaces.errors import (
     AuthenticationRequiredError,
     InsufficientScopeError,
@@ -34,8 +34,10 @@ async def _resolve_principal(request: Request) -> Principal:
 
     if settings.is_demo:
         host = request.client.host if request.client is not None else None
-        if not is_loopback_host(host):
-            raise AuthenticationRequiredError("Demo mode is only available from localhost")
+        if not is_trusted_demo_host(host, settings.auth_demo_trusted_cidrs):
+            raise AuthenticationRequiredError(
+                "Demo mode is only available from localhost or AUTH_DEMO_TRUSTED_CIDRS"
+            )
         return demo_principal()
 
     api_key = request.headers.get("X-API-Key")

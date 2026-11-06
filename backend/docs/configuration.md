@@ -13,6 +13,23 @@ hps-api
 `.env.example` documents the local defaults. Copying it verbatim is the supported setup; the
 documented PostgreSQL URL is **not** a secret and is expected to stay identical.
 
+## Demo authentication (containerised demos)
+
+`AUTH_MODE=demo` grants an anonymous principal to **loopback clients only** (ADR-005). A frontend
+container calling the backend over the Docker bridge is not loopback, so the guard would answer 401.
+
+`AUTH_DEMO_TRUSTED_CIDRS` (default: empty) adds explicitly trusted networks:
+
+```
+AUTH_DEMO_TRUSTED_CIDRS=172.16.0.0/12,192.168.0.0/16,10.0.0.0/8   # docker/OrbStack bridges
+```
+
+- Empty keeps the original loopback-only posture; an unrecognised entry fails the boot.
+- `/readyz` reports `auth_demo_trusted` (`loopback` or the list) and `auth_mode`, so the relaxation is
+  never invisible; the boot log warns whenever the list is non-empty.
+- The backend does **not** trust `X-Forwarded-For`: uvicorn runs without `--proxy-headers`, because a
+  spoofable header would let any client claim 127.0.0.1 and defeat the guard. Do not add it.
+
 ## What the readiness gate checks
 
 `validate-architecture-readiness.sh` runs the architecture conformance check, which calls

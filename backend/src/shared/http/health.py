@@ -89,6 +89,8 @@ async def readyz(request: Request) -> JSONResponse:
         )
 
     checks["ocr"] = "available" if _ocr_available() else "absent"
+    checks["auth_mode"] = settings.auth_mode.value
+    checks["auth_demo_trusted"] = ",".join(settings.auth_demo_trusted_cidrs) or "loopback"
     provider = settings.llm_provider.strip().lower()
     checks["llm"] = provider
     checks["llm_model"] = (

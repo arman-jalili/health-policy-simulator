@@ -36,6 +36,9 @@ async def test_readyz_reports_ready_when_database_answers(
     assert response.status_code == 200
     assert response.json()["checks"] == {
         "database": "ok",
+        # The demo guard's trust boundary is part of readiness: loopback-only is the default.
+        "auth_mode": "demo",
+        "auth_demo_trusted": "loopback",
         "llm": "scripted",
         "llm_model": "scripted-local",
         "ocr": "available" if __import__("shutil").which("tesseract") else "absent",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from typing import Any, cast
 
@@ -28,7 +29,19 @@ class ProgressPublisher:
             run_id=run_id,
             sequence=0,
             kind=kind,
-            payload=asdict(cast(Any, event)),
+            payload=_json_safe(asdict(cast(Any, event))),
             created_at=self._clock.now(),
         )
         return await self._progress.append(view)
+
+
+def _json_safe(payload: dict[str, Any]) -> dict[str, Any]:
+    """Round-trip through JSON so the persisted payload never carries a non-JSON type.
+
+    Events carry ``Decimal`` values (``cost_estimate``, budget limits, the checkpoint's
+    ``budget_used_cost``). The progress row is a JSON column, so a Decimal aborts the insert and the
+    worker dead-letters the run — observed with non-zero model prices, i.e. on the first paid call
+    ("Object of type Decimal is not JSON serializable"). ``default=str`` keeps the value
+    lossless as a decimal string, which is how the API renders money anyway.
+    """
+    return cast(dict[str, Any], json.loads(json.dumps(payload, default=str, sort_keys=False)))

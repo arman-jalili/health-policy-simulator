@@ -1,0 +1,82 @@
+# Full demo stack: PostgreSQL + backend (FastAPI) + frontend (Next.js).
+#
+#   cp .env.demo.example .env.demo      # optional; fill in DeepSeek to run with a real model
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# Ports: frontend 3000, backend 8000 (API + /docs). PostgreSQL is internal; see the db service.
+# Data: the `hps-demo-pgdata` volume survives `down`; `down -v` wipes it.
+#
+# Corpus: `./material` is mounted read-only at /corpus. Ingest it with
+#   docker compose exec backend python scripts/ingest_corpus.py /corpus --snapshot-label demo-2026
+
+name: hps-demo
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hps
+      POSTGRES_PASSWORD: hps
+      POSTGRES_DB: health_policy
+    # Not published by default: the backend reaches it as `db:5432`. Uncomment for psql debugging
+    # (avoid 5433 — that is the local dev container in backend/compose.yaml).
+    # ports:
+    #   - "5434:5432"
+    volumes:
+      - hps-demo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hps -d health_policy"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Committed defaults first, then git-ignored local overrides (later file wins).
+    # Anything under `environment:` below overrides both, so only compose-owned values live there.
+    env_file:
+      - path: demo.env
+        required: true
+      - path: demo.env.local
+        required: false
+    environment:
+      # The database address is owned by this file, never by a local override.
+      DATABASE_URL: postgresql+asyncpg://hps:hps@db:5432/health_policy
+      # Demo auth: loopback plus the compose bridge. Override AUTH_DEMO_TRUSTED_CIDRS in demo.env.local
+      # once you know your subnet (`docker network inspect hps-demo_default`); empty means loopback only.
+      AUTH_DEMO_TRUSTED_CIDRS: ${AUTH_DEMO_TRUSTED_CIDRS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
+    # The API is intentionally not published: the browser talks to the frontend, which proxies with
+    # server-side credentials. Uncomment for `curl localhost:8000/docs` during development.
+    # ports:
+    #   - "8000:8000"
+    volumes:
+      # Read-only corpus mount for scripts/ingest_corpus.py and POST /corpus/*
+      - ./material:/corpus:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Server-side only: the browser talks to /api/hps/* on this origin, never to the backend.
+      HPS_API_BASE_URL: http://backend:8000
+      # Only for AUTH_MODE=strict; empty in demo mode.
+      HPS_API_KEY: ${HPS_API_KEY:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  hps-demo-pgdata:

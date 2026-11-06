@@ -13,6 +13,7 @@ Thumbs.db
 # ── Secrets ───────────────────────────────────────────────────────────────────
 .env
 .env.*
+demo.env.local
 !.env.example
 *.pem
 *.key

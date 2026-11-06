@@ -1,0 +1,127 @@
+# Demo stack — `docker compose`
+
+Everything the jury sees, in three containers: PostgreSQL (pgvector), the FastAPI backend, and the
+Next.js frontend that proxies the API server-side.
+
+```
+docker compose up --build        # first run: builds both images
+open http://localhost:3000       # the only URL you need
+```
+
+| Service | Port | What it is |
+|---|---|---|
+| `frontend` | 3000 | Next.js (standalone). Serves the UI and proxies `/api/hps/*` → `backend:8000` |
+| `backend` | not published | FastAPI + Alembic. Reach it through the frontend proxy, or uncomment `ports:` for `/docs` |
+| `db` | not published | PostgreSQL 16 + pgvector, volume `hps-demo-pgdata` |
+
+The browser never talks to the backend and never sees a key: the proxy holds `HPS_API_KEY` server-side.
+
+## 1. First run
+
+```bash
+docker compose up --build -d
+docker compose ps                      # all three healthy
+curl -s localhost:3000/api/hps/_platform/readyz | python3 -m json.tool | head -30
+```
+
+`/readyz` reports what the stack can actually do. Expect `status: ready`, `llm: scripted`,
+`simulation_pricing: zero`, `ocr: available` (Tesseract is installed in the image) and
+`auth_demo_trusted` listing the compose bridge ranges.
+
+Seed the one-document demo corpus (idempotent — safe to run again):
+
+```bash
+docker compose exec backend python -m shared.demo_seed
+```
+
+## 2. Ingest your own corpus
+
+`./material` is mounted read-only at `/corpus`. PDFs only; the script chunks paragraphs, indexes
+passages and pins a snapshot.
+
+```bash
+docker compose exec backend python scripts/ingest_corpus.py /corpus --dry-run --snapshot-label corpus-2026
+docker compose exec backend python scripts/ingest_corpus.py /corpus --limit 10 --snapshot-label corpus-2026
+docker compose exec backend python scripts/ingest_corpus.py /corpus --snapshot-label corpus-2026
+```
+
+Afterwards assemble packs against the printed `snapshot_id` (`POST /api/v1/evidence/packs`) or ingest a
+curated subset into its own snapshot for the demo. Scanned PDFs need the OCR path — `/readyz` tells you
+whether it is available (`ocr: available`), and files it cannot read show up as named failures in the
+ingestion run (`GET /api/v1/corpus/ingestion-runs/{id}` → `outcomes[]`).
+
+Long ingest? Run it in the background and watch the log:
+
+```bash
+docker compose exec -d backend sh -c \
+  'python scripts/ingest_corpus.py /corpus --snapshot-label corpus-2026 > /tmp/ingest.json 2> /tmp/ingest.log'
+docker compose exec backend tail -f /tmp/ingest.log
+```
+
+## 3. Switch to the live model (DeepSeek)
+
+The stack boots with the scripted provider so a rehearsal needs no key. For the live demo:
+
+```bash
+cp demo.env.example demo.env.local          # git-ignored
+$EDITOR demo.env.local                      # set LLM_API_KEY=sk-…
+docker compose up -d --force-recreate backend
+curl -s localhost:3000/api/hps/_platform/readyz | grep -o '"llm[^,]*'
+# llm: openai-compatible   llm_model: deepseek-chat   simulation_pricing: configured
+```
+
+`demo.env` holds the committed defaults; `demo.env.local` is loaded after it, so only the values you
+change there take effect. Prices in `demo.env.example` are DeepSeek's list prices per 1k tokens — the UI
+formats money as **EUR**, DeepSeek bills **USD**; label the number on stage as one or the other, do not
+mix. Keep `SIMULATION_ALLOW_ZERO_PRICE=false` with a real provider: at price 0 the budget guard could only
+stop by invocation count.
+
+Verify the path before the jury sees it:
+
+```bash
+# a run driven by the model (not the UI), with a budget that pauses it:
+curl -s -X POST localhost:3000/api/hps/runs -H 'content-type: application/json' \
+  -d '{"question":"Kassenstellen aufstocken und Kosten senken?","round_cap":1}' | tee /tmp/run.json
+RUN=$(python3 -c "import json;print(json.load(open('/tmp/run.json'))['run_id'])")
+curl -s -X POST localhost:3000/api/hps/runs/$RUN:start -H 'content-type: application/json' -d '{"budget":{"max_invocations":9}}'
+curl -s localhost:3000/api/hps/runs/$RUN/usage | python3 -m json.tool
+```
+
+A wrong key fails loudly and honestly: the job ends `dead_letter` with
+`LlmProviderFailed: … http_401: Authentication Fails …` — never a silent fallback to the echo.
+
+## 4. Operating it
+
+```bash
+docker compose logs -f backend            # structured JSON logs, one line per request
+docker compose down                       # keeps the database volume
+docker compose down -v                    # wipes documents, runs, briefs
+docker compose exec backend python -m shared.demo_seed   # re-seed after a wipe
+```
+
+Migrations run from the backend entrypoint on every start (`alembic upgrade head`), so an older volume
+is upgraded in place. `HPS_SEED_ON_BOOT=1` seeds before serving — convenient for a rehearsal, but it
+runs on every restart, so leave it 0 when you are ingesting your own corpus.
+
+## 5. Two things that will bite you
+
+**Demo auth is host-based.** `AUTH_MODE=demo` grants anonymous access to *loopback clients only*; inside
+Docker the frontend is not loopback, so the compose file sets `AUTH_DEMO_TRUSTED_CIDRS` to the private
+ranges Docker/OrbStack allocate from. The backend does **not** trust `X-Forwarded-For` (uvicorn runs
+without `--proxy-headers`) — a spoofable header would defeat the guard. If your bridge uses another
+subnet, set `AUTH_DEMO_TRUSTED_CIDRS` in `demo.env.local`:
+
+```bash
+docker network inspect hps-demo_default --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+```
+
+**Runtime config must not be prerendered.** `/api/hps/meta` awaits `connection()` so the frontend reads
+`HPS_API_BASE_URL` at request time; without it, Next baked the build host's default (`127.0.0.1:8000`)
+into the image and every proxy call failed inside Docker.
+
+## 6. Not included (deliberate)
+
+- No reverse proxy / TLS: single-origin on `localhost:3000`. Put Caddy in front for a remote demo.
+- No worker sidecar: the simulation worker runs inside the backend process, which is what the current
+  design does (single-replica). Running two backend replicas would double-run jobs.
+- No secrets in images or `demo.env`: keys live in `demo.env.local` or the shell.

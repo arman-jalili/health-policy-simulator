@@ -9,11 +9,16 @@ to ``IdentityAccessContainer.demo_policy``.
 
 from __future__ import annotations
 
-from identity_access.interfaces.demo import is_loopback_host
+from collections.abc import Sequence
+
+from identity_access.interfaces.demo import is_trusted_demo_host
 
 
 class LoopbackDemoPolicy:
-    """Permit demo principals only from loopback clients."""
+    """Permit demo principals from loopback clients and explicitly trusted networks."""
+
+    def __init__(self, trusted_cidrs: Sequence[str] = ()) -> None:
+        self._trusted_cidrs = tuple(trusted_cidrs)
 
     def permits(self, client_host: str | None) -> bool:
-        return is_loopback_host(client_host)
+        return is_trusted_demo_host(client_host, self._trusted_cidrs)

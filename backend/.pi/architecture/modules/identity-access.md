@@ -83,7 +83,7 @@ narrow port plus its adapters.
 |---|---|---|
 | `PrincipalPort` / `Principal` | application (ACL) | The only published concept; resolves a credential to an actor |
 | `KeyResolver` | infrastructure | Hash + lookup against the key store |
-| `DemoResolver` | infrastructure | Localhost-only principal in `AUTH_MODE=demo` |
+| `DemoResolver` | infrastructure | Loopback-only principal in `AUTH_MODE=demo`; `AUTH_DEMO_TRUSTED_CIDRS` (default empty) adds explicitly trusted networks for containerized demos, reported by `/readyz` as `auth_demo_trusted` |
 | `require_scope(...)` | interfaces | FastAPI dependency declaring the required scope per route |
 | `ApiKeyStore` | infrastructure | Key generation, hashing, revocation |
 
@@ -142,7 +142,7 @@ leaves `infrastructure/`. `Principal` is the sole published concept.
 |---|---|---|
 | `X-API-Key` header | `api_key` argument | extracted by the FastAPI dependency |
 | `key_record` row | `Principal` | label ← `key.label`, role/scopes parsed from the record |
-| `AUTH_MODE` env | `Principal.is_demo` | `demo` + localhost ⇒ demo principal; otherwise 401 |
+| `AUTH_MODE` env | `Principal.is_demo` | `demo` + loopback (or a host in `AUTH_DEMO_TRUSTED_CIDRS`) ⇒ demo principal; otherwise 401 |
 | Missing key | — | `401 unauthenticated`; mutating routes never default to anonymous |
 
 **Vendor / implementation choice**
